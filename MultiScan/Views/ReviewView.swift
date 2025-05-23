@@ -55,6 +55,18 @@ struct ReviewView: View {
                     Image(systemName: navigationState.isRandomized ? "shuffle.circle.fill" : "shuffle.circle")
                 }
                 .help(navigationState.isRandomized ? "Sequential Order" : "Random Order")
+                
+                Divider()
+                
+                Button(action: copyCurrentPageText) {
+                    Image(systemName: "doc.on.doc")
+                }
+                .help("Copy Current Page Text")
+                
+                Button(action: copyAllPagesText) {
+                    Image(systemName: "doc.on.doc.fill")
+                }
+                .help("Copy All Pages Text")
             }
         }
         .onAppear {
@@ -68,5 +80,26 @@ struct ReviewView: View {
                 selectedPageNumber = currentPage.pageNumber
             }
         }
+    }
+    
+    private func copyCurrentPageText() {
+        guard let currentPage = navigationState.currentPage else { return }
+        
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(currentPage.text, forType: .string)
+        
+    }
+    
+    private func copyAllPagesText() {
+        let sortedPages = document.pages.sorted { $0.pageNumber < $1.pageNumber }
+        let allText = sortedPages
+            .map { $0.text }
+            .joined(separator: "\n\n")
+        
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(allText, forType: .string)
+        
     }
 }

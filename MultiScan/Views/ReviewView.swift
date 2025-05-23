@@ -29,38 +29,45 @@ struct ReviewView: View {
             )
             .frame(minWidth: 200, idealWidth: 300)
         }
-        .navigationTitle(document.name)
+        .navigationTitle(String(document.name.prefix(30)) + (document.name.count > 30 ? "..." : ""))
         .navigationSubtitle("\(document.totalPages) pages")
         .toolbar {
             ToolbarItemGroup {
                 Button(action: { navigationState.previousPage() }) {
-                    Image(systemName: "chevron.left")
+                    Label("Previous", systemImage: "chevron.left")
+                        .labelStyle(.iconOnly)
                 }
                 .disabled(!navigationState.hasPrevious)
                 .keyboardShortcut("[", modifiers: [])
                 
                 Button(action: { navigationState.nextPage() }) {
-                    Image(systemName: "chevron.right")
+                    Label("Next", systemImage: "chevron.right")
+                        .labelStyle(.iconOnly)
                 }
                 .disabled(!navigationState.hasNext)
                 .keyboardShortcut("]", modifiers: [])
                 
-                Divider()
+                Spacer()
+                    .frame(width: 20)
                 
                 Button(action: { navigationState.toggleRandomization() }) {
-                    Image(systemName: navigationState.isRandomized ? "shuffle.circle.fill" : "shuffle.circle")
+                    Label(navigationState.isRandomized ? "Sequential" : "Shuffle", systemImage: navigationState.isRandomized ? "shuffle.circle.fill" : "shuffle.circle")
+                        .labelStyle(.iconOnly)
                 }
                 .help(navigationState.isRandomized ? "Sequential Order" : "Random Order")
                 
-                Divider()
+                Spacer()
+                    .frame(width: 20)
                 
                 Button(action: copyCurrentPageText) {
-                    Image(systemName: "doc.on.doc")
+                    Label("Copy Page Contents", systemImage: "doc.on.doc")
+                        .labelStyle(.iconOnly)
                 }
                 .help("Copy Current Page Text")
                 
                 Button(action: copyAllPagesText) {
-                    Image(systemName: "doc.on.doc.fill")
+                    Label("Copy All Pages Text", systemImage: "doc.on.doc.fill")
+                        .labelStyle(.iconOnly)
                 }
                 .help("Copy All Pages Text")
             }

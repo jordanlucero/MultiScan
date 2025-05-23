@@ -5,33 +5,29 @@ struct ReviewView: View {
     let document: Document
     @StateObject private var navigationState = NavigationState()
     @State private var selectedPageNumber: Int?
+    @State private var leftColumnWidth: CGFloat = 200
+    @State private var rightColumnWidth: CGFloat = 300
     
     var body: some View {
-        GeometryReader { geometry in
-            HStack(spacing: 0) {
-                ThumbnailSidebar(
-                    document: document,
-                    navigationState: navigationState,
-                    selectedPageNumber: $selectedPageNumber
-                )
-                .frame(width: geometry.size.width * 0.2)
-                
-                Divider()
-                
-                ImageViewer(
-                    document: document,
-                    navigationState: navigationState
-                )
-                .frame(width: geometry.size.width * 0.5)
-                
-                Divider()
-                
-                TextSidebar(
-                    document: document,
-                    navigationState: navigationState
-                )
-                .frame(width: geometry.size.width * 0.3)
-            }
+        HSplitView {
+            ThumbnailSidebar(
+                document: document,
+                navigationState: navigationState,
+                selectedPageNumber: $selectedPageNumber
+            )
+            .frame(minWidth: 150, idealWidth: 200)
+            
+            ImageViewer(
+                document: document,
+                navigationState: navigationState
+            )
+            .frame(minWidth: 400)
+            
+            TextSidebar(
+                document: document,
+                navigationState: navigationState
+            )
+            .frame(minWidth: 200, idealWidth: 300)
         }
         .navigationTitle(document.name)
         .navigationSubtitle("\(document.totalPages) pages")

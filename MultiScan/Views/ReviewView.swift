@@ -83,6 +83,14 @@ struct ReviewView: View {
                 selectedPageNumber = currentPage.pageNumber
             }
         }
+        .onKeyPress(.leftArrow) {
+            navigationState.previousPage()
+            return .handled
+        }
+        .onKeyPress(.rightArrow) {
+            navigationState.nextPage()
+            return .handled
+        }
     }
     
     private func copyCurrentPageText() {

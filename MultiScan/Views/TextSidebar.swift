@@ -5,6 +5,7 @@ struct TextSidebar: View {
     @ObservedObject var navigationState: NavigationState
     @State private var editedText: String = ""
     @State private var isEditing: Bool = false
+    @State private var showLineBreaks: Bool = false
     
     var currentPage: Page? {
         navigationState.currentPage
@@ -26,6 +27,11 @@ struct TextSidebar: View {
                 
                 Spacer()
                 
+                Button(action: { showLineBreaks.toggle() }) {
+                    Image(systemName: showLineBreaks ? "text.line.first.and.arrowtriangle.forward" : "text.alignleft")
+                }
+                .help(showLineBreaks ? "Hide Line Breaks" : "Show Line Breaks")
+                
                 Button(action: { isEditing.toggle() }) {
                     Image(systemName: isEditing ? "checkmark.circle.fill" : "pencil.circle")
                 }
@@ -44,11 +50,17 @@ struct TextSidebar: View {
                         .cornerRadius(8)
                         .padding()
                 } else {
-                    Text(currentPage?.text ?? "No text detected on this page.")
-                        .font(.system(.body, design: .default))
-                        .textSelection(.enabled)
-                        .padding()
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if showLineBreaks {
+                        LineBreakVisibleText(text: currentPage?.text ?? "No text detected on this page.")
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        Text(currentPage?.text ?? "No text detected on this page.")
+                            .font(.system(.body, design: .default))
+                            .textSelection(.enabled)
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
             }
             .background(Color(NSColor.controlBackgroundColor))
@@ -98,5 +110,33 @@ struct TextSidebar: View {
     private func saveChanges() {
         guard let page = currentPage else { return }
         page.text = editedText
+    }
+}
+
+struct LineBreakVisibleText: View {
+    let text: String
+    
+    var body: some View {
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+        
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
+                HStack(spacing: 4) {
+                    Text(String(line))
+                        .font(.system(.body, design: .default))
+                        .textSelection(.enabled)
+                    
+                    if index < lines.count - 1 {
+                        Image(systemName: "arrow.turn.down.left")
+                            .font(.caption)
+                            .foregroundColor(.accentColor.opacity(0.6))
+                            .help("Line break")
+                    }
+                    
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

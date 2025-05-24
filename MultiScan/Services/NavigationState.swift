@@ -23,11 +23,31 @@ class NavigationState: ObservableObject {
     }
     
     var hasNext: Bool {
-        currentPageIndex < currentOrder.count - 1
+        guard let document = selectedDocument else { return false }
+        
+        var nextIndex = currentPageIndex + 1
+        while nextIndex < currentOrder.count {
+            let pageNumber = currentOrder[nextIndex]
+            if let page = document.pages.first(where: { $0.pageNumber == pageNumber }), !page.isDone {
+                return true
+            }
+            nextIndex += 1
+        }
+        return false
     }
     
     var hasPrevious: Bool {
-        currentPageIndex > 0
+        guard let document = selectedDocument else { return false }
+        
+        var prevIndex = currentPageIndex - 1
+        while prevIndex >= 0 {
+            let pageNumber = currentOrder[prevIndex]
+            if let page = document.pages.first(where: { $0.pageNumber == pageNumber }), !page.isDone {
+                return true
+            }
+            prevIndex -= 1
+        }
+        return false
     }
     
     func setupNavigation(for document: Document) {
@@ -35,17 +55,47 @@ class NavigationState: ObservableObject {
         originalOrder = document.pages.map { $0.pageNumber }.sorted()
         randomizedOrder = originalOrder.shuffled()
         currentPageIndex = 0
+        
+        // Find first undone page
+        var index = 0
+        while index < currentOrder.count {
+            let pageNumber = currentOrder[index]
+            if let page = document.pages.first(where: { $0.pageNumber == pageNumber }), !page.isDone {
+                currentPageIndex = index
+                return
+            }
+            index += 1
+        }
+        
+        // If all pages are done, stay at index 0
+        currentPageIndex = 0
     }
     
     func nextPage() {
-        if hasNext {
-            currentPageIndex += 1
+        guard let document = selectedDocument else { return }
+        
+        var nextIndex = currentPageIndex + 1
+        while nextIndex < currentOrder.count {
+            let pageNumber = currentOrder[nextIndex]
+            if let page = document.pages.first(where: { $0.pageNumber == pageNumber }), !page.isDone {
+                currentPageIndex = nextIndex
+                return
+            }
+            nextIndex += 1
         }
     }
     
     func previousPage() {
-        if hasPrevious {
-            currentPageIndex -= 1
+        guard let document = selectedDocument else { return }
+        
+        var prevIndex = currentPageIndex - 1
+        while prevIndex >= 0 {
+            let pageNumber = currentOrder[prevIndex]
+            if let page = document.pages.first(where: { $0.pageNumber == pageNumber }), !page.isDone {
+                currentPageIndex = prevIndex
+                return
+            }
+            prevIndex -= 1
         }
     }
     
@@ -60,5 +110,22 @@ class NavigationState: ObservableObject {
         if let currentPageNumber = currentPage?.pageNumber {
             goToPage(pageNumber: currentPageNumber)
         }
+    }
+    
+    func toggleCurrentPageDone() {
+        currentPage?.isDone.toggle()
+    }
+    
+    var donePageCount: Int {
+        selectedDocument?.pages.filter { $0.isDone }.count ?? 0
+    }
+    
+    var totalPageCount: Int {
+        selectedDocument?.pages.count ?? 0
+    }
+    
+    var progress: Double {
+        guard totalPageCount > 0 else { return 0 }
+        return Double(donePageCount) / Double(totalPageCount)
     }
 }

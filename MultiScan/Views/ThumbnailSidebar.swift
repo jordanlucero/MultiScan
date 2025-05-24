@@ -5,32 +5,66 @@ struct ThumbnailSidebar: View {
     @ObservedObject var navigationState: NavigationState
     @Binding var selectedPageNumber: Int?
     
+    enum FilterOption: String, CaseIterable {
+        case all = "All"
+        case notDone = "Not Done"
+        case done = "Done"
+    }
+    
+    @State private var filterOption: FilterOption = .all
+    
+    var filteredPages: [Page] {
+        let sortedPages = document.pages.sorted(by: { $0.pageNumber < $1.pageNumber })
+        
+        switch filterOption {
+        case .all:
+            return sortedPages
+        case .notDone:
+            return sortedPages.filter { !$0.isDone }
+        case .done:
+            return sortedPages.filter { $0.isDone }
+        }
+    }
+    
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: 10) {
-                    ForEach(document.pages.sorted(by: { $0.pageNumber < $1.pageNumber })) { page in
-                        ThumbnailView(
-                            page: page,
-                            document: document,
-                            isSelected: selectedPageNumber == page.pageNumber
-                        ) {
-                            navigationState.goToPage(pageNumber: page.pageNumber)
-                            selectedPageNumber = page.pageNumber
+        VStack(spacing: 0) {
+            // Filter picker
+            Picker("Filter", selection: $filterOption) {
+                ForEach(FilterOption.allCases, id: \.self) { option in
+                    Text(option.rawValue).tag(option)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding()
+            
+            Divider()
+            
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 10) {
+                        ForEach(filteredPages) { page in
+                            ThumbnailView(
+                                page: page,
+                                document: document,
+                                isSelected: selectedPageNumber == page.pageNumber
+                            ) {
+                                navigationState.goToPage(pageNumber: page.pageNumber)
+                                selectedPageNumber = page.pageNumber
+                            }
+                            .id(page.pageNumber)
                         }
-                        .id(page.pageNumber)
+                    }
+                    .padding()
+                }
+                .onChange(of: selectedPageNumber) { _, newValue in
+                    if let pageNumber = newValue {
+                        withAnimation {
+                            proxy.scrollTo(pageNumber, anchor: .center)
+                        }
                     }
                 }
-                .padding()
             }
             .background(Color(NSColor.controlBackgroundColor))
-            .onChange(of: selectedPageNumber) { _, newValue in
-                if let pageNumber = newValue {
-                    withAnimation {
-                        proxy.scrollTo(pageNumber, anchor: .center)
-                    }
-                }
-            }
         }
     }
 }
@@ -41,7 +75,13 @@ struct ThumbnailView: View {
     let isSelected: Bool
     let action: () -> Void
     
-    @State private var thumbnail: NSImage?
+    var thumbnail: NSImage? {
+        if let thumbnailData = page.thumbnailData,
+           let image = NSImage(data: thumbnailData) {
+            return image
+        }
+        return nil
+    }
     
     var body: some View {
         VStack(spacing: 4) {
@@ -60,8 +100,29 @@ struct ThumbnailView: View {
                             .aspectRatio(contentMode: .fit)
                             .padding(4)
                     } else {
-                        ProgressView()
-                            .scaleEffect(0.5)
+                        // Placeholder for pages without thumbnails
+                        VStack {
+                            Image(systemName: "photo")
+                                .font(.largeTitle)
+                                .foregroundColor(.secondary)
+                            Text("No Preview")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    
+                    if page.isDone {
+                        VStack {
+                            HStack {
+                                Spacer()
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.title2)
+                                    .foregroundColor(.green)
+                                    .background(Circle().fill(Color.white).padding(-2))
+                                    .padding(8)
+                            }
+                            Spacer()
+                        }
                     }
                 }
                 .aspectRatio(8.5/11, contentMode: .fit)
@@ -73,40 +134,6 @@ struct ThumbnailView: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .foregroundColor(isSelected ? .accentColor : .secondary)
-        }
-        .onAppear {
-            loadThumbnail()
-        }
-    }
-    
-    private func loadThumbnail() {
-        Task {
-            guard let folderURL = document.resolvedFolderURL() else { return }
-            
-            let accessed = folderURL.startAccessingSecurityScopedResource()
-            defer {
-                if accessed {
-                    folderURL.stopAccessingSecurityScopedResource()
-                }
-            }
-            
-            let imageURL = folderURL.appendingPathComponent(page.imageFileName)
-            
-            if let image = NSImage(contentsOf: imageURL) {
-                let thumbnailSize = NSSize(width: 150, height: 200)
-                let thumbnailImage = NSImage(size: thumbnailSize)
-                
-                thumbnailImage.lockFocus()
-                image.draw(in: NSRect(origin: .zero, size: thumbnailSize),
-                          from: NSRect(origin: .zero, size: image.size),
-                          operation: .copy,
-                          fraction: 1.0)
-                thumbnailImage.unlockFocus()
-                
-                await MainActor.run {
-                    self.thumbnail = thumbnailImage
-                }
-            }
         }
     }
 }

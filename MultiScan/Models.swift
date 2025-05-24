@@ -15,12 +15,16 @@ final class Page {
     var imageFileName: String
     var document: Document?
     var createdAt: Date
+    var isDone: Bool = false
+    var thumbnailData: Data?
     
     init(pageNumber: Int, text: String, imageFileName: String) {
         self.pageNumber = pageNumber
         self.text = text
         self.imageFileName = imageFileName
         self.createdAt = Date()
+        self.isDone = false
+        self.thumbnailData = nil
     }
 }
 

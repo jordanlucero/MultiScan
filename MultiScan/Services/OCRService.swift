@@ -10,7 +10,7 @@ class OCRService: ObservableObject {
     @Published var currentFile: String = ""
     @Published var error: Error?
     
-    func processImagesInFolder(at url: URL, bookmarkData: Data?) async throws -> [(pageNumber: Int, text: String, fileName: String)] {
+    func processImagesInFolder(at url: URL, bookmarkData: Data?) async throws -> [(pageNumber: Int, text: String, fileName: String, thumbnailData: Data?)] {
         isProcessing = true
         progress = 0
         defer { isProcessing = false }
@@ -50,21 +50,21 @@ class OCRService: ObservableObject {
         
         imageURLs.sort { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
         
-        var results: [(pageNumber: Int, text: String, fileName: String)] = []
+        var results: [(pageNumber: Int, text: String, fileName: String, thumbnailData: Data?)] = []
         
         for (index, imageURL) in imageURLs.enumerated() {
             currentFile = imageURL.lastPathComponent
             progress = Double(index) / Double(imageURLs.count)
             
-            let text = try await recognizeText(in: imageURL)
-            results.append((pageNumber: index + 1, text: text, fileName: imageURL.lastPathComponent))
+            let (text, thumbnailData) = try await processImage(at: imageURL)
+            results.append((pageNumber: index + 1, text: text, fileName: imageURL.lastPathComponent, thumbnailData: thumbnailData))
         }
         
         progress = 1.0
         return results
     }
     
-    private func recognizeText(in imageURL: URL) async throws -> String {
+    private func processImage(at imageURL: URL) async throws -> (text: String, thumbnailData: Data?) {
         // Check if file exists before trying to load
         guard FileManager.default.fileExists(atPath: imageURL.path) else {
             print("File does not exist: \(imageURL.path)")
@@ -76,6 +76,45 @@ class OCRService: ObservableObject {
             throw OCRError.imageLoadError
         }
         
+        // Generate thumbnail
+        let thumbnailData = generateThumbnail(from: image)
+        
+        // Perform OCR
+        let text = try await recognizeText(from: image, imageURL: imageURL)
+        
+        return (text, thumbnailData)
+    }
+    
+    private func generateThumbnail(from image: NSImage) -> Data? {
+        // Create a smaller thumbnail (150x200 max)
+        let maxSize = NSSize(width: 150, height: 200)
+        let imageSize = image.size
+        
+        // Calculate aspect ratio
+        let widthRatio = maxSize.width / imageSize.width
+        let heightRatio = maxSize.height / imageSize.height
+        let ratio = min(widthRatio, heightRatio)
+        
+        let newSize = NSSize(width: imageSize.width * ratio, height: imageSize.height * ratio)
+        
+        let thumbnailImage = NSImage(size: newSize)
+        thumbnailImage.lockFocus()
+        image.draw(in: NSRect(origin: .zero, size: newSize),
+                  from: NSRect(origin: .zero, size: imageSize),
+                  operation: .copy,
+                  fraction: 1.0)
+        thumbnailImage.unlockFocus()
+        
+        // Convert to JPEG data with compression
+        guard let tiffData = thumbnailImage.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiffData) else {
+            return nil
+        }
+        
+        return bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.7])
+    }
+    
+    private func recognizeText(from image: NSImage, imageURL: URL) async throws -> String {
         guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
             print("Failed to convert image to CGImage: \(imageURL.lastPathComponent)")
             throw OCRError.imageConversionError

@@ -7,6 +7,7 @@ struct ReviewView: View {
     @State private var selectedPageNumber: Int?
     @State private var leftColumnWidth: CGFloat = 200
     @State private var rightColumnWidth: CGFloat = 300
+    @State private var showProgress: Bool = false
     
     var body: some View {
         HSplitView {
@@ -59,6 +60,24 @@ struct ReviewView: View {
                 Spacer()
                     .frame(width: 20)
                 
+                Button(action: { navigationState.toggleCurrentPageDone() }) {
+                    Label("Mark as Done", systemImage: navigationState.currentPage?.isDone == true ? "checkmark.circle.fill" : "checkmark.circle")
+                        .labelStyle(.iconOnly)
+                }
+                .help(navigationState.currentPage?.isDone == true ? "Mark as Not Done" : "Mark as Done")
+                
+                Button(action: { showProgress.toggle() }) {
+                    Label("Progress", systemImage: "flag.pattern.checkered")
+                        .labelStyle(.iconOnly)
+                }
+                .popover(isPresented: $showProgress, arrowEdge: .bottom) {
+                    ProgressPopover(navigationState: navigationState)
+                }
+                .help("View Progress")
+                
+                Spacer()
+                    .frame(width: 20)
+                
                 Button(action: copyCurrentPageText) {
                     Label("Copy Page Contents", systemImage: "doc.on.doc")
                         .labelStyle(.iconOnly)
@@ -83,23 +102,12 @@ struct ReviewView: View {
                 selectedPageNumber = currentPage.pageNumber
             }
         }
-        .onKeyPress(.leftArrow) {
-            navigationState.previousPage()
-            return .handled
-        }
-        .onKeyPress(.rightArrow) {
-            navigationState.nextPage()
-            return .handled
-        }
     }
     
     private func copyCurrentPageText() {
         guard let currentPage = navigationState.currentPage else { return }
         
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(currentPage.text, forType: .string)
-        
+        TextFormatter.copyFormattedText(currentPage.text)
     }
     
     private func copyAllPagesText() {
@@ -108,9 +116,6 @@ struct ReviewView: View {
             .map { $0.text }
             .joined(separator: "\n\n")
         
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(allText, forType: .string)
-        
+        TextFormatter.copyFormattedText(allText)
     }
 }

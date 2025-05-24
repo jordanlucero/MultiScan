@@ -6,6 +6,7 @@ struct TextSidebar: View {
     @State private var editedText: String = ""
     @State private var isEditing: Bool = false
     @State private var showLineBreaks: Bool = false
+    @State private var showFormattingHelp: Bool = false
     
     var currentPage: Page? {
         navigationState.currentPage
@@ -32,6 +33,28 @@ struct TextSidebar: View {
                 }
                 .help(showLineBreaks ? "Hide Line Breaks" : "Show Line Breaks")
                 
+                if isEditing {
+                    Button(action: { showFormattingHelp.toggle() }) {
+                        Image(systemName: "questionmark.circle")
+                    }
+                    .popover(isPresented: $showFormattingHelp, arrowEdge: .bottom) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Formatting Syntax")
+                                .font(.headline)
+                            Divider()
+                            HStack {
+                                Text("Two Asterisks → **Bold**")
+                            }
+                            HStack {
+                                Text("One Asterisk → *Italic*")
+                            }
+                        }
+                        .padding()
+                        .frame(width: 200)
+                    }
+                    .help("Formatting syntax")
+                }
+                
                 Button(action: { isEditing.toggle() }) {
                     Image(systemName: isEditing ? "checkmark.circle.fill" : "pencil.circle")
                 }
@@ -45,6 +68,7 @@ struct TextSidebar: View {
                 if isEditing {
                     TextEditor(text: $editedText)
                         .font(.system(.body, design: .default))
+                        .scrollContentBackground(.hidden)
                         .padding()
                         .background(Color(NSColor.textBackgroundColor))
                         .cornerRadius(8)

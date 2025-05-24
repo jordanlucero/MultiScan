@@ -148,6 +148,7 @@ struct HomeView: View {
                         text: result.text,
                         imageFileName: result.fileName
                     )
+                    page.thumbnailData = result.thumbnailData
                     page.document = document
                     document.pages.append(page)
                 }

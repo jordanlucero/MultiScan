@@ -9,6 +9,8 @@ struct HomeView: View {
     @State private var showingFolderPicker = false
     @State private var showingProgress = false
     @State private var showingError = false
+    @State private var documentToDelete: Document?
+    @State private var showingDeleteConfirmation = false
     
     var body: some View {
         VStack(spacing: 30) {
@@ -64,9 +66,23 @@ struct HomeView: View {
                                     .foregroundColor(.secondary)
                             }
                             Spacer()
-                            NavigationLink(destination: ReviewView(document: document)) {
-                                Text("Review")
-                                    .font(.caption)
+                            
+                            HStack(spacing: 8) {
+                                NavigationLink(destination: ReviewView(document: document)) {
+                                    Text("Review")
+                                        .font(.caption)
+                                }
+                                
+                                Button(action: { 
+                                    documentToDelete = document
+                                    showingDeleteConfirmation = true
+                                }) {
+                                    Image(systemName: "trash")
+                                        .font(.caption)
+                                        .foregroundColor(.red)
+                                }
+                                .buttonStyle(.plain)
+                                .help("Delete document")
                             }
                         }
                         .padding(.vertical, 4)
@@ -110,6 +126,18 @@ struct HomeView: View {
             if let url = selectedFolderURL {
                 url.stopAccessingSecurityScopedResource()
             }
+        }
+        .confirmationDialog(
+            "Delete Document",
+            isPresented: $showingDeleteConfirmation,
+            presenting: documentToDelete
+        ) { document in
+            Button("Delete", role: .destructive) {
+                deleteDocument(document)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { document in
+            Text("Are you sure you want to delete \"\(document.name)\"? This will remove all OCR data and cannot be undone.")
         }
     }
     
@@ -163,6 +191,18 @@ struct HomeView: View {
                 // Make sure to stop accessing on error too
                 folderURL.stopAccessingSecurityScopedResource()
             }
+        }
+    }
+    
+    private func deleteDocument(_ document: Document) {
+        // Delete the document from the model context
+        modelContext.delete(document)
+        
+        // Save the changes
+        do {
+            try modelContext.save()
+        } catch {
+            print("Failed to delete document: \(error)")
         }
     }
 }

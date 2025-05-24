@@ -28,17 +28,6 @@ struct ThumbnailSidebar: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Filter picker
-            Picker("Filter", selection: $filterOption) {
-                ForEach(FilterOption.allCases, id: \.self) { option in
-                    Text(option.rawValue).tag(option)
-                }
-            }
-            .pickerStyle(.segmented)
-            .padding()
-            
-            Divider()
-            
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 10) {
@@ -64,6 +53,39 @@ struct ThumbnailSidebar: View {
                     }
                 }
             }
+            .background(Color(NSColor.controlBackgroundColor))
+            
+            Divider()
+            
+            // Bottom toolbar
+            HStack(spacing: 8) {
+                Menu {
+                    ForEach(FilterOption.allCases, id: \.self) { option in
+                        Button(action: { filterOption = option }) {
+                            HStack {
+                                Text(option.rawValue)
+                                if filterOption == option {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    Image(systemName: "line.3.horizontal.decrease.circle.fill")
+                        .font(.title3)
+                }
+                .menuStyle(.borderlessButton)
+                .help("Filter pages")
+                
+                Spacer()
+                
+                if filterOption != .all {
+                    Text(filterOption.rawValue)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding(8)
             .background(Color(NSColor.controlBackgroundColor))
         }
     }

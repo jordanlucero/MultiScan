@@ -82,7 +82,7 @@ struct ReviewView: View {
                 .help("Copy Current Page Text")
                 
                 Button(action: copyAllPagesText) {
-                    Label("Copy All Pages Text", systemImage: "doc.on.doc.fill")
+                    Label("Copy All Pages Text", systemImage: "doc.on.doc")
                         .labelStyle(.iconOnly)
                 }
                 .help("Copy All Pages Text")

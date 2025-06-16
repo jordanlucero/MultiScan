@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
@@ -7,10 +8,11 @@ struct HomeView: View {
     @StateObject private var ocrService = OCRService()
     @State private var selectedFolderURL: URL?
     @State private var showingFolderPicker = false
-    @State private var showingProgress = false
     @State private var showingError = false
     @State private var documentToDelete: Document?
     @State private var showingDeleteConfirmation = false
+    @State private var processingDocumentIDs: Set<PersistentIdentifier> = []
+    @State private var isDragOver = false
     
     var body: some View {
         VStack(spacing: 30) {
@@ -33,21 +35,6 @@ struct HomeView: View {
             .controlSize(.large)
             .buttonStyle(.borderedProminent)
             
-            if let folderURL = selectedFolderURL {
-                VStack(spacing: 10) {
-                    Label(folderURL.lastPathComponent, systemImage: "folder.fill")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    Button(action: startOCR) {
-                        Label("Start OCR Processing", systemImage: "text.viewfinder")
-                            .frame(minWidth: 200)
-                    }
-                    .controlSize(.large)
-                    .disabled(ocrService.isProcessing)
-                }
-            }
-            
             if !documents.isEmpty {
                 Divider()
                 
@@ -68,9 +55,15 @@ struct HomeView: View {
                             Spacer()
                             
                             HStack(spacing: 8) {
-                                NavigationLink(destination: ReviewView(document: document)) {
-                                    Text("Review")
-                                        .font(.caption)
+                                if processingDocumentIDs.contains(document.persistentModelID) {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                        .frame(width: 40)
+                                } else {
+                                    NavigationLink(destination: ReviewView(document: document)) {
+                                        Text("Review")
+                                            .font(.caption)
+                                    }
                                 }
                                 
                                 Button(action: { 
@@ -83,6 +76,7 @@ struct HomeView: View {
                                 }
                                 .buttonStyle(.plain)
                                 .help("Delete document")
+                                .disabled(processingDocumentIDs.contains(document.persistentModelID))
                             }
                         }
                         .padding(.vertical, 4)
@@ -93,6 +87,11 @@ struct HomeView: View {
         }
         .padding(50)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(isDragOver ? Color.accentColor.opacity(0.1) : Color.clear)
+        .onDrop(of: [.fileURL], isTargeted: $isDragOver) { providers in
+            handleDrop(providers: providers)
+            return true
+        }
         .fileImporter(
             isPresented: $showingFolderPicker,
             allowedContentTypes: [.folder],
@@ -104,7 +103,8 @@ struct HomeView: View {
                     // Start accessing the security-scoped resource immediately
                     if url.startAccessingSecurityScopedResource() {
                         selectedFolderURL = url
-                        // We'll stop accessing after creating the bookmark in startOCR
+                        // Start OCR processing immediately
+                        startOCRImmediately(for: url, needsSecurityScope: true)
                     } else {
                         print("Failed to access security-scoped resource")
                     }
@@ -112,9 +112,6 @@ struct HomeView: View {
             case .failure(let error):
                 print("Folder selection error: \(error)")
             }
-        }
-        .sheet(isPresented: $showingProgress) {
-            OCRProgressView(ocrService: ocrService)
         }
         .alert("Error", isPresented: $showingError, presenting: ocrService.error) { _ in
             Button("OK") { }
@@ -145,55 +142,6 @@ struct HomeView: View {
         showingFolderPicker = true
     }
     
-    private func startOCR() {
-        guard let folderURL = selectedFolderURL else { return }
-        
-        showingProgress = true
-        
-        Task {
-            do {
-                // Create bookmark while we have access
-                let bookmarkData = SecurityScopedResourceManager.shared.createBookmark(for: folderURL)
-                
-                // Process images (OCRService will handle its own security scope)
-                let results = try await ocrService.processImagesInFolder(at: folderURL, bookmarkData: bookmarkData)
-                
-                // Stop accessing the original URL since we have a bookmark now
-                folderURL.stopAccessingSecurityScopedResource()
-                
-                let document = Document(
-                    name: folderURL.lastPathComponent,
-                    folderPath: folderURL.path,
-                    folderBookmark: bookmarkData,
-                    totalPages: results.count
-                )
-                
-                modelContext.insert(document)
-                
-                for result in results {
-                    let page = Page(
-                        pageNumber: result.pageNumber,
-                        text: result.text,
-                        imageFileName: result.fileName
-                    )
-                    page.thumbnailData = result.thumbnailData
-                    page.document = document
-                    document.pages.append(page)
-                }
-                
-                try modelContext.save()
-                showingProgress = false
-                
-            } catch {
-                ocrService.error = error
-                showingProgress = false
-                showingError = true
-                // Make sure to stop accessing on error too
-                folderURL.stopAccessingSecurityScopedResource()
-            }
-        }
-    }
-    
     private func deleteDocument(_ document: Document) {
         // Delete the document from the model context
         modelContext.delete(document)
@@ -203,6 +151,118 @@ struct HomeView: View {
             try modelContext.save()
         } catch {
             print("Failed to delete document: \(error)")
+        }
+    }
+    
+    private func startOCRImmediately(for folderURL: URL, needsSecurityScope: Bool = false) {
+        Task {
+            do {
+                // Create bookmark while we have access
+                let bookmarkData = SecurityScopedResourceManager.shared.createBookmark(for: folderURL)
+                
+                // Create document immediately and show it in the list
+                let document = Document(
+                    name: folderURL.lastPathComponent,
+                    folderPath: folderURL.path,
+                    folderBookmark: bookmarkData,
+                    totalPages: 0  // Will update after processing
+                )
+                
+                modelContext.insert(document)
+                try modelContext.save()
+                
+                // Track this document as processing
+                processingDocumentIDs.insert(document.persistentModelID)
+                
+                // Clear the selected folder
+                selectedFolderURL = nil
+                
+                // Process images in background
+                Task.detached {
+                    do {
+                        // Process images (OCRService will handle its own security scope)
+                        let results = try await self.ocrService.processImagesInFolder(at: folderURL, bookmarkData: bookmarkData)
+                        
+                        // Stop accessing the original URL if we started access
+                        if needsSecurityScope {
+                            folderURL.stopAccessingSecurityScopedResource()
+                        }
+                        
+                        // Update the document with results on main thread
+                        await MainActor.run {
+                            document.totalPages = results.count
+                            
+                            for result in results {
+                                let page = Page(
+                                    pageNumber: result.pageNumber,
+                                    text: result.text,
+                                    imageFileName: result.fileName
+                                )
+                                page.thumbnailData = result.thumbnailData
+                                page.document = document
+                                document.pages.append(page)
+                            }
+                            
+                            do {
+                                try self.modelContext.save()
+                            } catch {
+                                print("Failed to save OCR results: \(error)")
+                            }
+                            
+                            // Remove from processing set
+                            self.processingDocumentIDs.remove(document.persistentModelID)
+                        }
+                    } catch {
+                        // Handle error on main thread
+                        await MainActor.run {
+                            self.processingDocumentIDs.remove(document.persistentModelID)
+                            // Optionally delete the failed document
+                            self.modelContext.delete(document)
+                            try? self.modelContext.save()
+                            
+                            self.ocrService.error = error
+                            self.showingError = true
+                        }
+                        // Make sure to stop accessing on error too
+                        if needsSecurityScope {
+                            folderURL.stopAccessingSecurityScopedResource()
+                        }
+                    }
+                }
+            } catch {
+                // Handle immediate errors (e.g., bookmark creation failure)
+                self.ocrService.error = error
+                self.showingError = true
+                if needsSecurityScope {
+                    folderURL.stopAccessingSecurityScopedResource()
+                }
+            }
+        }
+    }
+    
+    private func handleDrop(providers: [NSItemProvider]) {
+        guard let provider = providers.first else { return }
+        
+        provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { (item, error) in
+            guard let data = item as? Data,
+                  let url = URL(dataRepresentation: data, relativeTo: nil) else {
+                return
+            }
+            
+            // Check if it's a directory
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+                  isDirectory.boolValue else {
+                // Not a folder, ignore
+                return
+            }
+            
+            DispatchQueue.main.async {
+                // For drag and drop, the URL already has implicit access
+                self.selectedFolderURL = url
+                // Start OCR processing immediately
+                self.startOCRImmediately(for: url)
+            }
         }
     }
 }

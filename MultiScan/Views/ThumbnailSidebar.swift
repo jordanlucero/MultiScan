@@ -7,8 +7,8 @@ struct ThumbnailSidebar: View {
     
     enum FilterOption: String, CaseIterable {
         case all = "All"
-        case notDone = "Not Done"
-        case done = "Done"
+        case notDone = "Not Reviewed"
+        case done = "Reviewed"
     }
     
     @State private var filterOption: FilterOption = .all

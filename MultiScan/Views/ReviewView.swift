@@ -48,23 +48,20 @@ struct ReviewView: View {
                 .disabled(!navigationState.hasNext)
                 .keyboardShortcut("]", modifiers: [])
                 
-                Spacer()
-                    .frame(width: 20)
-                
                 Button(action: { navigationState.toggleRandomization() }) {
-                    Label(navigationState.isRandomized ? "Sequential" : "Shuffle", systemImage: navigationState.isRandomized ? "shuffle.circle.fill" : "shuffle.circle")
+                    Label(navigationState.isRandomized ? "Sequential Order" : "Shuffled Order", systemImage: navigationState.isRandomized ? "shuffle.circle.fill" : "shuffle.circle")
                         .labelStyle(.iconOnly)
                 }
-                .help(navigationState.isRandomized ? "Sequential Order" : "Random Order")
+                .help(navigationState.isRandomized ? "Switch to Sequential Order" : "Switch to Shuffled Order")
                 
                 Spacer()
                     .frame(width: 20)
                 
                 Button(action: { navigationState.toggleCurrentPageDone() }) {
-                    Label("Mark as Done", systemImage: navigationState.currentPage?.isDone == true ? "checkmark.circle.fill" : "checkmark.circle")
+                    Label("Mark as Reviewed", systemImage: navigationState.currentPage?.isDone == true ? "checkmark.circle.fill" : "checkmark.circle")
                         .labelStyle(.iconOnly)
                 }
-                .help(navigationState.currentPage?.isDone == true ? "Mark as Not Done" : "Mark as Done")
+                .help(navigationState.currentPage?.isDone == true ? "Mark as Not Reviewed" : "Mark as Reviewed")
                 
                 Button(action: { showProgress.toggle() }) {
                     Label("Progress", systemImage: "flag.pattern.checkered")
@@ -79,7 +76,7 @@ struct ReviewView: View {
                     .frame(width: 20)
                 
                 Button(action: copyCurrentPageText) {
-                    Label("Copy Page Contents", systemImage: "doc.on.doc")
+                    Label("Copy Page Text", systemImage: "document")
                         .labelStyle(.iconOnly)
                 }
                 .help("Copy Current Page Text")

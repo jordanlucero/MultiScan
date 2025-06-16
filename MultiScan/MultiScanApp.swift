@@ -10,6 +10,8 @@ import SwiftData
 
 @main
 struct MultiScanApp: App {
+    @AppStorage("showStatisticsPane") private var showStatisticsPane = true
+    
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             Document.self,
@@ -29,5 +31,11 @@ struct MultiScanApp: App {
             ContentView()
         }
         .modelContainer(sharedModelContainer)
+        .commands {
+            CommandGroup(after: .sidebar) {
+                Toggle("Show Statistics", isOn: $showStatisticsPane)
+                    .keyboardShortcut("T", modifiers: [.command, .shift])
+            }
+        }
     }
 }

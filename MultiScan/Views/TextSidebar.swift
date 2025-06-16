@@ -7,6 +7,7 @@ struct TextSidebar: View {
     @State private var isEditing: Bool = false
     @State private var showLineBreaks: Bool = false
     @State private var showFormattingHelp: Bool = false
+    @AppStorage("showStatisticsPane") private var showStatisticsPane = true
     
     var currentPage: Page? {
         navigationState.currentPage
@@ -89,29 +90,31 @@ struct TextSidebar: View {
             }
             .background(Color(NSColor.controlBackgroundColor))
             
-            Divider()
-            
-            VStack(spacing: 8) {
-                HStack {
-                    Text("Statistics")
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                    Spacer()
-                }
+            if showStatisticsPane {
+                Divider()
                 
-                if let page = currentPage {
+                VStack(spacing: 8) {
                     HStack {
-                        Label("\(page.text.split(separator: " ").count) words", systemImage: "textformat")
+                        Text("Statistics")
                             .font(.caption)
+                            .fontWeight(.semibold)
                         Spacer()
-                        Label("\(page.text.count) characters", systemImage: "character")
-                            .font(.caption)
                     }
-                    .foregroundColor(.secondary)
+                    
+                    if let page = currentPage {
+                        HStack {
+                            Label("\(page.text.split(separator: " ").count) words", systemImage: "textformat")
+                                .font(.caption)
+                            Spacer()
+                            Label("\(page.text.count) characters", systemImage: "character")
+                                .font(.caption)
+                        }
+                        .foregroundColor(.secondary)
+                    }
                 }
+                .padding()
+                .background(Color(NSColor.controlBackgroundColor))
             }
-            .padding()
-            .background(Color(NSColor.controlBackgroundColor))
         }
         .onChange(of: currentPage) { _, newPage in
             if let page = newPage {

@@ -6,7 +6,13 @@ struct ImageViewer: View {
     @State private var image: NSImage?
     @State private var scale: CGFloat = 1.0
     @State private var lastScale: CGFloat = 1.0
-    
+    @State private var isHovering: Bool = false
+    @FocusState private var focusedButton: ZoomButton?
+
+    enum ZoomButton {
+        case fit, zoomIn, zoomOut
+    }
+
     var body: some View {
         GeometryReader { geometry in
             ZStack {
@@ -42,22 +48,28 @@ struct ImageViewer: View {
                         Image(systemName: "arrow.up.left.and.arrow.down.right")
                     }
                     .help("Fit to Window")
-                    
+                    .focused($focusedButton, equals: .fit)
+
                     Button(action: { scale *= 1.25; lastScale = scale }) {
                         Image(systemName: "plus.magnifyingglass")
                     }
                     .help("Zoom In")
-                    
+                    .focused($focusedButton, equals: .zoomIn)
+
                     Button(action: { scale *= 0.8; lastScale = scale }) {
                         Image(systemName: "minus.magnifyingglass")
                     }
                     .help("Zoom Out")
+                    .focused($focusedButton, equals: .zoomOut)
                 }
                 .padding()
-           //     .background(.regularMaterial)
                 .glassEffect()
-       //         .cornerRadius(8)
                 .padding()
+                .opacity(isHovering || focusedButton != nil ? 1.0 : 0.0)
+                .animation(.easeInOut(duration: 0.25), value: isHovering || focusedButton != nil)
+            }
+            .onHover { hovering in
+                isHovering = hovering
             }
         }
         .onChange(of: navigationState.currentPage) { _, newPage in

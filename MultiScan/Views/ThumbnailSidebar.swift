@@ -75,6 +75,7 @@ struct ThumbnailSidebar: View {
                         .font(.title3)
                 }
                 .menuStyle(.borderlessButton)
+                .padding(.leading, 12)
                 .help("Filter pages")
                 
                 Spacer()

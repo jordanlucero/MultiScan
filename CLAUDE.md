@@ -8,7 +8,7 @@ MultiScan is a macOS SwiftUI application that uses SwiftData for persistence. Cu
 
 ## Technology Stack
 
-- **Platform**: macOS 14.0+
+- **Platform**: macOS 26.0+
 - **UI Framework**: SwiftUI
 - **Persistence**: SwiftData
 - **Language**: Swift 5.9+
@@ -49,7 +49,7 @@ xcodebuild -scheme MultiScan clean
 ## Key Implementation Details
 
 - **App Sandbox**: Enabled with read-only user file access (`com.apple.security.files.user-selected.read-only`)
-- **Minimum Deployment**: macOS 14.0
+- **Minimum Deployment**: macOS 26.0
 - **SwiftData Container**: Automatically manages SQLite database for Item model
 - **Navigation**: Split view pattern suitable for document-based or list-detail interfaces
 

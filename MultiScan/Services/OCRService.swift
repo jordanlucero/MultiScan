@@ -48,16 +48,18 @@ class OCRService: ObservableObject {
         
         print("Found \(imageURLs.count) images in folder: \(url.path)")
         
-        imageURLs.sort { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+        imageURLs.sort { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
         
         var results: [(pageNumber: Int, text: String, fileName: String, thumbnailData: Data?)] = []
         
         for (index, imageURL) in imageURLs.enumerated() {
-            currentFile = imageURL.lastPathComponent
+            // Get the relative path from the base folder
+            let relativePath = imageURL.path.replacingOccurrences(of: url.path + "/", with: "")
+            currentFile = relativePath
             progress = Double(index) / Double(imageURLs.count)
             
             let (text, thumbnailData) = try await processImage(at: imageURL)
-            results.append((pageNumber: index + 1, text: text, fileName: imageURL.lastPathComponent, thumbnailData: thumbnailData))
+            results.append((pageNumber: index + 1, text: text, fileName: relativePath, thumbnailData: thumbnailData))
         }
         
         progress = 1.0

@@ -54,8 +54,9 @@ struct ImageViewer: View {
                     .help("Zoom Out")
                 }
                 .padding()
-                .background(.regularMaterial)
-                .cornerRadius(8)
+           //     .background(.regularMaterial)
+                .glassEffect()
+       //         .cornerRadius(8)
                 .padding()
             }
         }
@@ -74,26 +75,77 @@ struct ImageViewer: View {
         }
         
         Task {
-            guard let folderURL = document.resolvedFolderURL() else { return }
-            
-            let accessed = folderURL.startAccessingSecurityScopedResource()
-            defer {
-                if accessed {
-                    folderURL.stopAccessingSecurityScopedResource()
+            do {
+                // Get the folder URL from the document
+                guard let folderURL = document.resolvedFolderURL() else { 
+                    print("Failed to resolve folder URL")
+                    return 
                 }
-            }
-            
-            let imageURL = folderURL.appendingPathComponent(page.imageFileName)
-            
-            if let loadedImage = NSImage(contentsOf: imageURL) {
+                
+                // Construct the image URL - page.imageFileName now contains the relative path
+                let imageURL = folderURL.appendingPathComponent(page.imageFileName)
+                
+                // First, check if the file exists
+                guard FileManager.default.fileExists(atPath: imageURL.path) else {
+                    print("Image file does not exist: \(imageURL.path)")
+                    await MainActor.run {
+                        self.image = nil
+                    }
+                    return
+                }
+                
+                // Start accessing the security-scoped resource
+                let accessed = folderURL.startAccessingSecurityScopedResource()
+                defer {
+                    if accessed {
+                        folderURL.stopAccessingSecurityScopedResource()
+                    }
+                }
+                
+                // Try to load the image using NSImage directly with the file URL
+                var loadedImage: NSImage? = NSImage(contentsOf: imageURL)
+                
+                if loadedImage == nil {
+                    // Load the image data
+                    let imageData = try Data(contentsOf: imageURL)
+                    
+                    // Method 1: Direct NSImage from data
+                    loadedImage = NSImage(data: imageData)
+                    
+                    // Method 2: Use CGImageSource for better format support
+                    if loadedImage == nil {
+                        if let imageSource = CGImageSourceCreateWithData(imageData as CFData, nil),
+                           let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) {
+                            let size = NSSize(width: CGFloat(cgImage.width), height: CGFloat(cgImage.height))
+                            loadedImage = NSImage(cgImage: cgImage, size: size)
+                        }
+                    }
+                    
+                    // Method 3: Try NSBitmapImageRep
+                    if loadedImage == nil {
+                        if let bitmapRep = NSBitmapImageRep(data: imageData) {
+                            loadedImage = NSImage(size: bitmapRep.size)
+                            loadedImage?.addRepresentation(bitmapRep)
+                        }
+                    }
+                }
+                
                 await MainActor.run {
-                    self.image = loadedImage
-                    self.scale = 1.0
-                    self.lastScale = 1.0
+                    if let finalImage = loadedImage {
+                        self.image = finalImage
+                        self.scale = 1.0
+                        self.lastScale = 1.0
+                    } else {
+                        print("Failed to create NSImage from data for: \(imageURL.path)")
+                        self.image = nil
+                    }
                 }
-            } else {
-                print("Failed to load image from: \(imageURL.path)")
-                print("File exists: \(FileManager.default.fileExists(atPath: imageURL.path))")
+                
+            } catch {
+                print("Error loading image: \(error)")
+                await MainActor.run {
+                    self.image = nil
+                }
             }
         }
     }

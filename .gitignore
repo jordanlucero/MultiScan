@@ -1,0 +1,52 @@
+# Icon Files (including Blender files)
+Icon Files/
+
+# Xcode user data
+*.xcuserdata
+*.xcuserdatad
+xcuserdata/
+MultiScan.xcodeproj/xcuserdata/
+MultiScan.xcodeproj/project.xcworkspace/xcuserdata/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Xcode
+*.swp
+*~.nib
+DerivedData/
+*.hmap
+*.ipa
+*.xccheckout
+*.moved-aside
+*.xcuserstate
+*.xcscmblueprint
+*.xcworkspace
+!default.xcworkspace
+
+# Swift Package Manager
+.build/
+Packages/
+Package.pins
+Package.resolved
+
+# CocoaPods
+Pods/
+
+# Carthage
+Carthage/Build/
+
+# Accio dependency management
+Dependencies/
+.accio/
+
+# fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+# Code Injection
+iOSInjectionProject/

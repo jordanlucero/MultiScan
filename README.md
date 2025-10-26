@@ -5,7 +5,7 @@ Built with fully-native Swift, SwiftUI, SwiftData, and VisionKit frameworks. Swi
 
 **Please remember to be mindful of how you use MultiScan, and to not use it in workflows where full accuracy is paramount. This implementation of VisionKit might place text out of order, or make simple mistakes that you will catch while reading.**
 
-Built with Claude Code, using Claude 4 Opus and Sonnet.
+Built with Claude Code running Claude 4 Opus, Claude 4 Sonnet, Claude 4.1 Opus, and Claude 4.5 Sonnet.
 
 # Key Limitations at this time
 

@@ -78,6 +78,18 @@ struct ImageViewer: View {
         .onAppear {
             loadImage(for: navigationState.currentPage)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .zoomIn)) { _ in
+            scale *= 1.25
+            lastScale = scale
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .zoomOut)) { _ in
+            scale *= 0.8
+            lastScale = scale
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .zoomActualSize)) { _ in
+            scale = 1.0
+            lastScale = 1.0
+        }
     }
     
     private func loadImage(for page: Page?) {

@@ -8,28 +8,36 @@ struct ReviewView: View {
     @State private var leftColumnWidth: CGFloat = 200
     @State private var rightColumnWidth: CGFloat = 300
     @State private var showProgress: Bool = false
+    @AppStorage("showThumbnails") private var showThumbnails = true
+    @AppStorage("showTextPanel") private var showTextPanel = true
     
     var body: some View {
         HSplitView {
-            ThumbnailSidebar(
-                document: document,
-                navigationState: navigationState,
-                selectedPageNumber: $selectedPageNumber
-            )
-            .frame(minWidth: 150, idealWidth: 200)
-            
+            if showThumbnails {
+                ThumbnailSidebar(
+                    document: document,
+                    navigationState: navigationState,
+                    selectedPageNumber: $selectedPageNumber
+                )
+                .frame(minWidth: 150, idealWidth: 200)
+            }
+
             ImageViewer(
                 document: document,
                 navigationState: navigationState
             )
             .frame(minWidth: 400)
-            
-            TextSidebar(
-                document: document,
-                navigationState: navigationState
-            )
-            .frame(minWidth: 200, idealWidth: 300)
+
+            if showTextPanel {
+                TextSidebar(
+                    document: document,
+                    navigationState: navigationState
+                )
+                .frame(minWidth: 200, idealWidth: 300)
+            }
         }
+        .focusedValue(\.document, document)
+        .focusedValue(\.navigationState, navigationState)
         .navigationTitle(String(document.name.prefix(30)) + (document.name.count > 30 ? "..." : ""))
         .navigationSubtitle("\(document.totalPages) pages")
         .toolbar {

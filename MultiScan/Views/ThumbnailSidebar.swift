@@ -4,14 +4,32 @@ struct ThumbnailSidebar: View {
     let document: Document
     @ObservedObject var navigationState: NavigationState
     @Binding var selectedPageNumber: Int?
-    
+
     enum FilterOption: String, CaseIterable {
         case all = "All"
         case notDone = "Not Reviewed"
         case done = "Reviewed"
     }
-    
-    @State private var filterOption: FilterOption = .all
+
+    @AppStorage("filterOption") private var filterOptionString = "all"
+
+    private var filterOption: FilterOption {
+        get {
+            switch filterOptionString {
+            case "all": return .all
+            case "notDone": return .notDone
+            case "done": return .done
+            default: return .all
+            }
+        }
+        set {
+            switch newValue {
+            case .all: filterOptionString = "all"
+            case .notDone: filterOptionString = "notDone"
+            case .done: filterOptionString = "done"
+            }
+        }
+    }
     
     var filteredPages: [Page] {
         let sortedPages = document.pages.sorted(by: { $0.pageNumber < $1.pageNumber })
@@ -61,7 +79,13 @@ struct ThumbnailSidebar: View {
             HStack(spacing: 8) {
                 Menu {
                     ForEach(FilterOption.allCases, id: \.self) { option in
-                        Button(action: { filterOption = option }) {
+                        Button(action: {
+                            switch option {
+                            case .all: filterOptionString = "all"
+                            case .notDone: filterOptionString = "notDone"
+                            case .done: filterOptionString = "done"
+                            }
+                        }) {
                             HStack {
                                 Text(option.rawValue)
                                 if filterOption == option {

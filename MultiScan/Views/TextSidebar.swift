@@ -8,9 +8,28 @@ struct TextSidebar: View {
     @State private var showLineBreaks: Bool = false
     @State private var showFormattingHelp: Bool = false
     @AppStorage("showStatisticsPane") private var showStatisticsPane = true
-    
+    @AppStorage("useSmartParagraphs") private var useSmartParagraphs = false
+
     var currentPage: Page? {
         navigationState.currentPage
+    }
+
+    /// Returns formatted text based on smart paragraphs setting
+    var displayText: String {
+        guard let page = currentPage else {
+            return "No text detected on this page."
+        }
+
+        // If smart paragraphs is enabled and we have bounding box data, use it
+        if useSmartParagraphs && !page.boundingBoxes.isEmpty {
+            return TextPostProcessor.applySmartParagraphs(
+                rawText: page.text,
+                boundingBoxes: page.boundingBoxes
+            )
+        }
+
+        // Otherwise return raw text
+        return page.text
     }
     
     var body: some View {
@@ -76,11 +95,11 @@ struct TextSidebar: View {
                         .padding()
                 } else {
                     if showLineBreaks {
-                        LineBreakVisibleText(text: currentPage?.text ?? "No text detected on this page.")
+                        LineBreakVisibleText(text: displayText)
                             .padding()
                             .frame(maxWidth: .infinity, alignment: .leading)
                     } else {
-                        Text(currentPage?.text ?? "No text detected on this page.")
+                        Text(displayText)
                             .font(.system(.body, design: .default))
                             .textSelection(.enabled)
                             .padding()

@@ -10,7 +10,7 @@ class OCRService: ObservableObject {
     @Published var currentFile: String = ""
     @Published var error: Error?
     
-    func processImagesInFolder(at url: URL, bookmarkData: Data?) async throws -> [(pageNumber: Int, text: String, fileName: String, thumbnailData: Data?)] {
+    func processImagesInFolder(at url: URL, bookmarkData: Data?) async throws -> [(pageNumber: Int, text: String, fileName: String, thumbnailData: Data?, boundingBoxesData: Data?)] {
         isProcessing = true
         progress = 0
         defer { isProcessing = false }
@@ -49,42 +49,45 @@ class OCRService: ObservableObject {
         print("Found \(imageURLs.count) images in folder: \(url.path)")
         
         imageURLs.sort { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
-        
-        var results: [(pageNumber: Int, text: String, fileName: String, thumbnailData: Data?)] = []
-        
+
+        var results: [(pageNumber: Int, text: String, fileName: String, thumbnailData: Data?, boundingBoxesData: Data?)] = []
+
         for (index, imageURL) in imageURLs.enumerated() {
             // Get the relative path from the base folder
             let relativePath = imageURL.path.replacingOccurrences(of: url.path + "/", with: "")
             currentFile = relativePath
             progress = Double(index) / Double(imageURLs.count)
-            
-            let (text, thumbnailData) = try await processImage(at: imageURL)
-            results.append((pageNumber: index + 1, text: text, fileName: relativePath, thumbnailData: thumbnailData))
+
+            let (text, thumbnailData, boundingBoxesData) = try await processImage(at: imageURL)
+            results.append((pageNumber: index + 1, text: text, fileName: relativePath, thumbnailData: thumbnailData, boundingBoxesData: boundingBoxesData))
         }
         
         progress = 1.0
         return results
     }
     
-    private func processImage(at imageURL: URL) async throws -> (text: String, thumbnailData: Data?) {
+    private func processImage(at imageURL: URL) async throws -> (text: String, thumbnailData: Data?, boundingBoxesData: Data?) {
         // Check if file exists before trying to load
         guard FileManager.default.fileExists(atPath: imageURL.path) else {
             print("File does not exist: \(imageURL.path)")
             throw OCRError.imageLoadError
         }
-        
+
         guard let image = NSImage(contentsOf: imageURL) else {
             print("Failed to load image: \(imageURL.lastPathComponent)")
             throw OCRError.imageLoadError
         }
-        
+
         // Generate thumbnail
         let thumbnailData = generateThumbnail(from: image)
-        
+
         // Perform OCR
-        let text = try await recognizeText(from: image, imageURL: imageURL)
-        
-        return (text, thumbnailData)
+        let (text, boundingBoxes) = try await recognizeText(from: image, imageURL: imageURL)
+
+        // Encode bounding boxes
+        let boundingBoxesData = try? JSONEncoder().encode(boundingBoxes)
+
+        return (text, thumbnailData, boundingBoxesData)
     }
     
     private func generateThumbnail(from image: NSImage) -> Data? {
@@ -116,36 +119,40 @@ class OCRService: ObservableObject {
         return bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.7])
     }
     
-    private func recognizeText(from image: NSImage, imageURL: URL) async throws -> String {
+    private func recognizeText(from image: NSImage, imageURL: URL) async throws -> (text: String, boundingBoxes: [CGRect]) {
         guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
             print("Failed to convert image to CGImage: \(imageURL.lastPathComponent)")
             throw OCRError.imageConversionError
         }
-        
+
         return try await withCheckedThrowingContinuation { continuation in
             let request = VNRecognizeTextRequest { request, error in
                 if let error = error {
                     continuation.resume(throwing: error)
                     return
                 }
-                
+
                 guard let observations = request.results as? [VNRecognizedTextObservation] else {
-                    continuation.resume(returning: "")
+                    continuation.resume(returning: ("", []))
                     return
                 }
-                
+
+                // Extract text lines
                 let recognizedText = observations
                     .compactMap { $0.topCandidates(1).first?.string }
                     .joined(separator: "\n")
-                
-                continuation.resume(returning: recognizedText)
+
+                // Extract bounding boxes (in image coordinates, origin is bottom-left)
+                let boundingBoxes = observations.map { $0.boundingBox }
+
+                continuation.resume(returning: (recognizedText, boundingBoxes))
             }
-            
+
             request.recognitionLevel = .accurate
             request.usesLanguageCorrection = true
-            
+
             let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
-            
+
             do {
                 try handler.perform([request])
             } catch {

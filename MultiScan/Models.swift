@@ -7,6 +7,7 @@
 
 import Foundation
 import SwiftData
+import CoreGraphics
 
 @Model
 final class Page {
@@ -17,14 +18,25 @@ final class Page {
     var createdAt: Date
     var isDone: Bool = false
     var thumbnailData: Data?
-    
-    init(pageNumber: Int, text: String, imageFileName: String) {
+    var boundingBoxesData: Data? // Encoded array of CGRect from VisionKit
+
+    init(pageNumber: Int, text: String, imageFileName: String, boundingBoxesData: Data? = nil) {
         self.pageNumber = pageNumber
         self.text = text
         self.imageFileName = imageFileName
         self.createdAt = Date()
         self.isDone = false
         self.thumbnailData = nil
+        self.boundingBoxesData = boundingBoxesData
+    }
+
+    /// Decode stored bounding boxes
+    var boundingBoxes: [CGRect] {
+        guard let data = boundingBoxesData,
+              let boxes = try? JSONDecoder().decode([CGRect].self, from: data) else {
+            return []
+        }
+        return boxes
     }
 }
 

@@ -134,7 +134,7 @@ struct HomeView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: { document in
-            Text("Are you sure you want to delete \"\(document.name)\"? This will remove all OCR data and cannot be undone.")
+            Text("Are you sure you want to delete the MultiScan project for \"\(document.name)\"? This will delete the OCR data and can't be undone.")
         }
     }
     
@@ -196,7 +196,8 @@ struct HomeView: View {
                                 let page = Page(
                                     pageNumber: result.pageNumber,
                                     text: result.text,
-                                    imageFileName: result.fileName
+                                    imageFileName: result.fileName,
+                                    boundingBoxesData: result.boundingBoxesData
                                 )
                                 page.thumbnailData = result.thumbnailData
                                 page.document = document

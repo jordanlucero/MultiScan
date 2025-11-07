@@ -66,7 +66,7 @@ struct MultiScanApp: App {
             // View Menu Commands
             CommandGroup(after: .sidebar) {
                 Toggle("Show Thumbnails", systemImage: "sidebar.squares.leading", isOn: $showThumbnails)
-                    .keyboardShortcut("T", modifiers: [.command, .option])
+                    .keyboardShortcut("S", modifiers: [.command])
 
                 Toggle("Show Text Panel", systemImage: "sidebar.trailing", isOn: $showTextPanel)
                     .keyboardShortcut("P", modifiers: [.command, .option])

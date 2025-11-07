@@ -5,35 +5,45 @@ struct ReviewView: View {
     let document: Document
     @StateObject private var navigationState = NavigationState()
     @State private var selectedPageNumber: Int?
-    @State private var leftColumnWidth: CGFloat = 200
-    @State private var rightColumnWidth: CGFloat = 300
     @State private var showProgress: Bool = false
     @AppStorage("showThumbnails") private var showThumbnails = true
     @AppStorage("showTextPanel") private var showTextPanel = true
-    
-    var body: some View {
-        HSplitView {
-            if showThumbnails {
-                ThumbnailSidebar(
-                    document: document,
-                    navigationState: navigationState,
-                    selectedPageNumber: $selectedPageNumber
-                )
-                .frame(minWidth: 150, idealWidth: 200)
+
+    // Convert Bool to NavigationSplitViewVisibility for sidebar control
+    private var sidebarVisibility: Binding<NavigationSplitViewVisibility> {
+        Binding(
+            get: { showThumbnails ? .all : .detailOnly },
+            set: { newValue in
+                showThumbnails = (newValue == .all)
             }
+        )
+    }
 
-            ImageViewer(
+    var body: some View {
+        NavigationSplitView(columnVisibility: sidebarVisibility) {
+            // Sidebar: Thumbnail list
+            ThumbnailSidebar(
                 document: document,
-                navigationState: navigationState
+                navigationState: navigationState,
+                selectedPageNumber: $selectedPageNumber
             )
-            .frame(minWidth: 400)
-
-            if showTextPanel {
-                TextSidebar(
+            .navigationSplitViewColumnWidth(min: 150, ideal: 200, max: 400)
+        } detail: {
+            // Detail: Main content area with image viewer and optional text panel
+            HSplitView {
+                ImageViewer(
                     document: document,
                     navigationState: navigationState
                 )
-                .frame(minWidth: 200, idealWidth: 300)
+                .frame(minWidth: 400)
+
+                if showTextPanel {
+                    TextSidebar(
+                        document: document,
+                        navigationState: navigationState
+                    )
+                    .frame(minWidth: 200, idealWidth: 300)
+                }
             }
         }
         .focusedValue(\.document, document)

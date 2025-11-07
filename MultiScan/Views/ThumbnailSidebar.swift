@@ -71,10 +71,9 @@ struct ThumbnailSidebar: View {
                     }
                 }
             }
-            .background(Color(NSColor.controlBackgroundColor))
-            
+
             Divider()
-            
+
             // Bottom toolbar
             HStack(spacing: 8) {
                 Menu {
@@ -101,9 +100,9 @@ struct ThumbnailSidebar: View {
                 .menuStyle(.borderlessButton)
                 .padding(.leading, 12)
                 .help("Filter pages")
-                
+
                 Spacer()
-                
+
                 if filterOption != .all {
                     Text(filterOption.rawValue)
                         .font(.caption)
@@ -111,7 +110,6 @@ struct ThumbnailSidebar: View {
                 }
             }
             .padding(8)
-            .background(Color(NSColor.controlBackgroundColor))
         }
     }
 }

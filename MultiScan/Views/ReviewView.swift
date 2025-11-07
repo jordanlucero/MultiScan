@@ -6,8 +6,8 @@ struct ReviewView: View {
     @StateObject private var navigationState = NavigationState()
     @State private var selectedPageNumber: Int?
     @State private var showProgress: Bool = false
+    @State private var inspectorIsShown: Bool = true
     @AppStorage("showThumbnails") private var showThumbnails = true
-    @AppStorage("showTextPanel") private var showTextPanel = true
 
     // Convert Bool to NavigationSplitViewVisibility for sidebar control
     private var sidebarVisibility: Binding<NavigationSplitViewVisibility> {
@@ -29,22 +29,18 @@ struct ReviewView: View {
             )
             .navigationSplitViewColumnWidth(min: 150, ideal: 200, max: 400)
         } detail: {
-            // Detail: Main content area with image viewer and optional text panel
-            HSplitView {
-                ImageViewer(
-                    document: document,
-                    navigationState: navigationState
-                )
-                .frame(minWidth: 400)
-
-                if showTextPanel {
-                    TextSidebar(
-                        document: document,
-                        navigationState: navigationState
-                    )
-                    .frame(minWidth: 200, idealWidth: 300)
-                }
-            }
+            // Detail: Main content area with image viewer
+            ImageViewer(
+                document: document,
+                navigationState: navigationState
+            )
+        }
+        .inspector(isPresented: $inspectorIsShown) {
+            TextSidebar(
+                document: document,
+                navigationState: navigationState
+            )
+            .inspectorColumnWidth(min: 250, ideal: 350, max: 500)
         }
         .focusedValue(\.document, document)
         .focusedValue(\.navigationState, navigationState)
@@ -104,6 +100,16 @@ struct ReviewView: View {
                         .labelStyle(.iconOnly)
                 }
                 .help("Copy All Pages Text")
+
+                Spacer()
+                    .frame(width: 20)
+
+                Button(action: { inspectorIsShown.toggle() }) {
+                    Label("Show Text Panel", systemImage: "sidebar.right")
+                        .labelStyle(.iconOnly)
+                }
+                .help(inspectorIsShown ? "Hide Text Panel" : "Show Text Panel")
+                .keyboardShortcut("i", modifiers: [.command, .option])
             }
         }
         .onAppear {

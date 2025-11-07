@@ -34,92 +34,53 @@ struct TextSidebar: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("OCR Text")
-                        .font(.headline)
-                    
-                    if let page = currentPage {
-                        Text("Page \(page.pageNumber) of \(document.totalPages)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+            // Header
+            VStack(alignment: .leading, spacing: 6) {
+                Text("OCR Text")
+                    .font(.headline)
+
+                if let page = currentPage {
+                    Text("Page \(page.pageNumber) of \(document.totalPages)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-                
-                Spacer()
-                
-                Button(action: { showLineBreaks.toggle() }) {
-                    Image(systemName: showLineBreaks ? "text.line.first.and.arrowtriangle.forward" : "text.alignleft")
-                }
-                .help(showLineBreaks ? "Hide Line Breaks" : "Show Line Breaks")
-                
-                if isEditing {
-                    Button(action: { showFormattingHelp.toggle() }) {
-                        Image(systemName: "questionmark.circle")
-                    }
-                    .popover(isPresented: $showFormattingHelp, arrowEdge: .bottom) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Formatting Syntax")
-                                .font(.headline)
-                            Divider()
-                            HStack {
-                                Text("Two Asterisks → **Bold**")
-                            }
-                            HStack {
-                                Text("One Asterisk → *Italic*")
-                            }
-                        }
-                        .padding()
-                        .frame(width: 200)
-                    }
-                    .help("Formatting syntax")
-                }
-                
-                Button(action: { isEditing.toggle() }) {
-                    Image(systemName: isEditing ? "checkmark.circle.fill" : "pencil.circle")
-                }
-                .help(isEditing ? "Save Changes" : "Edit Text")
             }
-            .padding()
-            
+            .padding(.horizontal)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+
             Divider()
-            
+
+            // Text content area
             ScrollView {
                 if isEditing {
                     TextEditor(text: $editedText)
                         .font(.system(.body, design: .default))
                         .scrollContentBackground(.hidden)
-                        .padding()
-                        .background(Color(NSColor.textBackgroundColor))
-                        .cornerRadius(8)
-                        .padding()
+                        .frame(minHeight: 200)
                 } else {
                     if showLineBreaks {
                         LineBreakVisibleText(text: displayText)
-                            .padding()
                             .frame(maxWidth: .infinity, alignment: .leading)
                     } else {
                         Text(displayText)
                             .font(.system(.body, design: .default))
                             .textSelection(.enabled)
-                            .padding()
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
             }
-            .background(Color(NSColor.controlBackgroundColor))
-            
+            .padding()
+
+            // Statistics pane
             if showStatisticsPane {
                 Divider()
-                
-                VStack(spacing: 8) {
-                    HStack {
-                        Text("Statistics")
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                        Spacer()
-                    }
-                    
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Statistics")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+
                     if let page = currentPage {
                         HStack {
                             Label("\(page.text.split(separator: " ").count) words", systemImage: "textformat")
@@ -128,11 +89,46 @@ struct TextSidebar: View {
                             Label("\(page.text.count) characters", systemImage: "character")
                                 .font(.caption)
                         }
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                     }
                 }
                 .padding()
-                .background(Color(NSColor.controlBackgroundColor))
+            }
+        }
+        .toolbar {
+            ToolbarItemGroup {
+                Button(action: { showLineBreaks.toggle() }) {
+                    Label(showLineBreaks ? "Hide Line Breaks" : "Show Line Breaks",
+                          systemImage: showLineBreaks ? "text.line.first.and.arrowtriangle.forward" : "text.alignleft")
+                        .labelStyle(.iconOnly)
+                }
+                .help(showLineBreaks ? "Hide Line Breaks" : "Show Line Breaks")
+
+                if isEditing {
+                    Button(action: { showFormattingHelp.toggle() }) {
+                        Label("Formatting Help", systemImage: "questionmark.circle")
+                            .labelStyle(.iconOnly)
+                    }
+                    .popover(isPresented: $showFormattingHelp, arrowEdge: .bottom) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Formatting Syntax")
+                                .font(.headline)
+                            Divider()
+                            Text("**Bold** → Two Asterisks")
+                            Text("*Italic* → One Asterisk")
+                        }
+                        .padding()
+                        .frame(width: 220)
+                    }
+                    .help("Formatting syntax")
+                }
+
+                Button(action: { isEditing.toggle() }) {
+                    Label(isEditing ? "Save" : "Edit",
+                          systemImage: isEditing ? "checkmark.circle.fill" : "pencil.circle")
+                        .labelStyle(.iconOnly)
+                }
+                .help(isEditing ? "Save Changes" : "Edit Text")
             }
         }
         .onChange(of: currentPage) { _, newPage in

@@ -3,7 +3,7 @@ A macOS app that runs OCR on folders containing images and lets you check its wo
 
 ![MultiScan running on an iMac with macOS Tahoe.](https://github.com/user-attachments/assets/92505022-c688-4126-98cc-3533444fda16)
 
-**Multiscan is designed for casual reading or very particular workflows where the OCR output can be reviewed. This implementation of VisionKit might place text out of order, or make simple mistakes that you will catch while reading. I don't recommend using MultiScan for workflows where absolute accuracy is required.**
+**MultiScan is designed for casual reading or very particular workflows where the OCR output can be reviewed. This implementation of VisionKit might place text out of order, or make simple mistakes that you will catch while reading. I don't recommend using MultiScan for workflows where absolute accuracy is required.**
 
 Built with Claude Code running Claude 4 Opus, Claude 4 Sonnet, Claude 4.1 Opus, and Claude 4.5 Sonnet.
 

@@ -9,7 +9,7 @@ Built with Claude Code running Claude 4 Opus, Claude 4 Sonnet, Claude 4.1 Opus, 
 
 # Key Limitations
 
-MultiScan doesn't have the capacity to identify images contained on a document page, and will attempt to transcribe the text within them in a way that doesn't make sense. When you export the plain text, it can be useful to make note of what page numbers contain an image or graphic, and just simply pasting in a screenshot of the image.
+MultiScan doesn't have the capacity to identify images contained on a document page, and will attempt to transcribe the text within them in a way that doesn't make sense. When you export the plain text, it can be useful to make note of what page numbers contain an image or graphic for simply pasting in a screenshot or external scan of the image.
 
 This implementation of VisionKit will add line breaks at the end of each line of text that's shown on the physical document's pages. At this time, you may need to manually delete these line breaks so that text will flow naturally in some use cases, such as exporting the plain text into an EPUB document externally.
 

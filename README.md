@@ -16,3 +16,7 @@ This implementation of VisionKit will add line breaks at the end of each line of
 MultiScan is highly memory-intensive when running OCR. It also does NOT properly communicate progress, with the app simply hanging during OCR processing.
 
 Like most simple OCR implementations, be mindful of the quality of the input images. Fingers, image noise, and specks of dust or other things on pages might be mistaken for accented characters, or new characters entirely.
+
+# Copyright Notice
+
+MultiScan is intended for use with documents you own, have explicit permission to digitize, or that you're digitizing for exclusively personal use. You are responsible for complying with copyright laws in your jurisdiction. 

@@ -19,4 +19,4 @@ Like most simple OCR implementations, be mindful of the quality of the input ima
 
 # Copyright Notice
 
-MultiScan is only for use with documents you hold the copyright for, have explicit permission to digitize, or that you're digitizing for personal use only. If Format-shifting (converting content you own from one format to another) is legal in your jurisdiction, it's for personal usage only. You are responsible for complying with copyright laws in your jurisdiction.
+MultiScan is only for use with documents you hold the copyright for, have explicit permission to digitize, or that you're digitizing for personal use only. If format-shifting (converting content you own from one format to another) is legal in your jurisdiction, it's for personal usage only. You are responsible for complying with copyright laws in your jurisdiction.

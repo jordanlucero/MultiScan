@@ -56,6 +56,7 @@ xcodebuild -scheme MultiScan clean
 - **Concurrency safety**: `SecurityScopedResourceManager` is marked `@unchecked Sendable` with `AccessedResource: Sendable`, and AppKit was removed from that file (Foundation-only). All shared mutable state stays behind a serial queue; keep any new mutable state on the same queue or make the type an actor if you add async APIs.
 - **Sendability**: `OCRService` is `final @unchecked Sendable` so it can be captured by background tasks while progress mutations stay on the main actor. Keep state mutations wrapped in `await MainActor.run` to preserve thread safety.
 - **OCR task pumps results by ID**: Background OCR work now only captures IDs/URLs/bookmarks and applies results on the main actor via `model(for:)` lookups to avoid sending `Document`/`ModelContext` across executors. Keep future mutations on the main actor and avoid capturing persistent models in detached tasks.
+- **Image processing without AppKit**: `OCRService` now uses ImageIO/CoreGraphics for loading, thumbnailing, and JPEG generation (no `NSImage` dependency). `TextFormatter` still needs AppKit for `NSFont` and `NSPasteboard` copy support on macOS.
 
 ## Adding New Features
 

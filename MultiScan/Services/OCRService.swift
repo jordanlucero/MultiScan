@@ -1,6 +1,8 @@
 import Foundation
 import Vision
-import AppKit
+import CoreGraphics
+import ImageIO
+import UniformTypeIdentifiers
 import SwiftUI
 
 final class OCRService: ObservableObject, @unchecked Sendable {
@@ -92,52 +94,51 @@ final class OCRService: ObservableObject, @unchecked Sendable {
             throw OCRError.imageLoadError
         }
 
-        guard let image = NSImage(contentsOf: imageURL) else {
+        guard let imageSource = CGImageSourceCreateWithURL(imageURL as CFURL, nil),
+              let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else {
             print("Failed to load image: \(imageURL.lastPathComponent)")
             throw OCRError.imageLoadError
         }
 
-        let thumbnailData = generateThumbnail(from: image)
+        let thumbnailData = generateThumbnail(from: imageSource)
 
-        let (text, boundingBoxes) = try await recognizeText(from: image, imageURL: imageURL)
+        let (text, boundingBoxes) = try await recognizeText(from: cgImage, imageURL: imageURL)
 
         let boundingBoxesData = try? JSONEncoder().encode(boundingBoxes)
 
         return (text, thumbnailData, boundingBoxesData)
     }
     
-    private func generateThumbnail(from image: NSImage) -> Data? {
-        let maxSize = NSSize(width: 150, height: 200)
-        let imageSize = image.size
+    private func generateThumbnail(from imageSource: CGImageSource) -> Data? {
+        let maxDimension: CGFloat = 200
+        let options: [NSString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxDimension,
+            kCGImageSourceCreateThumbnailWithTransform: true
+        ]
         
-        let widthRatio = maxSize.width / imageSize.width
-        let heightRatio = maxSize.height / imageSize.height
-        let ratio = min(widthRatio, heightRatio)
-        
-        let newSize = NSSize(width: imageSize.width * ratio, height: imageSize.height * ratio)
-        
-        let thumbnailImage = NSImage(size: newSize)
-        thumbnailImage.lockFocus()
-        image.draw(in: NSRect(origin: .zero, size: newSize),
-                  from: NSRect(origin: .zero, size: imageSize),
-                  operation: .copy,
-                  fraction: 1.0)
-        thumbnailImage.unlockFocus()
-        
-        guard let tiffData = thumbnailImage.tiffRepresentation,
-              let bitmap = NSBitmapImageRep(data: tiffData) else {
+        guard let thumbnailImage = CGImageSourceCreateThumbnailAtIndex(imageSource, 0, options as CFDictionary) else {
             return nil
         }
         
-        return bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.7])
+        let data = NSMutableData()
+        let typeIdentifier = UTType.jpeg.identifier as CFString
+        guard let destination = CGImageDestinationCreateWithData(data, typeIdentifier, 1, nil) else {
+            return nil
+        }
+        
+        let compressionOptions: [NSString: Any] = [
+            kCGImageDestinationLossyCompressionQuality: 0.7
+        ]
+        CGImageDestinationAddImage(destination, thumbnailImage, compressionOptions as CFDictionary)
+        guard CGImageDestinationFinalize(destination) else {
+            return nil
+        }
+        
+        return data as Data
     }
     
-    private func recognizeText(from image: NSImage, imageURL: URL) async throws -> (text: String, boundingBoxes: [CGRect]) {
-        guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-            print("Failed to convert image to CGImage: \(imageURL.lastPathComponent)")
-            throw OCRError.imageConversionError
-        }
-
+    private func recognizeText(from cgImage: CGImage, imageURL: URL) async throws -> (text: String, boundingBoxes: [CGRect]) {
         return try await withCheckedThrowingContinuation { continuation in
             let request = VNRecognizeTextRequest { request, error in
                 if let error = error {

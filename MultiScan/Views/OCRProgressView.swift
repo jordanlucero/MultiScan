@@ -2,10 +2,15 @@ import SwiftUI
 
 struct OCRProgressView: View {
     @ObservedObject var ocrService: OCRService
+    var documentName: String
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
         VStack(spacing: 20) {
+            Text(documentName)
+                .font(.headline)
+                .foregroundColor(.secondary)
+            
             Text("Processing Images")
                 .font(.title2)
                 .fontWeight(.semibold)

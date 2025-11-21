@@ -56,9 +56,13 @@ struct HomeView: View {
                             
                             HStack(spacing: 8) {
                                 if processingDocumentIDs.contains(document.persistentModelID) {
-                                    ProgressView()
-                                        .controlSize(.small)
-                                        .frame(width: 40)
+                                    HStack(spacing: 10) {
+                                        ProgressView(value: ocrService.progress, total: 1.0)
+                                            .progressViewStyle(.linear)
+                                            .frame(width: 200)
+                                        ProgressView()
+                                            .controlSize(.small)
+                                    }
                                 } else {
                                     NavigationLink(destination: ReviewView(document: document)) {
                                         Text("Review")

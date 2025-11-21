@@ -3,7 +3,6 @@ import Vision
 import AppKit
 import SwiftUI
 
-@MainActor
 class OCRService: ObservableObject {
     @Published var isProcessing = false
     @Published var progress: Double = 0
@@ -11,9 +10,17 @@ class OCRService: ObservableObject {
     @Published var error: Error?
     
     func processImagesInFolder(at url: URL, bookmarkData: Data?) async throws -> [(pageNumber: Int, text: String, fileName: String, thumbnailData: Data?, boundingBoxesData: Data?)] {
-        isProcessing = true
-        progress = 0
-        defer { isProcessing = false }
+        await MainActor.run {
+            isProcessing = true
+            progress = 0
+            currentFile = ""
+        }
+        defer {
+            Task { @MainActor in
+                self.isProcessing = false
+                self.currentFile = ""
+            }
+        }
         
         // Only start accessing if we're using a bookmark
         var accessed = false
@@ -51,23 +58,35 @@ class OCRService: ObservableObject {
         imageURLs.sort { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
 
         var results: [(pageNumber: Int, text: String, fileName: String, thumbnailData: Data?, boundingBoxesData: Data?)] = []
+        let imageCount = max(imageURLs.count, 1)
 
         for (index, imageURL) in imageURLs.enumerated() {
-            // Get the relative path from the base folder
+            try Task.checkCancellation()
+            
             let relativePath = imageURL.path.replacingOccurrences(of: url.path + "/", with: "")
-            currentFile = relativePath
-            progress = Double(index) / Double(imageURLs.count)
-
+            
+            await MainActor.run {
+                self.currentFile = relativePath
+                self.progress = Double(index) / Double(imageCount)
+            }
+            
             let (text, thumbnailData, boundingBoxesData) = try await processImage(at: imageURL)
+            
             results.append((pageNumber: index + 1, text: text, fileName: relativePath, thumbnailData: thumbnailData, boundingBoxesData: boundingBoxesData))
+            
+            await MainActor.run {
+                self.progress = Double(index + 1) / Double(imageCount)
+            }
         }
         
-        progress = 1.0
+        await MainActor.run {
+            self.progress = 1.0
+            self.currentFile = ""
+        }
         return results
     }
     
     private func processImage(at imageURL: URL) async throws -> (text: String, thumbnailData: Data?, boundingBoxesData: Data?) {
-        // Check if file exists before trying to load
         guard FileManager.default.fileExists(atPath: imageURL.path) else {
             print("File does not exist: \(imageURL.path)")
             throw OCRError.imageLoadError
@@ -78,24 +97,19 @@ class OCRService: ObservableObject {
             throw OCRError.imageLoadError
         }
 
-        // Generate thumbnail
         let thumbnailData = generateThumbnail(from: image)
 
-        // Perform OCR
         let (text, boundingBoxes) = try await recognizeText(from: image, imageURL: imageURL)
 
-        // Encode bounding boxes
         let boundingBoxesData = try? JSONEncoder().encode(boundingBoxes)
 
         return (text, thumbnailData, boundingBoxesData)
     }
     
     private func generateThumbnail(from image: NSImage) -> Data? {
-        // Create a smaller thumbnail (150x200 max)
         let maxSize = NSSize(width: 150, height: 200)
         let imageSize = image.size
         
-        // Calculate aspect ratio
         let widthRatio = maxSize.width / imageSize.width
         let heightRatio = maxSize.height / imageSize.height
         let ratio = min(widthRatio, heightRatio)
@@ -110,7 +124,6 @@ class OCRService: ObservableObject {
                   fraction: 1.0)
         thumbnailImage.unlockFocus()
         
-        // Convert to JPEG data with compression
         guard let tiffData = thumbnailImage.tiffRepresentation,
               let bitmap = NSBitmapImageRep(data: tiffData) else {
             return nil
@@ -137,12 +150,10 @@ class OCRService: ObservableObject {
                     return
                 }
 
-                // Extract text lines
                 let recognizedText = observations
                     .compactMap { $0.topCandidates(1).first?.string }
                     .joined(separator: "\n")
 
-                // Extract bounding boxes (in image coordinates, origin is bottom-left)
                 let boundingBoxes = observations.map { $0.boundingBox }
 
                 continuation.resume(returning: (recognizedText, boundingBoxes))

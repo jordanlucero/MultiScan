@@ -94,7 +94,6 @@ struct TextFormatter {
     
     /// Calculate adjusted range after removing formatting markers
     private static func calculateAdjustedRange(_ originalRange: NSRange, removedCharacters: [(String, NSRange)], in originalText: String) -> NSRange {
-        var offset = 0
         var adjustedLocation = originalRange.location
         
         for (content, range) in removedCharacters {

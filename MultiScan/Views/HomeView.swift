@@ -158,91 +158,94 @@ struct HomeView: View {
         }
     }
     
+    @MainActor
     private func startOCRImmediately(for folderURL: URL, needsSecurityScope: Bool = false) {
-        Task {
-            do {
-                // Create bookmark while we have access
-                let bookmarkData = SecurityScopedResourceManager.shared.createBookmark(for: folderURL)
-                
-                // Create document immediately and show it in the list
-                let document = Document(
-                    name: folderURL.lastPathComponent,
-                    folderPath: folderURL.path,
-                    folderBookmark: bookmarkData,
-                    totalPages: 0  // Will update after processing
-                )
-                
-                modelContext.insert(document)
-                try modelContext.save()
-                
-                // Track this document as processing
-                processingDocumentIDs.insert(document.persistentModelID)
-                
-                // Clear the selected folder
-                selectedFolderURL = nil
-                
-                // Process images in background
-                Task.detached {
-                    do {
-                        // Process images (OCRService will handle its own security scope)
-                        let results = try await self.ocrService.processImagesInFolder(at: folderURL, bookmarkData: bookmarkData)
-                        
-                        // Stop accessing the original URL if we started access
-                        if needsSecurityScope {
-                            folderURL.stopAccessingSecurityScopedResource()
-                        }
-                        
-                        // Update the document with results on main thread
-                        await MainActor.run {
-                            document.totalPages = results.count
-                            
-                            for result in results {
-                                let page = Page(
-                                    pageNumber: result.pageNumber,
-                                    text: result.text,
-                                    imageFileName: result.fileName,
-                                    boundingBoxesData: result.boundingBoxesData
-                                )
-                                page.thumbnailData = result.thumbnailData
-                                page.document = document
-                                document.pages.append(page)
-                            }
-                            
-                            do {
-                                try self.modelContext.save()
-                            } catch {
-                                print("Failed to save OCR results: \(error)")
-                            }
-                            
-                            // Remove from processing set
-                            self.processingDocumentIDs.remove(document.persistentModelID)
-                        }
-                    } catch {
-                        // Handle error on main thread
-                        await MainActor.run {
-                            self.processingDocumentIDs.remove(document.persistentModelID)
-                            // Optionally delete the failed document
-                            self.modelContext.delete(document)
-                            try? self.modelContext.save()
-                            
-                            self.ocrService.error = error
-                            self.showingError = true
-                        }
-                        // Make sure to stop accessing on error too
-                        if needsSecurityScope {
-                            folderURL.stopAccessingSecurityScopedResource()
-                        }
+        do {
+            let bookmarkData = SecurityScopedResourceManager.shared.createBookmark(for: folderURL)
+            
+            let document = Document(
+                name: folderURL.lastPathComponent,
+                folderPath: folderURL.path,
+                folderBookmark: bookmarkData,
+                totalPages: 0
+            )
+            
+            modelContext.insert(document)
+            try modelContext.save()
+            
+            let documentID = document.persistentModelID
+            
+            processingDocumentIDs.insert(documentID)
+            selectedFolderURL = nil
+            
+            Task.detached(priority: .userInitiated) { [ocrService, bookmarkData, needsSecurityScope, folderURL, documentID] in
+                do {
+                    let results = try await ocrService.processImagesInFolder(at: folderURL, bookmarkData: bookmarkData)
+                    
+                    if needsSecurityScope {
+                        folderURL.stopAccessingSecurityScopedResource()
+                    }
+                    
+                    await MainActor.run {
+                        updateDocument(with: results, id: documentID)
+                    }
+                } catch {
+                    if needsSecurityScope {
+                        folderURL.stopAccessingSecurityScopedResource()
+                    }
+                    
+                    await MainActor.run {
+                        handleProcessingFailure(for: documentID, error: error)
                     }
                 }
-            } catch {
-                // Handle immediate errors (e.g., bookmark creation failure)
-                self.ocrService.error = error
-                self.showingError = true
-                if needsSecurityScope {
-                    folderURL.stopAccessingSecurityScopedResource()
-                }
+            }
+        } catch {
+            self.ocrService.error = error
+            self.showingError = true
+            if needsSecurityScope {
+                folderURL.stopAccessingSecurityScopedResource()
             }
         }
+    }
+
+    @MainActor
+    private func updateDocument(with results: [(pageNumber: Int, text: String, fileName: String, thumbnailData: Data?, boundingBoxesData: Data?)], id: PersistentIdentifier) {
+        guard let document = modelContext.model(for: id) as? Document else { return }
+        
+        document.totalPages = results.count
+        
+        for result in results {
+            let page = Page(
+                pageNumber: result.pageNumber,
+                text: result.text,
+                imageFileName: result.fileName,
+                boundingBoxesData: result.boundingBoxesData
+            )
+            page.thumbnailData = result.thumbnailData
+            page.document = document
+            document.pages.append(page)
+        }
+        
+        do {
+            try modelContext.save()
+        } catch {
+            print("Failed to save OCR results: \(error)")
+        }
+        
+        processingDocumentIDs.remove(id)
+    }
+
+    @MainActor
+    private func handleProcessingFailure(for documentID: PersistentIdentifier, error: Error) {
+        if let document = modelContext.model(for: documentID) as? Document {
+            modelContext.delete(document)
+        }
+        try? modelContext.save()
+        
+        processingDocumentIDs.remove(documentID)
+        
+        ocrService.error = error
+        showingError = true
     }
     
     private func handleDrop(providers: [NSItemProvider]) {

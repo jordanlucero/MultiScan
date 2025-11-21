@@ -3,7 +3,7 @@ import Vision
 import AppKit
 import SwiftUI
 
-class OCRService: ObservableObject {
+final class OCRService: ObservableObject, @unchecked Sendable {
     @Published var isProcessing = false
     @Published var progress: Double = 0
     @Published var currentFile: String = ""
@@ -42,7 +42,7 @@ class OCRService: ObservableObject {
         
         var imageURLs: [URL] = []
         
-        for case let fileURL as URL in enumerator {
+        while let fileURL = enumerator.nextObject() as? URL {
             guard let resourceValues = try? fileURL.resourceValues(forKeys: Set(resourceKeys)),
                   let isRegularFile = resourceValues.isRegularFile,
                   isRegularFile else { continue }

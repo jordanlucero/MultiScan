@@ -52,6 +52,10 @@ xcodebuild -scheme MultiScan clean
 - **Navigation**: Split view pattern suitable for document-based or list-detail interfaces
 - **OCR Processing**: `OCRService.processImagesInFolder` now runs work off the main actor and only hops to the main actor for UI-bound state updates (`isProcessing`, `progress`, `currentFile`). Avoid putting long-running OCR/image work back on the main actor or the app will beach-ball again.
 - **Progress UI**: OCR progress lives inline in the home project list (linear bar + spinner) with no modal overlay; keep it single-line to avoid layout jumps.
+- **Swift 6 readiness**: Directory traversal in `OCRService` now uses `enumerator.nextObject()` (no `makeIterator` in async context), and warnings like unused locals (e.g., `offset` in `TextFormatter`) are cleaned up. Keep async code free of synchronous iteration patterns that are banned under Swift 6 strict concurrency.
+- **Concurrency safety**: `SecurityScopedResourceManager` is marked `@unchecked Sendable` with `AccessedResource: Sendable`, and AppKit was removed from that file (Foundation-only). All shared mutable state stays behind a serial queue; keep any new mutable state on the same queue or make the type an actor if you add async APIs.
+- **Sendability**: `OCRService` is `final @unchecked Sendable` so it can be captured by background tasks while progress mutations stay on the main actor. Keep state mutations wrapped in `await MainActor.run` to preserve thread safety.
+- **OCR task pumps results by ID**: Background OCR work now only captures IDs/URLs/bookmarks and applies results on the main actor via `model(for:)` lookups to avoid sending `Document`/`ModelContext` across executors. Keep future mutations on the main actor and avoid capturing persistent models in detached tasks.
 
 ## Adding New Features
 

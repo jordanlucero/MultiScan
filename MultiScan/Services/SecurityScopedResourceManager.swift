@@ -1,10 +1,9 @@
 import Foundation
-import AppKit
 
-class SecurityScopedResourceManager {
+final class SecurityScopedResourceManager: @unchecked Sendable {
     static let shared = SecurityScopedResourceManager()
     
-    private struct AccessedResource {
+    private struct AccessedResource: Sendable {
         let url: URL
         let accessTime: Date
         var isAccessing: Bool
@@ -39,7 +38,7 @@ class SecurityScopedResourceManager {
             }
             
             for url in urlsToStop {
-                self.stopAccessingURL(url)
+                self.stopAccessingURLLocked(url)
             }
         }
     }
@@ -99,10 +98,7 @@ class SecurityScopedResourceManager {
     
     private func stopAccessingURL(_ url: URL) {
         accessQueue.sync {
-            if let resource = accessedResources[url], resource.isAccessing {
-                url.stopAccessingSecurityScopedResource()
-                accessedResources[url] = AccessedResource(url: url, accessTime: resource.accessTime, isAccessing: false)
-            }
+            stopAccessingURLLocked(url)
         }
     }
     
@@ -126,6 +122,13 @@ class SecurityScopedResourceManager {
         } catch {
             print("Error creating bookmark: \(error)")
             return nil
+        }
+    }
+    
+    private func stopAccessingURLLocked(_ url: URL) {
+        if let resource = accessedResources[url], resource.isAccessing {
+            url.stopAccessingSecurityScopedResource()
+            accessedResources[url] = AccessedResource(url: url, accessTime: resource.accessTime, isAccessing: false)
         }
     }
     

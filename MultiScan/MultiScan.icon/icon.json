@@ -1,0 +1,116 @@
+{
+  "color-space-for-untagged-svg-colors" : "display-p3",
+  "fill-specializations" : [
+    {
+      "value" : {
+        "linear-gradient" : [
+          "extended-gray:0.00000,1.00000",
+          "extended-gray:0.25000,1.00000"
+        ],
+        "orientation" : {
+          "start" : {
+            "x" : 0.5,
+            "y" : 0
+          },
+          "stop" : {
+            "x" : 0.5,
+            "y" : 0.7
+          }
+        }
+      }
+    },
+    {
+      "appearance" : "dark",
+      "value" : "system-dark"
+    }
+  ],
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "hidden" : true,
+          "image-name" : "Untitled8 ready.png",
+          "name" : "Untitled8 ready",
+          "position" : {
+            "scale" : 0.6,
+            "translation-in-points" : [
+              -3.469864164367843,
+              -9.048293530455043
+            ]
+          }
+        },
+        {
+          "hidden" : true,
+          "image-name" : "MultiScan book test.png",
+          "name" : "MultiScan book test",
+          "position" : {
+            "scale" : 0.75,
+            "translation-in-points" : [
+              -44.42091930693668,
+              -24.330727457747578
+            ]
+          }
+        },
+        {
+          "blend-mode" : "plus-lighter",
+          "fill-specializations" : [
+            {
+              "appearance" : "tinted",
+              "value" : {
+                "solid" : "display-p3:1.00000,0.97328,0.96144,1.00000"
+              }
+            }
+          ],
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "Untitled4356789.png",
+          "name" : "Untitled4356789",
+          "opacity-specializations" : [
+            {
+              "value" : 1
+            },
+            {
+              "appearance" : "dark",
+              "value" : 1
+            }
+          ],
+          "position" : {
+            "scale" : 0.5,
+            "translation-in-points" : [
+              -123.02862255776041,
+              -11.205727457747578
+            ]
+          }
+        },
+        {
+          "blend-mode" : "normal",
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "Note Jun 17, 2025.png",
+          "name" : "Note Jun 17, 2025",
+          "opacity" : 0.3,
+          "position" : {
+            "scale" : 0.7,
+            "translation-in-points" : [
+              -298.7614393103837,
+              -6.1775703927148236
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "squares" : [
+      "macOS"
+    ]
+  }
+}

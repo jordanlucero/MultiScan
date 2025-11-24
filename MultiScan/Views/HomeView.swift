@@ -24,7 +24,7 @@ struct HomeView: View {
                 .font(.largeTitle)
                 .fontWeight(.bold)
             
-            Text("Select a folder containing images to perform OCR")
+            Text("Select a folder containing images to start")
                 .font(.headline)
                 .foregroundColor(.secondary)
             

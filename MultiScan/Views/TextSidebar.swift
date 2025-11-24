@@ -125,7 +125,7 @@ struct TextSidebar: View {
 
                 Button(action: { isEditing.toggle() }) {
                     Label(isEditing ? "Save" : "Edit",
-                          systemImage: isEditing ? "checkmark.circle.fill" : "pencil.circle")
+                          systemImage: isEditing ? "checkmark.circle" : "pencil.circle")
                         .labelStyle(.iconOnly)
                 }
                 .help(isEditing ? "Save Changes" : "Edit Text")

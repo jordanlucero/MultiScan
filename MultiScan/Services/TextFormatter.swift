@@ -5,14 +5,36 @@
 //  Handles rich text export and clipboard operations.
 //
 
-import Foundation
-import AppKit
 import SwiftUI
+import AppKit
 
 struct TextFormatter {
-    /// Copies an AttributedString to the clipboard as both RTF and plain text
-    static func copyRichText(_ attributedString: AttributedString) {
-        let nsAttributedString = NSAttributedString(attributedString)
+    /// Copies a page's rich text to the clipboard
+    @MainActor
+    static func copyPageText(_ page: Page) {
+        copyToClipboard(page.richText)
+    }
+
+    /// Copies all pages' rich text to the clipboard
+    @MainActor
+    static func copyAllPagesText(_ pages: [Page]) {
+        let sortedPages = pages.sorted { $0.pageNumber < $1.pageNumber }
+        var combined = AttributedString()
+
+        for (index, page) in sortedPages.enumerated() {
+            combined.append(page.richText)
+            if index < sortedPages.count - 1 {
+                combined.append(AttributedString("\n\n"))
+            }
+        }
+
+        copyToClipboard(combined)
+    }
+
+    /// Copies AttributedString to clipboard, converting SwiftUI fonts to AppKit fonts for RTF
+    @MainActor
+    private static func copyToClipboard(_ attributedString: AttributedString) {
+        let nsAttributedString = convertToNSAttributedString(attributedString)
 
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
@@ -29,29 +51,36 @@ struct TextFormatter {
         }
     }
 
-    /// Copies multiple AttributedStrings to clipboard, joined with double newlines
-    static func copyRichText(_ attributedStrings: [AttributedString]) {
-        var combined = AttributedString()
+    /// Converts SwiftUI AttributedString to NSAttributedString with proper font conversion
+    private static func convertToNSAttributedString(_ attributedString: AttributedString) -> NSAttributedString {
+        let result = NSMutableAttributedString()
+        let baseFont = NSFont.systemFont(ofSize: NSFont.systemFontSize)
 
-        for (index, str) in attributedStrings.enumerated() {
-            combined.append(str)
-            if index < attributedStrings.count - 1 {
-                combined.append(AttributedString("\n\n"))
+        for run in attributedString.runs {
+            let text = String(attributedString[run.range].characters)
+            var attributes: [NSAttributedString.Key: Any] = [:]
+
+            // Convert SwiftUI Font to NSFont with proper traits
+            if let swiftUIFont = run.font {
+                let resolved = swiftUIFont.resolve(in: EnvironmentValues().fontResolutionContext)
+                var font = baseFont
+
+                if resolved.isBold && resolved.isItalic {
+                    font = NSFontManager.shared.convert(baseFont, toHaveTrait: [.boldFontMask, .italicFontMask])
+                } else if resolved.isBold {
+                    font = NSFontManager.shared.convert(baseFont, toHaveTrait: .boldFontMask)
+                } else if resolved.isItalic {
+                    font = NSFontManager.shared.convert(baseFont, toHaveTrait: .italicFontMask)
+                }
+
+                attributes[.font] = font
+            } else {
+                attributes[.font] = baseFont
             }
+
+            result.append(NSAttributedString(string: text, attributes: attributes))
         }
 
-        copyRichText(combined)
-    }
-
-    /// Copies a page's rich text to the clipboard
-    static func copyPageText(_ page: Page) {
-        copyRichText(page.richText)
-    }
-
-    /// Copies all pages' rich text to the clipboard
-    static func copyAllPagesText(_ pages: [Page]) {
-        let sortedPages = pages.sorted { $0.pageNumber < $1.pageNumber }
-        let attributedStrings = sortedPages.map { $0.richText }
-        copyRichText(attributedStrings)
+        return result
     }
 }

@@ -22,7 +22,10 @@ final class EditablePageText: Identifiable {
 
     init(page: Page) {
         self.page = page
-        self.text = page.richText
+        // Apply primary color for proper dark/light mode display in editor
+        var displayText = page.richText
+        displayText.foregroundColor = Color.primary
+        self.text = displayText
         self.selection = AttributedTextSelection()
     }
 
@@ -159,9 +162,7 @@ struct RichTextSidebar: View {
                         text: Bindable(editableText).text,
                         selection: Bindable(editableText).selection
                     )
-                    .textEditorStyle(.plain)
-                    .font(.body)
-                    .padding([.top, .leading, .trailing])
+// unsure about why scroll bar and padding is not consistent
                 }
             } else {
                 // View mode: Read-only styled text
@@ -170,7 +171,7 @@ struct RichTextSidebar: View {
                         .font(.body)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding([.top, .leading, .trailing])
+                        .padding()
                 }
             }
 
@@ -201,13 +202,13 @@ struct RichTextSidebar: View {
             ToolbarItemGroup {
                 if isEditing {
                     Button(action: cancelEditing) {
-                        Label("Cancel", systemImage: "xmark.circle")
+                        Label("Discard", systemImage: "xmark.circle")
                             .labelStyle(.iconOnly)
                     }
-                    .help("Cancel Editing")
+                    .help("Discard Changes")
 
                     Button(action: saveAndExitEditing) {
-                        Label("Done", systemImage: "checkmark.circle.fill")
+                        Label("Done", systemImage: "checkmark.circle")
                             .labelStyle(.iconOnly)
                     }
                     .help("Save Changes")

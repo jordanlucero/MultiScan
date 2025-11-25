@@ -2,47 +2,81 @@
 //  RichTextSidebar.swift
 //  MultiScan
 //
-//  A unified rich text viewing and editing sidebar using SwiftUI's
+//  A rich text viewing and editing sidebar using SwiftUI's
 //  native AttributedString support in macOS 26+.
 //
 
 import SwiftUI
 
-/// View model for managing editable rich text with selection tracking
+/// View model for managing editable rich text during edit mode
 @MainActor
 @Observable
 final class EditablePageText: Identifiable {
-    let page: Page
+    private let page: Page
 
-    var text: AttributedString {
-        get {
-            // Handle conflicts between local edits and SwiftData updates
-            if lastModified >= page.lastModified {
-                editedText
-            } else {
-                page.richText
-            }
-        }
-        set {
-            page.richText = newValue
-            editedText = newValue
-        }
-    }
+    /// The text being edited - only modified during edit sessions
+    var text: AttributedString
 
-    private var editedText: AttributedString {
-        didSet {
-            lastModified = .now
-        }
-    }
-    private var lastModified: Date
-
+    /// Selection tracking for formatting operations
     var selection: AttributedTextSelection
 
     init(page: Page) {
         self.page = page
+        self.text = page.richText
         self.selection = AttributedTextSelection()
-        self.editedText = page.richText
-        self.lastModified = page.lastModified
+    }
+
+    /// Save changes back to the page
+    func save() {
+        // Strip any foreground color before saving (we apply it dynamically for display)
+        var cleanText = text
+        for run in cleanText.runs {
+            let range = run.range
+            cleanText[range].foregroundColor = nil
+        }
+        page.richText = cleanText
+    }
+
+    /// Discard changes and reload from page
+    func revert() {
+        text = page.richText
+    }
+
+    /// Apply bold formatting to the current selection
+    func applyBold() {
+        text.transformAttributes(in: &selection) { container in
+            let currentFont = container.font
+            let resolved = currentFont?.resolve(in: EnvironmentValues().fontResolutionContext)
+            let isBold = resolved?.isBold ?? false
+            let isItalic = resolved?.isItalic ?? false
+
+            if isBold {
+                container.font = isItalic ? .body.italic() : nil
+            } else {
+                container.font = isItalic ? .body.bold().italic() : .body.bold()
+            }
+        }
+    }
+
+    /// Apply italic formatting to the current selection
+    func applyItalic() {
+        text.transformAttributes(in: &selection) { container in
+            let currentFont = container.font
+            let resolved = currentFont?.resolve(in: EnvironmentValues().fontResolutionContext)
+            let isBold = resolved?.isBold ?? false
+            let isItalic = resolved?.isItalic ?? false
+
+            if isItalic {
+                container.font = isBold ? .body.bold() : nil
+            } else {
+                container.font = isBold ? .body.bold().italic() : .body.italic()
+            }
+        }
+    }
+
+    /// Check if there's an active text selection
+    var hasSelection: Bool {
+        true // We can't easily check, so always enable formatting buttons
     }
 }
 
@@ -50,11 +84,24 @@ struct RichTextSidebar: View {
     let document: Document
     @ObservedObject var navigationState: NavigationState
     @AppStorage("showStatisticsPane") private var showStatisticsPane = true
+    @Environment(\.colorScheme) private var colorScheme
 
+    @State private var isEditing: Bool = false
     @State private var editableText: EditablePageText?
 
     var currentPage: Page? {
         navigationState.currentPage
+    }
+
+    /// Display text with proper color for current color scheme
+    private var displayText: AttributedString {
+        guard let page = currentPage else {
+            return AttributedString("No text detected on this page.")
+        }
+        var text = page.richText
+        // Apply primary color for proper dark/light mode support
+        text.foregroundColor = Color.primary
+        return text
     }
 
     var body: some View {
@@ -76,20 +123,55 @@ struct RichTextSidebar: View {
 
             Divider()
 
-            // Rich text editor - supports native formatting via Format menu (⌘B, ⌘I)
-            if let editableText = editableText {
-                TextEditor(
-                    text: Bindable(editableText).text,
-                    selection: Bindable(editableText).selection
-                )
-                .font(.body)
-                .scrollContentBackground(.hidden)
-                .padding([.top, .leading, .trailing])
+            // Content area - either viewing or editing
+            if isEditing, let editableText = editableText {
+                // Edit mode: TextEditor with formatting support
+                VStack(spacing: 0) {
+                    // Formatting toolbar
+                    HStack(spacing: 12) {
+                        Button(action: { editableText.applyBold() }) {
+                            Image(systemName: "bold")
+                                .frame(width: 24, height: 24)
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Bold (⌘B)")
+
+                        Button(action: { editableText.applyItalic() }) {
+                            Image(systemName: "italic")
+                                .frame(width: 24, height: 24)
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Italic (⌘I)")
+
+                        Spacer()
+
+                        Text("Editing")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                    .background(.bar)
+
+                    Divider()
+
+                    TextEditor(
+                        text: Bindable(editableText).text,
+                        selection: Bindable(editableText).selection
+                    )
+                    .textEditorStyle(.plain)
+                    .font(.body)
+                    .padding([.top, .leading, .trailing])
+                }
             } else {
-                Text("No text detected on this page.")
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                    .padding()
+                // View mode: Read-only styled text
+                ScrollView {
+                    Text(displayText)
+                        .font(.body)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding([.top, .leading, .trailing])
+                }
             }
 
             // Statistics pane
@@ -114,17 +196,59 @@ struct RichTextSidebar: View {
                 .padding()
             }
         }
+        .focusedValue(\.editableText, isEditing ? editableText : nil)
+        .toolbar {
+            ToolbarItemGroup {
+                if isEditing {
+                    Button(action: cancelEditing) {
+                        Label("Cancel", systemImage: "xmark.circle")
+                            .labelStyle(.iconOnly)
+                    }
+                    .help("Cancel Editing")
+
+                    Button(action: saveAndExitEditing) {
+                        Label("Done", systemImage: "checkmark.circle.fill")
+                            .labelStyle(.iconOnly)
+                    }
+                    .help("Save Changes")
+                } else {
+                    Button(action: startEditing) {
+                        Label("Edit", systemImage: "pencil.circle")
+                            .labelStyle(.iconOnly)
+                    }
+                    .help("Edit Text")
+                    .disabled(currentPage == nil)
+                }
+            }
+        }
         .onChange(of: currentPage) { _, newPage in
-            if let page = newPage {
-                editableText = EditablePageText(page: page)
-            } else {
-                editableText = nil
+            // When page changes, exit edit mode and reset
+            if isEditing {
+                // Auto-save when switching pages
+                editableText?.save()
+                isEditing = false
             }
+            editableText = nil
         }
-        .onAppear {
-            if let page = currentPage {
-                editableText = EditablePageText(page: page)
-            }
-        }
+    }
+
+    // MARK: - Edit Mode Actions
+
+    private func startEditing() {
+        guard let page = currentPage else { return }
+        editableText = EditablePageText(page: page)
+        isEditing = true
+    }
+
+    private func saveAndExitEditing() {
+        editableText?.save()
+        isEditing = false
+        editableText = nil
+    }
+
+    private func cancelEditing() {
+        editableText?.revert()
+        isEditing = false
+        editableText = nil
     }
 }

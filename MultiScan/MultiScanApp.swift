@@ -17,6 +17,7 @@ struct MultiScanApp: App {
 
     @FocusedValue(\.document) private var focusedDocument: Document?
     @FocusedValue(\.navigationState) private var focusedNavigationState: NavigationState?
+    @FocusedValue(\.editableText) private var focusedEditableText: EditablePageText?
 
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
@@ -129,6 +130,21 @@ struct MultiScanApp: App {
                 }
                 .keyboardShortcut("0", modifiers: [.command])
                 .disabled(focusedDocument == nil)
+            }
+
+            // Format Menu Commands
+            CommandMenu("Format") {
+                Button("Bold") {
+                    focusedEditableText?.applyBold()
+                }
+                .keyboardShortcut("B", modifiers: [.command])
+                .disabled(focusedEditableText == nil || focusedEditableText?.hasSelection != true)
+
+                Button("Italic") {
+                    focusedEditableText?.applyItalic()
+                }
+                .keyboardShortcut("I", modifiers: [.command])
+                .disabled(focusedEditableText == nil || focusedEditableText?.hasSelection != true)
             }
 
             // Help Menu Commands

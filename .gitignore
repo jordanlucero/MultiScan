@@ -1,6 +1,9 @@
 # Icon Files (including Blender files)
 Icon Files/
 
+# Sample code
+attributedstringsamplecode/
+
 # Xcode user data
 *.xcuserdata
 *.xcuserdatad

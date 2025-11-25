@@ -14,7 +14,6 @@ struct MultiScanApp: App {
     @AppStorage("showThumbnails") private var showThumbnails = true
     @AppStorage("showTextPanel") private var showTextPanel = true
     @AppStorage("filterOption") private var filterOption = "all"
-    @AppStorage("useSmartParagraphs") private var useSmartParagraphs = false
 
     @FocusedValue(\.document) private var focusedDocument: Document?
     @FocusedValue(\.navigationState) private var focusedNavigationState: NavigationState?
@@ -73,11 +72,6 @@ struct MultiScanApp: App {
 
                 Toggle("Show Statistics", systemImage: "chart.bar.xaxis", isOn: $showStatisticsPane)
                     .keyboardShortcut("T", modifiers: [.command, .shift])
-
-                Divider()
-
-                Toggle("Use Smart Paragraphs (Experimental)", isOn: $useSmartParagraphs)
-                    .keyboardShortcut("P", modifiers: [.command, .shift])
 
                 Divider()
 
@@ -151,15 +145,7 @@ struct MultiScanApp: App {
     private func copyCurrentPageText() {
         guard let currentPage = focusedNavigationState?.currentPage else { return }
 
-        let textToCopy: String
-        if useSmartParagraphs && !currentPage.boundingBoxes.isEmpty {
-            textToCopy = TextPostProcessor.applySmartParagraphs(
-                rawText: currentPage.text,
-                boundingBoxes: currentPage.boundingBoxes
-            )
-        } else {
-            textToCopy = currentPage.text
-        }
+        let textToCopy = currentPage.text
 
         TextFormatter.copyFormattedText(textToCopy)
     }
@@ -168,25 +154,9 @@ struct MultiScanApp: App {
         guard let document = focusedDocument else { return }
         let sortedPages = document.pages.sorted { $0.pageNumber < $1.pageNumber }
 
-        let allText: String
-        if useSmartParagraphs {
-            // Apply smart paragraphs to each page individually, then join with paragraph breaks
-            let processedPages = sortedPages.map { page -> String in
-                if !page.boundingBoxes.isEmpty {
-                    return TextPostProcessor.applySmartParagraphs(
-                        rawText: page.text,
-                        boundingBoxes: page.boundingBoxes
-                    )
-                } else {
-                    return page.text
-                }
-            }
-            allText = processedPages.joined(separator: "\n\n")
-        } else {
-            allText = sortedPages
-                .map { $0.text }
-                .joined(separator: "\n\n")
-        }
+        let allText = sortedPages
+            .map { $0.text }
+            .joined(separator: "\n\n")
 
         TextFormatter.copyFormattedText(allText)
     }

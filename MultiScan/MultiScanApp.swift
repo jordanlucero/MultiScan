@@ -144,20 +144,11 @@ struct MultiScanApp: App {
 
     private func copyCurrentPageText() {
         guard let currentPage = focusedNavigationState?.currentPage else { return }
-
-        let textToCopy = currentPage.text
-
-        TextFormatter.copyFormattedText(textToCopy)
+        TextFormatter.copyPageText(currentPage)
     }
 
     private func copyAllPagesText() {
         guard let document = focusedDocument else { return }
-        let sortedPages = document.pages.sorted { $0.pageNumber < $1.pageNumber }
-
-        let allText = sortedPages
-            .map { $0.text }
-            .joined(separator: "\n\n")
-
-        TextFormatter.copyFormattedText(allText)
+        TextFormatter.copyAllPagesText(document.pages)
     }
 }

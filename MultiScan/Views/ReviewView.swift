@@ -36,7 +36,7 @@ struct ReviewView: View {
             )
         }
         .inspector(isPresented: $inspectorIsShown) {
-            TextSidebar(
+            RichTextSidebar(
                 document: document,
                 navigationState: navigationState
             )
@@ -127,16 +127,10 @@ struct ReviewView: View {
     
     private func copyCurrentPageText() {
         guard let currentPage = navigationState.currentPage else { return }
-        
-        TextFormatter.copyFormattedText(currentPage.text)
+        TextFormatter.copyPageText(currentPage)
     }
-    
+
     private func copyAllPagesText() {
-        let sortedPages = document.pages.sorted { $0.pageNumber < $1.pageNumber }
-        let allText = sortedPages
-            .map { $0.text }
-            .joined(separator: "\n\n")
-        
-        TextFormatter.copyFormattedText(allText)
+        TextFormatter.copyAllPagesText(document.pages)
     }
 }

@@ -5,7 +5,7 @@ A macOS app that runs OCR on folders containing images and lets you check its wo
 
 **MultiScan is designed for casual reading or very particular workflows where the OCR output can be reviewed. This implementation of VisionKit might place text out of order, or make simple mistakes that you will catch while reading. I don't recommend using MultiScan for workflows where absolute accuracy is required.**
 
-Built with Claude Code running Claude 4 Opus, Claude 4 Sonnet, Claude 4.1 Opus, and Claude 4.5 Sonnet. Built with GPT-5.1-Codex-Max.
+Built with Claude Code running Claude 4 Opus, Claude 4 Sonnet, Claude 4.1 Opus, Claude 4.5 Sonnet, and Claude 4.5 Opus. Built with GPT-5.1-Codex-Max.
 
 # Key Limitations
 

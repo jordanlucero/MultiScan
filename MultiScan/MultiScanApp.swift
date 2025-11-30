@@ -39,6 +39,7 @@ struct MultiScanApp: App {
         }
         .modelContainer(sharedModelContainer)
         .commands {
+            
             // Edit Menu Commands
             CommandGroup(after: .pasteboard) {
                 Button("Copy Page Text", systemImage: "document") {
@@ -62,7 +63,33 @@ struct MultiScanApp: App {
                 .keyboardShortcut("D", modifiers: [.command])
                 .disabled(focusedNavigationState?.currentPage == nil)
             }
+            
+            // Format Menu Commands
+            CommandMenu("Format") {
+                Button("Bold", systemImage: "bold") {
+                    focusedEditableText?.applyBold()
+                }
+                .keyboardShortcut("B", modifiers: [.command])
+                .disabled(focusedEditableText == nil || focusedEditableText?.hasSelection != true)
 
+                Button("Italic", systemImage: "italic") {
+                    focusedEditableText?.applyItalic()
+                }
+                .keyboardShortcut("I", modifiers: [.command])
+                .disabled(focusedEditableText == nil || focusedEditableText?.hasSelection != true)
+
+                Button("Underline", systemImage: "underline") {
+                    focusedEditableText?.applyUnderline()
+                }
+                .keyboardShortcut("U", modifiers: [.command])
+                .disabled(focusedEditableText == nil || focusedEditableText?.hasSelection != true)
+
+                Button("Strikethrough", systemImage: "strikethrough") {
+                    focusedEditableText?.applyStrikethrough()
+                }
+                .disabled(focusedEditableText == nil || focusedEditableText?.hasSelection != true)
+            }
+            
             // View Menu Commands
             CommandGroup(after: .sidebar) {
                 Toggle("Show Thumbnails", systemImage: "sidebar.squares.leading", isOn: $showThumbnails)
@@ -130,21 +157,6 @@ struct MultiScanApp: App {
                 }
                 .keyboardShortcut("0", modifiers: [.command])
                 .disabled(focusedDocument == nil)
-            }
-
-            // Format Menu Commands
-            CommandMenu("Format") {
-                Button("Bold") {
-                    focusedEditableText?.applyBold()
-                }
-                .keyboardShortcut("B", modifiers: [.command])
-                .disabled(focusedEditableText == nil || focusedEditableText?.hasSelection != true)
-
-                Button("Italic") {
-                    focusedEditableText?.applyItalic()
-                }
-                .keyboardShortcut("I", modifiers: [.command])
-                .disabled(focusedEditableText == nil || focusedEditableText?.hasSelection != true)
             }
 
             // Help Menu Commands

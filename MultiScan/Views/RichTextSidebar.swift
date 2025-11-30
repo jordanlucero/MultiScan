@@ -77,6 +77,28 @@ final class EditablePageText: Identifiable {
         }
     }
 
+    /// Apply underline formatting to the current selection
+    func applyUnderline() {
+        text.transformAttributes(in: &selection) { container in
+            if container.underlineStyle != nil {
+                container.underlineStyle = nil
+            } else {
+                container.underlineStyle = .single
+            }
+        }
+    }
+
+    /// Apply strikethrough formatting to the current selection
+    func applyStrikethrough() {
+        text.transformAttributes(in: &selection) { container in
+            if container.strikethroughStyle != nil {
+                container.strikethroughStyle = nil
+            } else {
+                container.strikethroughStyle = .single
+            }
+        }
+    }
+
     /// Check if there's an active text selection
     var hasSelection: Bool {
         true // We can't easily check, so always enable formatting buttons
@@ -145,6 +167,20 @@ struct RichTextSidebar: View {
                         }
                         .buttonStyle(.borderless)
                         .help("Italic (⌘I)")
+
+                        Button(action: { editableText.applyUnderline() }) {
+                            Image(systemName: "underline")
+                                .frame(width: 24, height: 24)
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Underline (⌘U)")
+
+                        Button(action: { editableText.applyStrikethrough() }) {
+                            Image(systemName: "strikethrough")
+                                .frame(width: 24, height: 24)
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Strikethrough (⌘⇧X)")
 
                         Spacer()
 

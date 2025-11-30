@@ -51,7 +51,7 @@ struct TextFormatter {
         }
     }
 
-    /// Converts SwiftUI AttributedString to NSAttributedString with proper font conversion
+    /// Converts SwiftUI AttributedString to NSAttributedString with proper attribute conversion
     private static func convertToNSAttributedString(_ attributedString: AttributedString) -> NSAttributedString {
         let result = NSMutableAttributedString()
         let baseFont = NSFont.systemFont(ofSize: NSFont.systemFontSize)
@@ -76,6 +76,16 @@ struct TextFormatter {
                 attributes[.font] = font
             } else {
                 attributes[.font] = baseFont
+            }
+
+            // Convert underline style
+            if run.underlineStyle != nil {
+                attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
+            }
+
+            // Convert strikethrough style
+            if run.strikethroughStyle != nil {
+                attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
             }
 
             result.append(NSAttributedString(string: text, attributes: attributes))

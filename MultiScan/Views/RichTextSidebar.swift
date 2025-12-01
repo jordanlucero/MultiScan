@@ -133,12 +133,10 @@ struct RichTextSidebar: View {
         VStack(alignment: .leading, spacing: 0) {
             // Header
             VStack(alignment: .leading, spacing: 6) {
-                Text("OCR Text")
-                    .font(.headline)
 
                 if let page = currentPage {
                     Text("Page \(page.pageNumber) of \(document.totalPages)")
-                        .font(.caption)
+                        .font(.headline)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -250,10 +248,10 @@ struct RichTextSidebar: View {
                     .help("Save Changes")
                 } else {
                     Button(action: startEditing) {
-                        Label("Edit", systemImage: "pencil.circle")
+                        Label("Edit Text", systemImage: "pencil.circle")
                             .labelStyle(.iconOnly)
                     }
-                    .help("Edit Text")
+                    .help("Edit OCR Text")
                     .disabled(currentPage == nil)
                 }
             }

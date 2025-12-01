@@ -23,4 +23,4 @@ MultiScan may be highly memory-intensive when running OCR.
 
 # Copyright Notice
 
-MultiScan is only for use with documents you hold the copyright for, have explicit permission to digitize, or that you're digitizing for personal use only. Please note that format-shifting is only legal in some jurisdictions and only allows for personal usage. You are responsible for complying with copyright laws in your jurisdiction.
+MultiScan is only for use with documents you hold the copyright for, have explicit permission to digitize, or that you're digitizing for personal use only. Please note that format-shifting is only legal in some jurisdictions and only allows for personal usage. You are responsible for complying with copyright laws in your jurisdiction. This is not legal advice.

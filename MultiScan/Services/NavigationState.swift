@@ -3,127 +3,236 @@ import SwiftUI
 
 @MainActor
 class NavigationState: ObservableObject {
-    @Published var currentPageIndex: Int = 0
     @Published var isRandomized: Bool = true
     @Published var selectedDocument: Document?
-    
+
+    // Sequential mode: index into originalOrder
+    @Published private var sequentialIndex: Int = 0
+
+    // Shuffled mode: history-based navigation
+    private var shuffledOrder: [Int] = []
+    private var visitHistory: [Int] = []  // Page numbers in order visited
+    @Published private var historyIndex: Int = -1    // Current position in visitHistory
+
     private var originalOrder: [Int] = []
-    private var randomizedOrder: [Int] = []
-    
-    var currentOrder: [Int] {
-        isRandomized ? randomizedOrder : originalOrder
-    }
-    
+
+    // Published for view observation - updated whenever navigation changes
+    @Published private(set) var currentPageNumber: Int?
+
+    // MARK: - Current Page
+
     var currentPage: Page? {
         guard let document = selectedDocument,
-              currentPageIndex < currentOrder.count else { return nil }
-        
-        let pageNumber = currentOrder[currentPageIndex]
-        return document.pages.first { $0.pageNumber == pageNumber }
+              let pn = currentPageNumber else { return nil }
+        return document.pages.first { $0.pageNumber == pn }
     }
-    
+
+    /// Updates currentPageNumber based on current mode and indices
+    private func updateCurrentPageNumber() {
+        if isRandomized {
+            currentPageNumber = historyIndex >= 0 && historyIndex < visitHistory.count
+                ? visitHistory[historyIndex]
+                : nil
+        } else {
+            currentPageNumber = sequentialIndex >= 0 && sequentialIndex < originalOrder.count
+                ? originalOrder[sequentialIndex]
+                : nil
+        }
+    }
+
+    // MARK: - Navigation Availability
+
     var hasNext: Bool {
         guard let document = selectedDocument else { return false }
-        
-        var nextIndex = currentPageIndex + 1
-        while nextIndex < currentOrder.count {
-            let pageNumber = currentOrder[nextIndex]
-            if let page = document.pages.first(where: { $0.pageNumber == pageNumber }), !page.isDone {
-                return true
-            }
-            nextIndex += 1
+
+        if isRandomized {
+            // Shuffled mode: can go next if there's an undone page OTHER than current
+            return findNextUndoneInShuffledOrder(from: currentPageNumber, in: document) != nil
+        } else {
+            // Sequential mode: can go next if not at the last page
+            return sequentialIndex < originalOrder.count - 1
         }
-        return false
     }
-    
+
     var hasPrevious: Bool {
-        guard let document = selectedDocument else { return false }
-        
-        var prevIndex = currentPageIndex - 1
-        while prevIndex >= 0 {
-            let pageNumber = currentOrder[prevIndex]
-            if let page = document.pages.first(where: { $0.pageNumber == pageNumber }), !page.isDone {
-                return true
-            }
-            prevIndex -= 1
+        guard selectedDocument != nil else { return false }
+
+        if isRandomized {
+            // Shuffled mode: can go back if there's history behind us
+            return historyIndex > 0
+        } else {
+            // Sequential mode: can go back if not at the first page
+            return sequentialIndex > 0
         }
-        return false
     }
-    
+
+    // MARK: - Setup
+
     func setupNavigation(for document: Document) {
         selectedDocument = document
         originalOrder = document.pages.map { $0.pageNumber }.sorted()
-        randomizedOrder = originalOrder.shuffled()
-        currentPageIndex = 0
-        
-        // Find first undone page
-        var index = 0
-        while index < currentOrder.count {
-            let pageNumber = currentOrder[index]
-            if let page = document.pages.first(where: { $0.pageNumber == pageNumber }), !page.isDone {
-                currentPageIndex = index
-                return
-            }
-            index += 1
+        shuffledOrder = originalOrder.shuffled()
+
+        // Reset sequential index to first page
+        sequentialIndex = 0
+
+        // Reset shuffled history and start with first shuffled page
+        visitHistory = []
+        historyIndex = -1
+
+        if !shuffledOrder.isEmpty {
+            // Add first shuffled page to history
+            visitHistory.append(shuffledOrder[0])
+            historyIndex = 0
         }
-        
-        // If all pages are done, stay at index 0
-        currentPageIndex = 0
+
+        updateCurrentPageNumber()
     }
-    
+
+    // MARK: - Navigation
+
     func nextPage() {
-        guard let document = selectedDocument else { return }
-        
-        var nextIndex = currentPageIndex + 1
-        while nextIndex < currentOrder.count {
-            let pageNumber = currentOrder[nextIndex]
-            if let page = document.pages.first(where: { $0.pageNumber == pageNumber }), !page.isDone {
-                currentPageIndex = nextIndex
-                return
-            }
-            nextIndex += 1
+        guard selectedDocument != nil else { return }
+
+        if isRandomized {
+            nextPageShuffled()
+        } else {
+            nextPageSequential()
         }
     }
-    
+
     func previousPage() {
-        guard let document = selectedDocument else { return }
-        
-        var prevIndex = currentPageIndex - 1
-        while prevIndex >= 0 {
-            let pageNumber = currentOrder[prevIndex]
-            if let page = document.pages.first(where: { $0.pageNumber == pageNumber }), !page.isDone {
-                currentPageIndex = prevIndex
-                return
+        guard selectedDocument != nil else { return }
+
+        if isRandomized {
+            previousPageShuffled()
+        } else {
+            previousPageSequential()
+        }
+    }
+
+    private func nextPageSequential() {
+        guard sequentialIndex < originalOrder.count - 1 else { return }
+        sequentialIndex += 1
+        updateCurrentPageNumber()
+    }
+
+    private func previousPageSequential() {
+        guard sequentialIndex > 0 else { return }
+        sequentialIndex -= 1
+        updateCurrentPageNumber()
+    }
+
+    private func nextPageShuffled() {
+        guard let document = selectedDocument, !shuffledOrder.isEmpty else { return }
+
+        // Find the next undone page in shuffled order
+        guard let nextPN = findNextUndoneInShuffledOrder(from: currentPageNumber, in: document) else {
+            return // No undone pages left
+        }
+
+        // Truncate forward history if we went back
+        if historyIndex < visitHistory.count - 1 {
+            visitHistory = Array(visitHistory.prefix(historyIndex + 1))
+        }
+
+        visitHistory.append(nextPN)
+        historyIndex = visitHistory.count - 1
+        updateCurrentPageNumber()
+    }
+
+    private func previousPageShuffled() {
+        guard historyIndex > 0 else { return }
+        historyIndex -= 1
+        updateCurrentPageNumber()
+    }
+
+    /// Finds the next undone page in shuffled order, starting after the given page
+    private func findNextUndoneInShuffledOrder(from pageNumber: Int?, in document: Document) -> Int? {
+        let startIndex: Int
+        if let pn = pageNumber, let idx = shuffledOrder.firstIndex(of: pn) {
+            startIndex = idx
+        } else {
+            startIndex = shuffledOrder.count - 1 // Will wrap to 0
+        }
+
+        // Search through all OTHER pages in shuffled order (exclude current)
+        for offset in 1..<shuffledOrder.count {
+            let checkIndex = (startIndex + offset) % shuffledOrder.count
+            let checkPageNumber = shuffledOrder[checkIndex]
+
+            if let page = document.pages.first(where: { $0.pageNumber == checkPageNumber }),
+               !page.isDone {
+                return checkPageNumber
             }
-            prevIndex -= 1
         }
+
+        return nil // All pages are done
     }
-    
+
+    // MARK: - Direct Navigation
+
     func goToPage(pageNumber: Int) {
-        if let index = currentOrder.firstIndex(of: pageNumber) {
-            currentPageIndex = index
+        guard selectedDocument != nil else { return }
+
+        if isRandomized {
+            // In shuffled mode, add to history (truncating forward history)
+            if historyIndex < visitHistory.count - 1 {
+                // Truncate forward history
+                visitHistory = Array(visitHistory.prefix(historyIndex + 1))
+            }
+            visitHistory.append(pageNumber)
+            historyIndex = visitHistory.count - 1
+        } else {
+            // In sequential mode, just find the index
+            if let index = originalOrder.firstIndex(of: pageNumber) {
+                sequentialIndex = index
+            }
         }
+        updateCurrentPageNumber()
     }
-    
+
+    // MARK: - Mode Toggle
+
     func toggleRandomization() {
+        let currentPN = currentPageNumber
+
         isRandomized.toggle()
-        if let currentPageNumber = currentPage?.pageNumber {
-            goToPage(pageNumber: currentPageNumber)
+
+        if let pageNumber = currentPN {
+            if isRandomized {
+                // Switching TO shuffled: add current page to history if not already there
+                if visitHistory.isEmpty || visitHistory[historyIndex] != pageNumber {
+                    if historyIndex < visitHistory.count - 1 {
+                        visitHistory = Array(visitHistory.prefix(historyIndex + 1))
+                    }
+                    visitHistory.append(pageNumber)
+                    historyIndex = visitHistory.count - 1
+                }
+            } else {
+                // Switching TO sequential: find page in original order
+                if let index = originalOrder.firstIndex(of: pageNumber) {
+                    sequentialIndex = index
+                }
+            }
         }
+        updateCurrentPageNumber()
     }
-    
+
+    // MARK: - Page State
+
     func toggleCurrentPageDone() {
         currentPage?.isDone.toggle()
     }
-    
+
     var donePageCount: Int {
         selectedDocument?.pages.filter { $0.isDone }.count ?? 0
     }
-    
+
     var totalPageCount: Int {
         selectedDocument?.pages.count ?? 0
     }
-    
+
     var progress: Double {
         guard totalPageCount > 0 else { return 0 }
         return Double(donePageCount) / Double(totalPageCount)

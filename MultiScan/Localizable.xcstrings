@@ -81,6 +81,12 @@
         }
       }
     },
+    "Background" : {
+
+    },
+    "Black" : {
+      "comment" : "Viewer background option: black color"
+    },
     "Bold" : {
       "localizations" : {
         "es-419" : {
@@ -144,22 +150,18 @@
         }
       }
     },
+    "Dark Gray" : {
+      "comment" : "Viewer background option: dark gray color"
+    },
+    "Default" : {
+      "comment" : "Viewer background option: system default"
+    },
     "Delete" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Eliminar"
-          }
-        }
-      }
-    },
-    "Delete document" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Eliminar documento"
           }
         }
       }
@@ -173,6 +175,12 @@
           }
         }
       }
+    },
+    "Delete project" : {
+
+    },
+    "Delete..." : {
+
     },
     "Discard" : {
       "localizations" : {
@@ -234,6 +242,9 @@
         }
       }
     },
+    "Enter a new name for this project." : {
+
+    },
     "Error" : {
       "localizations" : {
         "es-419" : {
@@ -243,6 +254,9 @@
           }
         }
       }
+    },
+    "Error generating preview" : {
+
     },
     "Filter" : {
       "localizations" : {
@@ -284,6 +298,9 @@
         }
       }
     },
+    "Gray" : {
+      "comment" : "Viewer background option: gray color"
+    },
     "Hide Text Panel" : {
       "localizations" : {
         "es-419" : {
@@ -293,6 +310,21 @@
           }
         }
       }
+    },
+    "Import" : {
+
+    },
+    "Import from Files" : {
+
+    },
+    "Import from iPhone or iPad" : {
+
+    },
+    "Import from Photos" : {
+
+    },
+    "Import images to start scanning" : {
+
     },
     "Italic" : {
       "localizations" : {
@@ -313,6 +345,9 @@
           }
         }
       }
+    },
+    "Light Gray" : {
+      "comment" : "Viewer background option: light gray color"
     },
     "Loading image..." : {
       "localizations" : {
@@ -344,6 +379,9 @@
         }
       }
     },
+    "Medium Gray" : {
+      "comment" : "Viewer background option: medium gray color"
+    },
     "MultiScan" : {
       "localizations" : {
         "es-419" : {
@@ -353,6 +391,9 @@
           }
         }
       }
+    },
+    "MultiScan will optimize images it stores to save storage." : {
+
     },
     "Next" : {
       "localizations" : {
@@ -370,16 +411,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Página siguiente"
-          }
-        }
-      }
-    },
-    "No Preview" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sin vista previa"
           }
         }
       }
@@ -434,6 +465,9 @@
         }
       }
     },
+    "Optimize images on import" : {
+
+    },
     "Page %lld of %lld" : {
       "localizations" : {
         "en" : {
@@ -480,15 +514,20 @@
         }
       }
     },
-    "Recent Documents" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Documentos recientes"
-          }
-        }
-      }
+    "Project name" : {
+
+    },
+    "Recent Projects" : {
+
+    },
+    "Rename" : {
+
+    },
+    "Rename Project" : {
+
+    },
+    "Rename..." : {
+
     },
     "Review" : {
       "localizations" : {
@@ -526,27 +565,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Guardar cambios"
-          }
-        }
-      }
-    },
-    "Select a folder containing images to start" : {
-      "comment" : "Rework both versions",
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Seleccione una carpeta con imágenes para comenzar"
-          }
-        }
-      }
-    },
-    "Select Folder" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Seleccionar carpeta"
           }
         }
       }
@@ -680,6 +698,12 @@
           }
         }
       }
+    },
+    "Viewer" : {
+
+    },
+    "White" : {
+      "comment" : "Viewer background option: white color"
     },
     "Zoom In" : {
       "localizations" : {

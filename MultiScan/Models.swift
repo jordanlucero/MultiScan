@@ -13,13 +13,19 @@ import SwiftUI
 @Model
 final class Page {
     var pageNumber: Int
-    var imageFileName: String
     var document: Document?
     var createdAt: Date
     var isDone: Bool = false
     var thumbnailData: Data?
     var boundingBoxesData: Data? // Encoded array of CGRect from VisionKit
     var lastModified: Date = Date()
+
+    /// Original filename for display purposes
+    var originalFileName: String?
+
+    /// Full image data stored externally for efficiency
+    @Attribute(.externalStorage)
+    var imageData: Data?
 
     /// JSON-encoded AttributedString data for rich text storage
     @Attribute(.externalStorage)
@@ -43,9 +49,10 @@ final class Page {
         String(richText.characters)
     }
 
-    init(pageNumber: Int, text: String, imageFileName: String, boundingBoxesData: Data? = nil) {
+    init(pageNumber: Int, text: String, imageData: Data?, originalFileName: String? = nil, boundingBoxesData: Data? = nil) {
         self.pageNumber = pageNumber
-        self.imageFileName = imageFileName
+        self.imageData = imageData
+        self.originalFileName = originalFileName
         self.createdAt = Date()
         self.isDone = false
         self.thumbnailData = nil
@@ -113,36 +120,14 @@ final class Page {
 @Model
 final class Document {
     var name: String
-    var folderPath: String
-    var folderBookmark: Data?
     var totalPages: Int
     var createdAt: Date
     @Relationship(deleteRule: .cascade) var pages: [Page]
-    
-    init(name: String, folderPath: String, folderBookmark: Data? = nil, totalPages: Int) {
+
+    init(name: String, totalPages: Int = 0) {
         self.name = name
-        self.folderPath = folderPath
-        self.folderBookmark = folderBookmark
         self.totalPages = totalPages
         self.createdAt = Date()
         self.pages = []
-    }
-    
-    func resolvedFolderURL() -> URL? {
-        guard let bookmarkData = folderBookmark else {
-            return URL(fileURLWithPath: folderPath)
-        }
-        
-        var isStale = false
-        do {
-            let url = try URL(resolvingBookmarkData: bookmarkData, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &isStale)
-            if isStale {
-                print("Bookmark is stale for document: \(name)")
-            }
-            return url
-        } catch {
-            print("Error resolving bookmark: \(error)")
-            return URL(fileURLWithPath: folderPath)
-        }
     }
 }

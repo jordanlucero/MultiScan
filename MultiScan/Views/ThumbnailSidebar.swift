@@ -128,28 +128,26 @@ struct ThumbnailView: View {
     let document: Document
     let isSelected: Bool
     let action: () -> Void
-    
-    var thumbnail: NSImage? {
-        if let thumbnailData = page.thumbnailData,
-           let image = NSImage(data: thumbnailData) {
-            return image
-        }
-        return nil
+
+    /// Cross-platform thumbnail using PlatformImage helper
+    var thumbnail: Image? {
+        guard let data = page.thumbnailData else { return nil }
+        return PlatformImage.from(data: data)
     }
-    
+
     var body: some View {
         VStack(spacing: 4) {
             Button(action: action) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(Color(NSColor.controlColor))
+                        .fill(Color.gray.opacity(0.1))
                         .overlay(
                             RoundedRectangle(cornerRadius: 8)
                                 .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 3)
                         )
-                    
+
                     if let thumbnail = thumbnail {
-                        Image(nsImage: thumbnail)
+                        thumbnail
                             .resizable()
                             .aspectRatio(contentMode: .fit)
                             .padding(4)
@@ -159,12 +157,12 @@ struct ThumbnailView: View {
                             Image(systemName: "photo")
                                 .font(.largeTitle)
                                 .foregroundColor(.secondary)
-                            Text("No Preview")
+                            Text("Error generating preview")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
                     }
-                    
+
                     if page.isDone {
                         VStack {
                             HStack {
@@ -182,8 +180,8 @@ struct ThumbnailView: View {
                 .aspectRatio(8.5/11, contentMode: .fit)
             }
             .buttonStyle(.plain)
-            
-            Text(page.imageFileName)
+
+            Text(page.originalFileName ?? "Page \(page.pageNumber)")
                 .font(.caption)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -199,11 +197,11 @@ struct ThumbnailView: View {
     )
     @Previewable @State var selectedPageNumber: Int? = 1
 
-    let document = Document(name: "Sample Document", folderPath: "/tmp", totalPages: 3)
-    let page1 = Page(pageNumber: 1, text: "Here’s to the crazy ones.", imageFileName: "page1.jpg")
-    let page2 = Page(pageNumber: 2, text: "The misfits. The rebels. The troublemakers. The round pegs in the square holes.", imageFileName: "page2.jpg")
+    let document = Document(name: "Sample Document", totalPages: 3)
+    let page1 = Page(pageNumber: 1, text: "Here's to the crazy ones.", imageData: nil, originalFileName: "page1.jpg")
+    let page2 = Page(pageNumber: 2, text: "The misfits. The rebels. The troublemakers. The round pegs in the square holes.", imageData: nil, originalFileName: "page2.jpg")
     page2.isDone = true
-    let page3 = Page(pageNumber: 3, text: "The ones who see things differently.", imageFileName: "page3.jpg")
+    let page3 = Page(pageNumber: 3, text: "The ones who see things differently.", imageData: nil, originalFileName: "page3.jpg")
     document.pages = [page1, page2, page3]
 
     let navigationState = NavigationState()
@@ -226,11 +224,11 @@ struct ThumbnailView: View {
     )
     @Previewable @State var selectedPageNumber: Int? = 1
 
-    let document = Document(name: "Documento de Ejemplo", folderPath: "/tmp", totalPages: 3)
-    let page1 = Page(pageNumber: 1, text: "Texto de ejemplo para la página 1", imageFileName: "pagina1.jpg")
-    let page2 = Page(pageNumber: 2, text: "Texto de ejemplo para la página 2", imageFileName: "pagina2.jpg")
+    let document = Document(name: "Documento de Ejemplo", totalPages: 3)
+    let page1 = Page(pageNumber: 1, text: "Texto de ejemplo para la página 1", imageData: nil, originalFileName: "pagina1.jpg")
+    let page2 = Page(pageNumber: 2, text: "Texto de ejemplo para la página 2", imageData: nil, originalFileName: "pagina2.jpg")
     page2.isDone = true
-    let page3 = Page(pageNumber: 3, text: "Texto de ejemplo para la página 3", imageFileName: "pagina3.jpg")
+    let page3 = Page(pageNumber: 3, text: "Texto de ejemplo para la página 3", imageData: nil, originalFileName: "pagina3.jpg")
     document.pages = [page1, page2, page3]
 
     let navigationState = NavigationState()

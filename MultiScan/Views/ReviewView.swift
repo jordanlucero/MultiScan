@@ -3,6 +3,7 @@ import SwiftData
 
 struct ReviewView: View {
     let document: Document
+    @Environment(\.modelContext) private var modelContext
     @StateObject private var navigationState = NavigationState()
     @State private var selectedPageNumber: Int?
     @State private var showProgress: Bool = false
@@ -115,10 +116,8 @@ struct ReviewView: View {
             // Initialize columnVisibility from persisted AppStorage value
             columnVisibility = showThumbnails ? .all : .detailOnly
         }
-        .onChange(of: navigationState.currentPageIndex) { _, _ in
-            if let currentPage = navigationState.currentPage {
-                selectedPageNumber = currentPage.pageNumber
-            }
+        .onChange(of: navigationState.currentPageNumber) { _, newPageNumber in
+            selectedPageNumber = newPageNumber
         }
         // Sync columnVisibility when AppStorage changes (e.g., from menu command)
         .onChange(of: showThumbnails) { _, newValue in

@@ -5,13 +5,26 @@ import ImageIO
 import UniformTypeIdentifiers
 import SwiftUI
 
+/// Result type for processed images
+struct ProcessedImage {
+    let pageNumber: Int
+    let text: String
+    let imageData: Data
+    let thumbnailData: Data?
+    let boundingBoxesData: Data?
+    let originalFileName: String
+}
+
 final class OCRService: ObservableObject, @unchecked Sendable {
     @Published var isProcessing = false
     @Published var progress: Double = 0
     @Published var currentFile: String = ""
     @Published var error: Error?
-    
-    func processImagesInFolder(at url: URL, bookmarkData: Data?) async throws -> [(pageNumber: Int, text: String, fileName: String, thumbnailData: Data?, boundingBoxesData: Data?)] {
+
+    /// Process multiple images from Data
+    /// - Parameter images: Array of tuples containing image data and filename
+    /// - Returns: Array of ProcessedImage results
+    func processImages(_ images: [(data: Data, fileName: String)]) async throws -> [ProcessedImage] {
         await MainActor.run {
             isProcessing = true
             progress = 0
@@ -23,92 +36,56 @@ final class OCRService: ObservableObject, @unchecked Sendable {
                 self.currentFile = ""
             }
         }
-        
-        // Only start accessing if we're using a bookmark
-        var accessed = false
-        if bookmarkData != nil {
-            accessed = url.startAccessingSecurityScopedResource()
-        }
-        defer {
-            if accessed {
-                url.stopAccessingSecurityScopedResource()
-            }
-        }
-        
-        let fileManager = FileManager.default
-        let resourceKeys: [URLResourceKey] = [.isRegularFileKey, .nameKey]
-        
-        guard let enumerator = fileManager.enumerator(at: url, includingPropertiesForKeys: resourceKeys, options: [.skipsHiddenFiles, .skipsPackageDescendants]) else {
-            throw OCRError.folderAccessError
-        }
-        
-        var imageURLs: [URL] = []
-        
-        while let fileURL = enumerator.nextObject() as? URL {
-            guard let resourceValues = try? fileURL.resourceValues(forKeys: Set(resourceKeys)),
-                  let isRegularFile = resourceValues.isRegularFile,
-                  isRegularFile else { continue }
-            
-            let pathExtension = fileURL.pathExtension.lowercased()
-            if ["jpg", "jpeg", "png", "tiff", "tif", "bmp", "heic"].contains(pathExtension) {
-                imageURLs.append(fileURL)
-            }
-        }
-        
-        print("Found \(imageURLs.count) images in folder: \(url.path)")
-        
-        imageURLs.sort { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
 
-        var results: [(pageNumber: Int, text: String, fileName: String, thumbnailData: Data?, boundingBoxesData: Data?)] = []
-        let imageCount = max(imageURLs.count, 1)
+        var results: [ProcessedImage] = []
+        let imageCount = max(images.count, 1)
 
-        for (index, imageURL) in imageURLs.enumerated() {
+        for (index, image) in images.enumerated() {
             try Task.checkCancellation()
-            
-            let relativePath = imageURL.path.replacingOccurrences(of: url.path + "/", with: "")
-            
+
             await MainActor.run {
-                self.currentFile = relativePath
+                self.currentFile = image.fileName
                 self.progress = Double(index) / Double(imageCount)
             }
-            
-            let (text, thumbnailData, boundingBoxesData) = try await processImage(at: imageURL)
-            
-            results.append((pageNumber: index + 1, text: text, fileName: relativePath, thumbnailData: thumbnailData, boundingBoxesData: boundingBoxesData))
-            
+
+            let processed = try await processImageData(image.data, fileName: image.fileName, pageNumber: index + 1)
+            results.append(processed)
+
             await MainActor.run {
                 self.progress = Double(index + 1) / Double(imageCount)
             }
         }
-        
+
         await MainActor.run {
             self.progress = 1.0
             self.currentFile = ""
         }
+
         return results
     }
-    
-    private func processImage(at imageURL: URL) async throws -> (text: String, thumbnailData: Data?, boundingBoxesData: Data?) {
-        guard FileManager.default.fileExists(atPath: imageURL.path) else {
-            print("File does not exist: \(imageURL.path)")
-            throw OCRError.imageLoadError
-        }
 
-        guard let imageSource = CGImageSourceCreateWithURL(imageURL as CFURL, nil),
+    /// Process a single image from Data
+    private func processImageData(_ data: Data, fileName: String, pageNumber: Int) async throws -> ProcessedImage {
+        guard let imageSource = CGImageSourceCreateWithData(data as CFData, nil),
               let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else {
-            print("Failed to load image: \(imageURL.lastPathComponent)")
+            print("Failed to load image: \(fileName)")
             throw OCRError.imageLoadError
         }
 
         let thumbnailData = generateThumbnail(from: imageSource)
-
-        let (text, boundingBoxes) = try await recognizeText(from: cgImage, imageURL: imageURL)
-
+        let (text, boundingBoxes) = try await recognizeText(from: cgImage)
         let boundingBoxesData = try? JSONEncoder().encode(boundingBoxes)
 
-        return (text, thumbnailData, boundingBoxesData)
+        return ProcessedImage(
+            pageNumber: pageNumber,
+            text: text,
+            imageData: data,
+            thumbnailData: thumbnailData,
+            boundingBoxesData: boundingBoxesData,
+            originalFileName: fileName
+        )
     }
-    
+
     private func generateThumbnail(from imageSource: CGImageSource) -> Data? {
         let maxDimension: CGFloat = 200
         let options: [NSString: Any] = [
@@ -116,17 +93,17 @@ final class OCRService: ObservableObject, @unchecked Sendable {
             kCGImageSourceThumbnailMaxPixelSize: maxDimension,
             kCGImageSourceCreateThumbnailWithTransform: true
         ]
-        
+
         guard let thumbnailImage = CGImageSourceCreateThumbnailAtIndex(imageSource, 0, options as CFDictionary) else {
             return nil
         }
-        
+
         let data = NSMutableData()
         let typeIdentifier = UTType.jpeg.identifier as CFString
         guard let destination = CGImageDestinationCreateWithData(data, typeIdentifier, 1, nil) else {
             return nil
         }
-        
+
         let compressionOptions: [NSString: Any] = [
             kCGImageDestinationLossyCompressionQuality: 0.7
         ]
@@ -134,11 +111,11 @@ final class OCRService: ObservableObject, @unchecked Sendable {
         guard CGImageDestinationFinalize(destination) else {
             return nil
         }
-        
+
         return data as Data
     }
-    
-    private func recognizeText(from cgImage: CGImage, imageURL: URL) async throws -> (text: String, boundingBoxes: [CGRect]) {
+
+    private func recognizeText(from cgImage: CGImage) async throws -> (text: String, boundingBoxes: [CGRect]) {
         return try await withCheckedThrowingContinuation { continuation in
             let request = VNRecognizeTextRequest { request, error in
                 if let error = error {
@@ -178,7 +155,7 @@ enum OCRError: LocalizedError {
     case folderAccessError
     case imageLoadError
     case imageConversionError
-    
+
     var errorDescription: String? {
         switch self {
         case .folderAccessError:
@@ -188,5 +165,43 @@ enum OCRError: LocalizedError {
         case .imageConversionError:
             return "Could not convert image for processing"
         }
+    }
+}
+
+// MARK: - Image Compression Utilities
+
+extension OCRService {
+    /// Compress image data to JPEG with specified quality
+    /// - Parameters:
+    ///   - data: Original image data
+    ///   - quality: JPEG compression quality (0.0 to 1.0)
+    /// - Returns: Compressed JPEG data, or nil if compression failed
+    static func compressImageData(_ data: Data, quality: CGFloat = 0.8) -> Data? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+            return nil
+        }
+
+        let mutableData = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(
+            mutableData,
+            UTType.jpeg.identifier as CFString,
+            1,
+            nil
+        ) else {
+            return nil
+        }
+
+        let options: [CFString: Any] = [
+            kCGImageDestinationLossyCompressionQuality: quality
+        ]
+
+        CGImageDestinationAddImage(destination, cgImage, options as CFDictionary)
+
+        guard CGImageDestinationFinalize(destination) else {
+            return nil
+        }
+
+        return mutableData as Data
     }
 }

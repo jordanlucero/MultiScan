@@ -14,6 +14,8 @@ struct MultiScanApp: App {
     @AppStorage("showThumbnails") private var showThumbnails = true
     @AppStorage("showTextPanel") private var showTextPanel = true
     @AppStorage("filterOption") private var filterOption = "all"
+    @AppStorage("optimizeImagesOnImport") private var optimizeImagesOnImport = false
+    @AppStorage("viewerBackground") private var viewerBackground = ViewerBackground.default.rawValue
 
     @FocusedValue(\.document) private var focusedDocument: Document?
     @FocusedValue(\.navigationState) private var focusedNavigationState: NavigationState?
@@ -168,6 +170,28 @@ struct MultiScanApp: App {
                     }
                 }
             }
+        }
+
+        Settings {
+            Form {
+                Section("Import") {
+                    Toggle("Optimize images on import", isOn: $optimizeImagesOnImport)
+                    Text("MultiScan will optimize images it stores to save storage.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                Section("Viewer") {
+                    Picker("Background", selection: $viewerBackground) {
+                        ForEach(ViewerBackground.allCases, id: \.rawValue) { option in
+                            Text(option.label).tag(option.rawValue)
+                        }
+                    }
+                }
+            }
+            .formStyle(.grouped)
+            .padding()
+            .frame(width: 400)
         }
     }
 

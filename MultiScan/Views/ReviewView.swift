@@ -6,21 +6,16 @@ struct ReviewView: View {
     @StateObject private var navigationState = NavigationState()
     @State private var selectedPageNumber: Int?
     @State private var showProgress: Bool = false
-    @State private var inspectorIsShown: Bool = true
+
+    // Use proper NavigationSplitViewVisibility type for animated sidebar transitions
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @AppStorage("showThumbnails") private var showThumbnails = true
 
-    // Convert Bool to NavigationSplitViewVisibility for sidebar control
-    private var sidebarVisibility: Binding<NavigationSplitViewVisibility> {
-        Binding(
-            get: { showThumbnails ? .all : .detailOnly },
-            set: { newValue in
-                showThumbnails = (newValue == .all)
-            }
-        )
-    }
+    // Use AppStorage directly for inspector to sync with menu commands
+    @AppStorage("showTextPanel") private var inspectorIsShown = true
 
     var body: some View {
-        NavigationSplitView(columnVisibility: sidebarVisibility) {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             // Sidebar: Thumbnail list
             ThumbnailSidebar(
                 document: document,
@@ -117,10 +112,23 @@ struct ReviewView: View {
             if let firstPage = navigationState.currentPage {
                 selectedPageNumber = firstPage.pageNumber
             }
+            // Initialize columnVisibility from persisted AppStorage value
+            columnVisibility = showThumbnails ? .all : .detailOnly
         }
         .onChange(of: navigationState.currentPageIndex) { _, _ in
             if let currentPage = navigationState.currentPage {
                 selectedPageNumber = currentPage.pageNumber
+            }
+        }
+        // Sync columnVisibility when AppStorage changes (e.g., from menu command)
+        .onChange(of: showThumbnails) { _, newValue in
+            columnVisibility = newValue ? .all : .detailOnly
+        }
+        // Persist columnVisibility changes back to AppStorage (e.g., from system sidebar button)
+        .onChange(of: columnVisibility) { _, newValue in
+            let shouldShow = (newValue != .detailOnly)
+            if showThumbnails != shouldShow {
+                showThumbnails = shouldShow
             }
         }
     }

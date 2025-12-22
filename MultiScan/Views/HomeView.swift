@@ -138,7 +138,7 @@ struct HomeView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: { document in
-            Text("Are you sure you want to delete the MultiScan project for \"\(document.name)\"? This will delete the OCR data and can't be undone.")
+            Text("Are you sure you want to delete the MultiScan project for \"\(document.name)\"? This can't be undone.")
         }
     }
     
@@ -250,13 +250,13 @@ struct HomeView: View {
     
     private func handleDrop(providers: [NSItemProvider]) {
         guard let provider = providers.first else { return }
-        
+
         provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { (item, error) in
             guard let data = item as? Data,
                   let url = URL(dataRepresentation: data, relativeTo: nil) else {
                 return
             }
-            
+
             // Check if it's a directory
             var isDirectory: ObjCBool = false
             guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
@@ -264,13 +264,25 @@ struct HomeView: View {
                 // Not a folder, ignore
                 return
             }
-            
+
             DispatchQueue.main.async {
                 // For drag and drop, the URL already has implicit access
                 self.selectedFolderURL = url
-                // Start OCR processing immediately
+                // Start processing
                 self.startOCRImmediately(for: url)
             }
         }
     }
+}
+
+#Preview("English") {
+    HomeView()
+        .modelContainer(for: [Document.self, Page.self], inMemory: true)
+        .environment(\.locale, Locale(identifier: "en"))
+}
+
+#Preview("es-419") {
+    HomeView()
+        .modelContainer(for: [Document.self, Page.self], inMemory: true)
+        .environment(\.locale, Locale(identifier: "es-419"))
 }

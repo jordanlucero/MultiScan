@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 struct ThumbnailSidebar: View {
     let document: Document
@@ -6,9 +7,17 @@ struct ThumbnailSidebar: View {
     @Binding var selectedPageNumber: Int?
 
     enum FilterOption: String, CaseIterable {
-        case all = "All"
-        case notDone = "Not Reviewed"
-        case done = "Reviewed"
+        case all
+        case notDone
+        case done
+
+        var label: LocalizedStringResource {
+            switch self {
+            case .all: "All"
+            case .notDone: "Not Reviewed"
+            case .done: "Reviewed"
+            }
+        }
     }
 
     @AppStorage("filterOption") private var filterOptionString = "all"
@@ -86,7 +95,7 @@ struct ThumbnailSidebar: View {
                             }
                         }) {
                             HStack {
-                                Text(option.rawValue)
+                                Text(option.label)
                                 if filterOption == option {
                                     Image(systemName: "checkmark")
                                 }
@@ -104,7 +113,7 @@ struct ThumbnailSidebar: View {
                 Spacer()
 
                 if filterOption != .all {
-                    Text(filterOption.rawValue)
+                    Text(filterOption.label)
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -181,4 +190,58 @@ struct ThumbnailView: View {
                 .foregroundColor(isSelected ? .accentColor : .secondary)
         }
     }
+}
+
+#Preview("English") {
+    @Previewable @State var container = try! ModelContainer(
+        for: Document.self, Page.self,
+        configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+    )
+    @Previewable @State var selectedPageNumber: Int? = 1
+
+    let document = Document(name: "Sample Document", folderPath: "/tmp", totalPages: 3)
+    let page1 = Page(pageNumber: 1, text: "Here’s to the crazy ones.", imageFileName: "page1.jpg")
+    let page2 = Page(pageNumber: 2, text: "The misfits. The rebels. The troublemakers. The round pegs in the square holes.", imageFileName: "page2.jpg")
+    page2.isDone = true
+    let page3 = Page(pageNumber: 3, text: "The ones who see things differently.", imageFileName: "page3.jpg")
+    document.pages = [page1, page2, page3]
+
+    let navigationState = NavigationState()
+    navigationState.setupNavigation(for: document)
+
+    return ThumbnailSidebar(
+        document: document,
+        navigationState: navigationState,
+        selectedPageNumber: $selectedPageNumber
+    )
+    .modelContainer(container)
+    .environment(\.locale, Locale(identifier: "en"))
+    .frame(width: 200, height: 600)
+}
+
+#Preview("es-419") {
+    @Previewable @State var container = try! ModelContainer(
+        for: Document.self, Page.self,
+        configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+    )
+    @Previewable @State var selectedPageNumber: Int? = 1
+
+    let document = Document(name: "Documento de Ejemplo", folderPath: "/tmp", totalPages: 3)
+    let page1 = Page(pageNumber: 1, text: "Texto de ejemplo para la página 1", imageFileName: "pagina1.jpg")
+    let page2 = Page(pageNumber: 2, text: "Texto de ejemplo para la página 2", imageFileName: "pagina2.jpg")
+    page2.isDone = true
+    let page3 = Page(pageNumber: 3, text: "Texto de ejemplo para la página 3", imageFileName: "pagina3.jpg")
+    document.pages = [page1, page2, page3]
+
+    let navigationState = NavigationState()
+    navigationState.setupNavigation(for: document)
+
+    return ThumbnailSidebar(
+        document: document,
+        navigationState: navigationState,
+        selectedPageNumber: $selectedPageNumber
+    )
+    .modelContainer(container)
+    .environment(\.locale, Locale(identifier: "es-419"))
+    .frame(width: 200, height: 600)
 }

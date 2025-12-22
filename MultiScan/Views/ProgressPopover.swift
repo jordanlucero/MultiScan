@@ -5,8 +5,6 @@ struct ProgressPopover: View {
     
     var body: some View {
         VStack(spacing: 16) {
-            Text("Progress")
-                .font(.headline)
             
             VStack(spacing: 8) {
                 ProgressView(value: navigationState.progress)
@@ -37,3 +35,30 @@ struct ProgressPopover: View {
         }
     }
 }
+
+#Preview("English") {
+    class PreviewState: NavigationState {
+        override var donePageCount: Int { 1 }
+        override var totalPageCount: Int { 100 }
+        override var progress: Double { Double(donePageCount) / Double(totalPageCount) }
+    }
+    
+    return ProgressPopover(
+        navigationState: PreviewState()
+    )
+    .environment(\.locale, Locale(identifier: "en"))
+}
+
+#Preview("es-419") {
+    class PreviewState: NavigationState {
+        override var donePageCount: Int { 1 }
+        override var totalPageCount: Int { 100 }
+        override var progress: Double { Double(donePageCount) / Double(totalPageCount) }
+    }
+    
+    return ProgressPopover(
+        navigationState: PreviewState()
+    )
+    .environment(\.locale, Locale(identifier: "es-419"))
+}
+

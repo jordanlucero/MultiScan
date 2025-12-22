@@ -87,6 +87,7 @@ struct MultiScanApp: App {
                 Button("Strikethrough", systemImage: "strikethrough") {
                     focusedEditableText?.applyStrikethrough()
                 }
+                .keyboardShortcut("X", modifiers: [.command, .shift])
                 .disabled(focusedEditableText == nil || focusedEditableText?.hasSelection != true)
             }
             

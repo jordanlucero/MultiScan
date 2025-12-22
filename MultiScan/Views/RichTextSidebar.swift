@@ -1,11 +1,3 @@
-//
-//  RichTextSidebar.swift
-//  MultiScan
-//
-//  A rich text viewing and editing sidebar using SwiftUI's
-//  native AttributedString support in macOS 26+.
-//
-
 import SwiftUI
 
 /// View model for managing editable rich text during edit mode
@@ -121,7 +113,7 @@ struct RichTextSidebar: View {
     /// Display text with proper color for current color scheme
     private var displayText: AttributedString {
         guard let page = currentPage else {
-            return AttributedString("No text detected on this page.")
+            return AttributedString(localized: "No text detected on this page.")
         }
         var text = page.richText
         // Apply primary color for proper dark/light mode support
@@ -196,7 +188,7 @@ struct RichTextSidebar: View {
                         text: Bindable(editableText).text,
                         selection: Bindable(editableText).selection
                     )
-// unsure about why scroll bar and padding is not consistent
+                    .safeAreaPadding()
                 }
             } else {
                 // View mode: Read-only styled text

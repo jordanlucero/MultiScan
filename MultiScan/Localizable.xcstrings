@@ -2,7 +2,25 @@
   "sourceLanguage" : "en",
   "strings" : {
     "" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : ""
+          }
+        }
+      },
+      "shouldTranslate" : false
+    },
+    "[Page 1 of 5 | filename.heic | 245 words]" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "[Página 1 de 5 | nombre_de_archivo.heic | 245 palabras]"
+          }
+        }
+      }
     },
     "%lld characters" : {
       "localizations" : {
@@ -15,6 +33,7 @@
       }
     },
     "%lld of %lld pages completed" : {
+      "comment" : "Progress indicator showing completed pages",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -31,6 +50,7 @@
       }
     },
     "%lld pages" : {
+      "comment" : "Page count in export panel",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -50,9 +70,45 @@
         }
       }
     },
+    "%lld words, %lld characters" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld words, %2$lld characters"
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld palabras, %2$lld caracteres"
+          }
+        }
+      }
+    },
     "%lld%%" : {
       "comment" : "Numerical percentage shown in ProgressPopover",
       "shouldTranslate" : false
+    },
+    "Add dual line breaks between pages" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agregar saltos de línea dobles entre páginas"
+          }
+        }
+      }
+    },
+    "Add identifying information between pages" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agregar información de identificación entre páginas"
+          }
+        }
+      }
     },
     "All" : {
       "localizations" : {
@@ -85,10 +141,25 @@
       }
     },
     "Background" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fondo"
+          }
+        }
+      }
     },
     "Black" : {
-      "comment" : "Viewer background option: black color"
+      "comment" : "Viewer background option: black color",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Negro"
+          }
+        }
+      }
     },
     "Bold" : {
       "localizations" : {
@@ -120,47 +191,27 @@
         }
       }
     },
-    "Copy All Pages Text" : {
-      "comment" : "Rework both versions",
-      "extractionState" : "stale",
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Copiar texto de todas las páginas"
-          }
-        }
-      }
-    },
-    "Copy Current Page Text" : {
-      "comment" : "Rework both versions",
-      "extractionState" : "stale",
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Copiar texto de la página actual"
-          }
-        }
-      }
-    },
-    "Copy Page Text" : {
-      "comment" : "Rework both versions",
-      "extractionState" : "stale",
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Copiar texto de la página"
-          }
-        }
-      }
-    },
     "Dark Gray" : {
-      "comment" : "Viewer background option: dark gray color"
+      "comment" : "Viewer background option: dark gray color",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gris oscuro"
+          }
+        }
+      }
     },
     "Default" : {
-      "comment" : "Viewer background option: system default"
+      "comment" : "Viewer background option: system default",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Por defecto"
+          }
+        }
+      }
     },
     "Delete" : {
       "localizations" : {
@@ -183,10 +234,24 @@
       }
     },
     "Delete project" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eliminar proyecto"
+          }
+        }
+      }
     },
     "Delete..." : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eliminar..."
+          }
+        }
+      }
     },
     "Discard" : {
       "localizations" : {
@@ -209,7 +274,14 @@
       }
     },
     "Document Text" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Texto del documento"
+          }
+        }
+      }
     },
     "Done" : {
       "localizations" : {
@@ -217,6 +289,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Hecho"
+          }
+        }
+      }
+    },
+    "Each detail on its own line" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cada detalle en su propia línea"
           }
         }
       }
@@ -252,7 +334,14 @@
       }
     },
     "Enter a new name for this project." : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ingrese un nuevo nombre para este proyecto."
+          }
+        }
+      }
     },
     "Error" : {
       "localizations" : {
@@ -265,22 +354,64 @@
       }
     },
     "Error generating preview" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Error al generar vista previa"
+          }
+        }
+      }
     },
     "Export All Pages" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exportar todas las páginas"
+          }
+        }
+      }
     },
     "Export All Pages Text" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exportar texto de todas las páginas"
+          }
+        }
+      }
     },
     "Export All Pages..." : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exportar todas las páginas..."
+          }
+        }
+      }
     },
     "Export Options" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opciones de exportación"
+          }
+        }
+      }
     },
     "Filename" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nombre de archivo"
+          }
+        }
+      }
     },
     "Filter" : {
       "localizations" : {
@@ -323,7 +454,15 @@
       }
     },
     "Gray" : {
-      "comment" : "Viewer background option: gray color"
+      "comment" : "Viewer background option: gray color",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gris"
+          }
+        }
+      }
     },
     "Hide Text Panel" : {
       "localizations" : {
@@ -335,23 +474,95 @@
         }
       }
     },
+    "Horizontal line of hyphens" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Línea horizontal de guiones"
+          }
+        }
+      }
+    },
+    "Hyphen Divider" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Divisor de guiones"
+          }
+        }
+      }
+    },
     "Import" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Importar"
+          }
+        }
+      }
     },
     "Import from Files" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Importar desde Archivos"
+          }
+        }
+      }
     },
     "Import from iPhone or iPad" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Importar desde iPhone o iPad"
+          }
+        }
+      }
     },
     "Import from Photos" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Importar desde Fotos"
+          }
+        }
+      }
     },
     "Import images to start scanning" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Importe imágenes para comenzar a escanear"
+          }
+        }
+      }
     },
     "Include in Separator" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Incluir en divisor"
+          }
+        }
+      }
+    },
+    "Inline" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En línea"
+          }
+        }
+      }
     },
     "Italic" : {
       "localizations" : {
@@ -374,7 +585,25 @@
       }
     },
     "Light Gray" : {
-      "comment" : "Viewer background option: light gray color"
+      "comment" : "Viewer background option: light gray color",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gris claro"
+          }
+        }
+      }
+    },
+    "Line Break" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salto de línea"
+          }
+        }
+      }
     },
     "Loading image..." : {
       "localizations" : {
@@ -407,7 +636,25 @@
       }
     },
     "Medium Gray" : {
-      "comment" : "Viewer background option: medium gray color"
+      "comment" : "Viewer background option: medium gray color",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gris medio"
+          }
+        }
+      }
+    },
+    "Multiple Lines" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Múltiples líneas"
+          }
+        }
+      }
     },
     "MultiScan" : {
       "localizations" : {
@@ -420,7 +667,15 @@
       }
     },
     "MultiScan will optimize images it stores to save storage." : {
-
+      "comment" : "Rework both",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MultiScan optimizará las imágenes almacenadas para ahorrar espacio."
+          }
+        }
+      }
     },
     "Next" : {
       "localizations" : {
@@ -472,6 +727,9 @@
         }
       }
     },
+    "Note that these options are untested in 1.4b." : {
+      "shouldTranslate" : false
+    },
     "OK" : {
       "localizations" : {
         "es-419" : {
@@ -493,7 +751,25 @@
       }
     },
     "Optimize images on import" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Optimizar imágenes al importar"
+          }
+        }
+      }
+    },
+    "Page %lld" : {
+      "comment" : "Fallback page label when filename unavailable",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Página %lld"
+          }
+        }
+      }
     },
     "Page %lld of %lld" : {
       "localizations" : {
@@ -512,16 +788,65 @@
       }
     },
     "Page number" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Número de página"
+          }
+        }
+      }
     },
     "Page Separation" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Divisor de páginas"
+          }
+        }
+      }
     },
     "Page Text" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Texto de la página"
+          }
+        }
+      }
+    },
+    "Pages flow continuously without breaks" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Las páginas fluyen de forma continua sin interrupciones"
+          }
+        }
+      }
+    },
+    "Photo %lld" : {
+      "comment" : "Fallback filename for imported photo",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Foto %lld"
+          }
+        }
+      }
     },
     "Preview" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vista previa"
+          }
+        }
+      }
     },
     "Previous" : {
       "localizations" : {
@@ -553,20 +878,55 @@
         }
       }
     },
-    "Project name" : {
-
+    "Project Name" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nombre del proyecto"
+          }
+        }
+      }
     },
     "Recent Projects" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proyectos recientes"
+          }
+        }
+      }
     },
     "Rename" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Renombrar"
+          }
+        }
+      }
     },
     "Rename Project" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Renombrar proyecto"
+          }
+        }
+      }
     },
     "Rename..." : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Renombrar..."
+          }
+        }
+      }
     },
     "Review" : {
       "localizations" : {
@@ -609,7 +969,14 @@
       }
     },
     "Separator Style" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Estilo de divisor"
+          }
+        }
+      }
     },
     "Sequential Order" : {
       "localizations" : {
@@ -622,16 +989,44 @@
       }
     },
     "Share Current Page Text" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Compartir texto de la página actual"
+          }
+        }
+      }
     },
     "Share Page Text" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Compartir texto de la página"
+          }
+        }
+      }
     },
     "Share Page Text..." : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Compartir texto de la página..."
+          }
+        }
+      }
     },
     "Share..." : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Compartir..."
+          }
+        }
+      }
     },
     "Show Statistics" : {
       "localizations" : {
@@ -669,6 +1064,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orden aleatorio"
+          }
+        }
+      }
+    },
+    "Single Line" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Línea única"
           }
         }
       }
@@ -754,10 +1159,35 @@
       }
     },
     "Viewer" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Visor"
+          }
+        }
+      }
+    },
+    "Visual Separation" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Divisor visual"
+          }
+        }
+      }
     },
     "White" : {
-      "comment" : "Viewer background option: white color"
+      "comment" : "Viewer background option: white color",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Blanco"
+          }
+        }
+      }
     },
     "Zoom In" : {
       "localizations" : {

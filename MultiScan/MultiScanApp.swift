@@ -46,7 +46,7 @@ struct MultiScanApp: App {
             // Edit Menu Commands
             CommandGroup(after: .pasteboard) {
                 ShareLink("Share Page Text...",
-                          item: focusedNavigationState?.currentPage?.richText ?? AttributedString(),
+                          item: RichText(focusedNavigationState?.currentPage?.richText ?? AttributedString()),
                           preview: SharePreview("Page Text"))
                 .keyboardShortcut("C", modifiers: [.command, .shift])
                 .disabled(focusedNavigationState?.currentPage == nil)
@@ -174,6 +174,7 @@ struct MultiScanApp: App {
         }
 
         Settings {
+            Text("Note that these options are untested in 1.4b.")
             Form {
                 Section("Import") {
                     Toggle("Optimize images on import", isOn: $optimizeImagesOnImport)

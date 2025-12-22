@@ -171,6 +171,7 @@ enum OCRError: LocalizedError {
 // MARK: - Image Compression Utilities
 
 extension OCRService {
+    // Change this to HEIC ideally
     /// Compress image data to JPEG with specified quality
     /// - Parameters:
     ///   - data: Original image data

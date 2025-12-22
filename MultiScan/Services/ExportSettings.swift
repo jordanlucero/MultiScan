@@ -13,7 +13,7 @@ enum ExportFlowStyle: String, CaseIterable, Codable {
     case lineBreak        // Double line break between pages (default)
     case visualSeparation // Custom separators with metadata
 
-    var label: String {
+    var label: LocalizedStringResource {
         switch self {
         case .inline: "Inline"
         case .lineBreak: "Line Break"
@@ -21,11 +21,11 @@ enum ExportFlowStyle: String, CaseIterable, Codable {
         }
     }
 
-    var description: String {
+    var description: LocalizedStringResource {
         switch self {
         case .inline: "Pages flow continuously without breaks"
-        case .lineBreak: "Double line break between pages"
-        case .visualSeparation: "Add page info between pages"
+        case .lineBreak: "Add dual line breaks between pages"
+        case .visualSeparation: "Add identifying information between pages"
         }
     }
 }
@@ -36,7 +36,7 @@ enum SeparatorStyle: String, CaseIterable, Codable {
     case multipleLines // Metadata on separate lines
     case hyphenLine    // Row of hyphens as visual divider
 
-    var label: String {
+    var label: LocalizedStringResource {
         switch self {
         case .singleLine: "Single Line"
         case .multipleLines: "Multiple Lines"
@@ -44,9 +44,9 @@ enum SeparatorStyle: String, CaseIterable, Codable {
         }
     }
 
-    var description: String {
+    var description: LocalizedStringResource {
         switch self {
-        case .singleLine: "[Page 1 of 5 | filename.jpg | 245 words]"
+        case .singleLine: "[Page 1 of 5 | filename.heic | 245 words]"
         case .multipleLines: "Each detail on its own line"
         case .hyphenLine: "Horizontal line of hyphens"
         }

@@ -211,11 +211,12 @@ struct RichTextSidebar: View {
                         .fontWeight(.semibold)
 
                     HStack {
-                        let text = page.plainText
-                        Label("\(text.split(separator: " ").count) words", systemImage: "textformat")
+                        let wordCount = page.plainText.split(separator: " ").count
+                        let charCount = page.plainText.count
+                        Label("\(wordCount) words", systemImage: "textformat")
                             .font(.caption)
                         Spacer()
-                        Label("\(text.count) characters", systemImage: "character")
+                        Label("\(charCount) characters", systemImage: "character")
                             .font(.caption)
                     }
                     .foregroundStyle(.secondary)

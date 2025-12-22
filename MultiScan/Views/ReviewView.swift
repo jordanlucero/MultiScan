@@ -47,7 +47,7 @@ struct ReviewView: View {
             ExportPanelView(pages: document.pages)
         }
         .navigationTitle(String(document.name.prefix(30)) + (document.name.count > 30 ? "..." : ""))
-        .navigationSubtitle("\(document.totalPages) pages")
+        .navigationSubtitle(Text("\(document.totalPages) pages"))
         .toolbar {
             ToolbarItemGroup {
                 Button(action: { navigationState.previousPage() }) {
@@ -91,7 +91,7 @@ struct ReviewView: View {
                 Spacer()
                     .frame(width: 20)
                 
-                ShareLink(item: navigationState.currentPage?.richText ?? AttributedString(),
+                ShareLink(item: RichText(navigationState.currentPage?.richText ?? AttributedString()),
                           preview: SharePreview("Page Text")) {
                     Label("Share Page Text", systemImage: "square.and.arrow.up")
                         .labelStyle(.iconOnly)

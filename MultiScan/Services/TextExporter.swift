@@ -62,7 +62,7 @@ struct TextExporter {
         var components: [String] = []
 
         if settings.includePageNumber {
-            components.append("Page \(page.pageNumber) of \(totalPages)")
+            components.append(String(localized: "Page \(page.pageNumber) of \(totalPages)"))
         }
 
         if settings.includeFilename, let filename = page.originalFileName {
@@ -72,7 +72,7 @@ struct TextExporter {
         if settings.includeStatistics {
             let words = page.plainText.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
             let chars = page.plainText.count
-            components.append("\(words) words, \(chars) characters")
+            components.append(String(localized: "\(words) words, \(chars) characters"))
         }
 
         // Format based on separator style

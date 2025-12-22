@@ -15,8 +15,6 @@ This implementation of VisionKit will add line breaks at the end of each line of
 
 Be mindful of the quality of your input images. Fingers, image noise, and even specks of dust and dirt on pages might be mistaken for accented characters, or new characters entirely.
 
-MultiScan does not store the actual images used for a given project in its container. MutliScan won't be able to display images that are deleted or moved from the exact directory they existed in at the time of project generation.
-
 # Known Issues
 
 MultiScan may be highly memory-intensive when running OCR.

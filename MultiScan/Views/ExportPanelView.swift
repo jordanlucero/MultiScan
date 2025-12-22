@@ -43,7 +43,7 @@ struct ExportPanelView: View {
                 Text("Preview")
                     .font(.headline)
                 Spacer()
-                Text("\(pages.count) pages")
+                Text("\(pages.count) pages", comment: "Page count in export panel")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -133,7 +133,7 @@ struct ExportPanelView: View {
 
                 Spacer()
 
-                ShareLink(item: previewText, preview: SharePreview("Document Text")) {
+                ShareLink(item: RichText(previewText), preview: SharePreview("Document Text")) {
                     Text("Share...")
                 }
                 .keyboardShortcut(.defaultAction)

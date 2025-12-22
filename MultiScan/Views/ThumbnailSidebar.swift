@@ -181,7 +181,7 @@ struct ThumbnailView: View {
             }
             .buttonStyle(.plain)
 
-            Text(page.originalFileName ?? "Page \(page.pageNumber)")
+            Text(page.originalFileName ?? String(localized: "Page \(page.pageNumber)", comment: "Fallback page label when filename unavailable"))
                 .font(.caption)
                 .lineLimit(1)
                 .truncationMode(.middle)

@@ -122,7 +122,7 @@ struct HomeView: View {
             Text("Are you sure you want to delete the MultiScan project for \"\(document.name)\"? This can't be undone.")
         }
         .alert("Rename Project", isPresented: $showingRenameDialog) {
-            TextField("Project name", text: $renameText)
+            TextField("Project Name", text: $renameText)
             Button("Cancel", role: .cancel) {
                 documentToRename = nil
             }
@@ -341,7 +341,7 @@ struct HomeView: View {
 
         // Fallback: load as raw data without filename
         if let data = try? await item.loadTransferable(type: Data.self) {
-            return (data: data, fileName: "Photo \(index + 1)")
+            return (data: data, fileName: String(localized: "Photo \(index + 1)", comment: "Fallback filename for imported photo"))
         }
 
         return nil

@@ -19,6 +19,14 @@ class NavigationState: ObservableObject {
     // Published for view observation - updated whenever navigation changes
     @Published private(set) var currentPageNumber: Int?
 
+    // MARK: - Full Document Text Cache (for TTS, accessibility, and future search)
+
+    /// Plain text version of the entire document for TTS and search
+    @Published private(set) var fullDocumentPlainText: String = ""
+
+    /// Attributed text version of the entire document with formatting
+    @Published private(set) var fullDocumentAttributedText: AttributedString = AttributedString()
+
     // MARK: - Current Page
 
     var currentPage: Page? {
@@ -87,6 +95,9 @@ class NavigationState: ObservableObject {
         }
 
         updateCurrentPageNumber()
+
+        // Build the full document text cache for TTS/accessibility/search
+        rebuildTextCache()
     }
 
     // MARK: - Navigation
@@ -236,5 +247,31 @@ class NavigationState: ObservableObject {
     var progress: Double {
         guard totalPageCount > 0 else { return 0 }
         return Double(donePageCount) / Double(totalPageCount)
+    }
+
+    // MARK: - Text Cache
+
+    /// Rebuilds the full document text cache from all pages
+    func rebuildTextCache() {
+        guard let document = selectedDocument else {
+            fullDocumentPlainText = ""
+            fullDocumentAttributedText = AttributedString()
+            return
+        }
+
+        let sortedPages = document.pages.sorted { $0.pageNumber < $1.pageNumber }
+
+        // Build plain text version (for TTS, search, accessibility)
+        fullDocumentPlainText = sortedPages.map { $0.plainText }.joined(separator: "\n\n")
+
+        // Build attributed text version (preserves formatting)
+        var attributed = AttributedString()
+        for (index, page) in sortedPages.enumerated() {
+            if index > 0 {
+                attributed.append(AttributedString("\n\n"))
+            }
+            attributed.append(page.richText)
+        }
+        fullDocumentAttributedText = attributed
     }
 }

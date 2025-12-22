@@ -20,6 +20,7 @@ struct MultiScanApp: App {
     @FocusedValue(\.document) private var focusedDocument: Document?
     @FocusedValue(\.navigationState) private var focusedNavigationState: NavigationState?
     @FocusedValue(\.editableText) private var focusedEditableText: EditablePageText?
+    @FocusedValue(\.showExportPanel) private var showExportPanelBinding: Binding<Bool>?
 
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
@@ -44,14 +45,14 @@ struct MultiScanApp: App {
             
             // Edit Menu Commands
             CommandGroup(after: .pasteboard) {
-                Button("Copy Page Text", systemImage: "document") {
-                    copyCurrentPageText()
-                }
+                ShareLink("Share Page Text...",
+                          item: focusedNavigationState?.currentPage?.richText ?? AttributedString(),
+                          preview: SharePreview("Page Text"))
                 .keyboardShortcut("C", modifiers: [.command, .shift])
                 .disabled(focusedNavigationState?.currentPage == nil)
 
-                Button("Copy All Pages Text", systemImage: "document.on.document") {
-                    copyAllPagesText()
+                Button("Export All Pages...", systemImage: "doc.on.doc") {
+                    showExportPanelBinding?.wrappedValue = true
                 }
                 .keyboardShortcut("C", modifiers: [.command, .option])
                 .disabled(focusedDocument == nil)
@@ -195,13 +196,4 @@ struct MultiScanApp: App {
         }
     }
 
-    private func copyCurrentPageText() {
-        guard let currentPage = focusedNavigationState?.currentPage else { return }
-        TextFormatter.copyPageText(currentPage)
-    }
-
-    private func copyAllPagesText() {
-        guard let document = focusedDocument else { return }
-        TextFormatter.copyAllPagesText(document.pages)
-    }
 }

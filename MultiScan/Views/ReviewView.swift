@@ -7,6 +7,7 @@ struct ReviewView: View {
     @StateObject private var navigationState = NavigationState()
     @State private var selectedPageNumber: Int?
     @State private var showProgress: Bool = false
+    @State private var showExportPanel: Bool = false
 
     // Use proper NavigationSplitViewVisibility type for animated sidebar transitions
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
@@ -40,6 +41,11 @@ struct ReviewView: View {
         }
         .focusedValue(\.document, document)
         .focusedValue(\.navigationState, navigationState)
+        .focusedValue(\.showExportPanel, $showExportPanel)
+        .focusedValue(\.fullDocumentText, navigationState.fullDocumentPlainText)
+        .sheet(isPresented: $showExportPanel) {
+            ExportPanelView(pages: document.pages)
+        }
         .navigationTitle(String(document.name.prefix(30)) + (document.name.count > 30 ? "..." : ""))
         .navigationSubtitle("\(document.totalPages) pages")
         .toolbar {
@@ -85,17 +91,19 @@ struct ReviewView: View {
                 Spacer()
                     .frame(width: 20)
                 
-                Button(action: copyCurrentPageText) {
-                    Label("Copy Page Text", systemImage: "document")
+                ShareLink(item: navigationState.currentPage?.richText ?? AttributedString(),
+                          preview: SharePreview("Page Text")) {
+                    Label("Share Page Text", systemImage: "square.and.arrow.up")
                         .labelStyle(.iconOnly)
                 }
-                .help("Copy Current Page Text")
-                
-                Button(action: copyAllPagesText) {
-                    Label("Copy All Pages Text", systemImage: "doc.on.doc")
+                .help("Share Current Page Text")
+                .disabled(navigationState.currentPage == nil)
+
+                Button(action: { showExportPanel = true }) {
+                    Label("Export All Pages", systemImage: "doc.on.doc")
                         .labelStyle(.iconOnly)
                 }
-                .help("Copy All Pages Text")
+                .help("Export All Pages Text")
 
                 Spacer()
                     .frame(width: 20)
@@ -130,14 +138,5 @@ struct ReviewView: View {
                 showThumbnails = shouldShow
             }
         }
-    }
-    
-    private func copyCurrentPageText() {
-        guard let currentPage = navigationState.currentPage else { return }
-        TextFormatter.copyPageText(currentPage)
-    }
-
-    private func copyAllPagesText() {
-        TextFormatter.copyAllPagesText(document.pages)
     }
 }

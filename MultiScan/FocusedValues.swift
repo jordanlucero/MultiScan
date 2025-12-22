@@ -13,6 +13,14 @@ struct FocusedEditableTextKey: FocusedValueKey {
     typealias Value = EditablePageText
 }
 
+struct FocusedShowExportPanelKey: FocusedValueKey {
+    typealias Value = Binding<Bool>
+}
+
+struct FocusedFullDocumentTextKey: FocusedValueKey {
+    typealias Value = String
+}
+
 extension FocusedValues {
     var document: Document? {
         get { self[FocusedDocumentKey.self] }
@@ -27,5 +35,15 @@ extension FocusedValues {
     var editableText: EditablePageText? {
         get { self[FocusedEditableTextKey.self] }
         set { self[FocusedEditableTextKey.self] = newValue }
+    }
+
+    var showExportPanel: Binding<Bool>? {
+        get { self[FocusedShowExportPanelKey.self] }
+        set { self[FocusedShowExportPanelKey.self] = newValue }
+    }
+
+    var fullDocumentText: String? {
+        get { self[FocusedFullDocumentTextKey.self] }
+        set { self[FocusedFullDocumentTextKey.self] = newValue }
     }
 }

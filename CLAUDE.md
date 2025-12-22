@@ -60,3 +60,26 @@ When extending functionality:
 2. Use `@Query` for reactive data fetching in views
 3. Access `modelContext` from environment for CRUD operations
 4. Follow SwiftUI view composition patterns
+
+## Full Document Text Cache
+
+The `NavigationState` class maintains a cached copy of the full document text:
+- `fullDocumentPlainText: String` - Plain text for search/TTS
+- `fullDocumentAttributedText: AttributedString` - Rich text with formatting
+
+### Cache Invalidation
+The cache is rebuilt when:
+- Document selection changes (via `setupNavigation(for:)`)
+- Call `rebuildTextCache()` manually after page text edits
+
+### Accessibility Integration
+- `fullDocumentPlainText` available via `FocusedValues` for app-level access
+- Text selection enabled in `RichTextSidebar` via `.textSelection(.enabled)`
+- Note: macOS Edit > Speech menu requires NSTextView in responder chain (not currently implemented to avoid AppKit dependency)
+
+### Future: Search Implementation
+To implement document search:
+1. Use `fullDocumentPlainText` for search queries
+2. Use `String.range(of:)` for matching (AVOID `NSRegularExpression` TO AVOID APPKIT)
+3. Map character positions back to page numbers for navigation
+4. Consider adding a search index for large documents (100+ pages)

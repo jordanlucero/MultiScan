@@ -1,6 +1,9 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "" : {
+
+    },
     "%lld characters" : {
       "localizations" : {
         "es-419" : {
@@ -119,6 +122,7 @@
     },
     "Copy All Pages Text" : {
       "comment" : "Rework both versions",
+      "extractionState" : "stale",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -130,6 +134,7 @@
     },
     "Copy Current Page Text" : {
       "comment" : "Rework both versions",
+      "extractionState" : "stale",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -141,6 +146,7 @@
     },
     "Copy Page Text" : {
       "comment" : "Rework both versions",
+      "extractionState" : "stale",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -202,6 +208,9 @@
         }
       }
     },
+    "Document Text" : {
+
+    },
     "Done" : {
       "localizations" : {
         "es-419" : {
@@ -256,6 +265,21 @@
       }
     },
     "Error generating preview" : {
+
+    },
+    "Export All Pages" : {
+
+    },
+    "Export All Pages Text" : {
+
+    },
+    "Export All Pages..." : {
+
+    },
+    "Export Options" : {
+
+    },
+    "Filename" : {
 
     },
     "Filter" : {
@@ -324,6 +348,9 @@
 
     },
     "Import images to start scanning" : {
+
+    },
+    "Include in Separator" : {
 
     },
     "Italic" : {
@@ -484,6 +511,18 @@
         }
       }
     },
+    "Page number" : {
+
+    },
+    "Page Separation" : {
+
+    },
+    "Page Text" : {
+
+    },
+    "Preview" : {
+
+    },
     "Previous" : {
       "localizations" : {
         "es-419" : {
@@ -569,6 +608,9 @@
         }
       }
     },
+    "Separator Style" : {
+
+    },
     "Sequential Order" : {
       "localizations" : {
         "es-419" : {
@@ -578,6 +620,18 @@
           }
         }
       }
+    },
+    "Share Current Page Text" : {
+
+    },
+    "Share Page Text" : {
+
+    },
+    "Share Page Text..." : {
+
+    },
+    "Share..." : {
+
     },
     "Show Statistics" : {
       "localizations" : {

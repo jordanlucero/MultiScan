@@ -54,71 +54,78 @@ struct ThumbnailSidebar: View {
     }
     
     var body: some View {
-        VStack(spacing: 0) {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: 10) {
-                        ForEach(filteredPages) { page in
-                            ThumbnailView(
-                                page: page,
-                                document: document,
-                                isSelected: selectedPageNumber == page.pageNumber
-                            ) {
-                                navigationState.goToPage(pageNumber: page.pageNumber)
-                                selectedPageNumber = page.pageNumber
-                            }
-                            .id(page.pageNumber)
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 10) {
+                    ForEach(filteredPages) { page in
+                        ThumbnailView(
+                            page: page,
+                            document: document,
+                            isSelected: selectedPageNumber == page.pageNumber
+                        ) {
+                            navigationState.goToPage(pageNumber: page.pageNumber)
+                            selectedPageNumber = page.pageNumber
                         }
+                        .id(page.pageNumber)
                     }
-                    .padding()
                 }
-                .onChange(of: selectedPageNumber) { _, newValue in
-                    if let pageNumber = newValue {
-                        withAnimation {
-                            proxy.scrollTo(pageNumber, anchor: .center)
-                        }
+                .padding()
+            }
+            .onChange(of: selectedPageNumber) { _, newValue in
+                if let pageNumber = newValue {
+                    withAnimation {
+                        proxy.scrollTo(pageNumber, anchor: .center)
                     }
                 }
             }
-
-            Divider()
-
-            // Bottom toolbar
-            HStack(spacing: 8) {
-                Menu {
-                    ForEach(FilterOption.allCases, id: \.self) { option in
-                        Button(action: {
-                            switch option {
-                            case .all: filterOptionString = "all"
-                            case .notDone: filterOptionString = "notDone"
-                            case .done: filterOptionString = "done"
-                            }
-                        }) {
-                            HStack {
-                                Text(option.label)
-                                if filterOption == option {
-                                    Image(systemName: "checkmark")
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                // Bottom toolbar
+                HStack(spacing: 8) {
+                    Menu {
+                        ForEach(FilterOption.allCases, id: \.self) { option in
+                            Button(action: {
+                                switch option {
+                                case .all: filterOptionString = "all"
+                                case .notDone: filterOptionString = "notDone"
+                                case .done: filterOptionString = "done"
+                                }
+                            }) {
+                                HStack {
+                                    Text(option.label)
+                                    if filterOption == option {
+                                        Image(systemName: "checkmark")
+                                    }
                                 }
                             }
                         }
+                    } label: {
+                        Image(systemName: "line.3.horizontal.decrease.circle.fill")
+                            .font(.title3)
                     }
-                } label: {
-                    Image(systemName: "line.3.horizontal.decrease.circle.fill")
-                        .font(.title3)
-                }
-                .menuStyle(.borderlessButton)
-                .padding(.leading, 12)
-                .help("Filter pages")
+                    .menuStyle(.borderlessButton)
+                    .padding(.leading, 12)
+                    .help("Filter pages")
 
-                Spacer()
+                    Spacer()
 
-                if filterOption != .all {
-                    Text(filterOption.label)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    if filterOption != .all {
+                        Text(filterOption.label)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .padding(.trailing, 8)
+                    }
                 }
+                .frame(minHeight: 26)
+                .padding(6)
+                .background(.thickMaterial)
+                // want a blurred background with .scrollEdgeEffectStyle if possible
+        //        .glassEffect(.clear, in: UnevenRoundedRectangle(
+        //            topLeadingRadius: 0,
+        //            bottomLeadingRadius: 12,
+        //            bottomTrailingRadius: 12,
+        //            topTrailingRadius: 0
+        //        ))
             }
-            .padding(8)
         }
     }
 }

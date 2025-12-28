@@ -21,6 +21,8 @@ struct MultiScanApp: App {
     @FocusedValue(\.navigationState) private var focusedNavigationState: NavigationState?
     @FocusedValue(\.editableText) private var focusedEditableText: EditablePageText?
     @FocusedValue(\.showExportPanel) private var showExportPanelBinding: Binding<Bool>?
+    @FocusedValue(\.showAddFromPhotos) private var showAddFromPhotosBinding: Binding<Bool>?
+    @FocusedValue(\.showAddFromFiles) private var showAddFromFilesBinding: Binding<Bool>?
 
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
@@ -42,7 +44,22 @@ struct MultiScanApp: App {
         }
         .modelContainer(sharedModelContainer)
         .commands {
-            
+
+            // File Menu Commands - Append Pages
+            CommandGroup(after: .newItem) {
+                Divider()
+
+                Button("Append Pages from Photos...", systemImage: "photo.on.rectangle") {
+                    showAddFromPhotosBinding?.wrappedValue = true
+                }
+                .disabled(showAddFromPhotosBinding == nil)
+
+                Button("Append Pages from Files...", systemImage: "folder") {
+                    showAddFromFilesBinding?.wrappedValue = true
+                }
+                .disabled(showAddFromFilesBinding == nil)
+            }
+
             // Edit Menu Commands
             CommandGroup(after: .pasteboard) {
                 ShareLink("Share Page Text...",

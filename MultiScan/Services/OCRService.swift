@@ -22,9 +22,11 @@ final class OCRService: ObservableObject, @unchecked Sendable {
     @Published var error: Error?
 
     /// Process multiple images from Data
-    /// - Parameter images: Array of tuples containing image data and filename
+    /// - Parameters:
+    ///   - images: Array of tuples containing image data and filename
+    ///   - startingPageNumber: The page number to start from (default 1 for new documents)
     /// - Returns: Array of ProcessedImage results
-    func processImages(_ images: [(data: Data, fileName: String)]) async throws -> [ProcessedImage] {
+    func processImages(_ images: [(data: Data, fileName: String)], startingPageNumber: Int = 1) async throws -> [ProcessedImage] {
         await MainActor.run {
             isProcessing = true
             progress = 0
@@ -48,7 +50,7 @@ final class OCRService: ObservableObject, @unchecked Sendable {
                 self.progress = Double(index) / Double(imageCount)
             }
 
-            let processed = try await processImageData(image.data, fileName: image.fileName, pageNumber: index + 1)
+            let processed = try await processImageData(image.data, fileName: image.fileName, pageNumber: startingPageNumber + index)
             results.append(processed)
 
             await MainActor.run {

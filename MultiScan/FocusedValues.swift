@@ -21,6 +21,14 @@ struct FocusedFullDocumentTextKey: FocusedValueKey {
     typealias Value = String
 }
 
+struct FocusedShowAddFromPhotosKey: FocusedValueKey {
+    typealias Value = Binding<Bool>
+}
+
+struct FocusedShowAddFromFilesKey: FocusedValueKey {
+    typealias Value = Binding<Bool>
+}
+
 extension FocusedValues {
     var document: Document? {
         get { self[FocusedDocumentKey.self] }
@@ -45,5 +53,15 @@ extension FocusedValues {
     var fullDocumentText: String? {
         get { self[FocusedFullDocumentTextKey.self] }
         set { self[FocusedFullDocumentTextKey.self] = newValue }
+    }
+
+    var showAddFromPhotos: Binding<Bool>? {
+        get { self[FocusedShowAddFromPhotosKey.self] }
+        set { self[FocusedShowAddFromPhotosKey.self] = newValue }
+    }
+
+    var showAddFromFiles: Binding<Bool>? {
+        get { self[FocusedShowAddFromFilesKey.self] }
+        set { self[FocusedShowAddFromFilesKey.self] = newValue }
     }
 }

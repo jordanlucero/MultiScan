@@ -90,6 +90,9 @@
       "comment" : "Numerical percentage shown in ProgressPopover",
       "shouldTranslate" : false
     },
+    "%lld%% pages reviewed" : {
+
+    },
     "Add dual line breaks between pages" : {
       "localizations" : {
         "es-419" : {
@@ -129,6 +132,15 @@
           }
         }
       }
+    },
+    "Append Pages from Files..." : {
+
+    },
+    "Append Pages from Photos" : {
+
+    },
+    "Append Pages from Photos..." : {
+
     },
     "Are you sure you want to delete the MultiScan project for \"%@\"? This can't be undone." : {
       "localizations" : {
@@ -234,6 +246,7 @@
       }
     },
     "Delete project" : {
+      "extractionState" : "stale",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -334,6 +347,7 @@
       }
     },
     "Enter a new name for this project." : {
+      "extractionState" : "stale",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -760,6 +774,9 @@
         }
       }
     },
+    "Optimize Images..." : {
+
+    },
     "Page %lld" : {
       "comment" : "Fallback page label when filename unavailable",
       "localizations" : {
@@ -868,6 +885,9 @@
         }
       }
     },
+    "Processing %lld%%" : {
+
+    },
     "Progress" : {
       "localizations" : {
         "es-419" : {
@@ -889,6 +909,7 @@
       }
     },
     "Recent Projects" : {
+      "extractionState" : "stale",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -899,6 +920,7 @@
       }
     },
     "Rename" : {
+      "extractionState" : "stale",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -909,6 +931,7 @@
       }
     },
     "Rename Project" : {
+      "extractionState" : "stale",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -929,6 +952,7 @@
       }
     },
     "Review" : {
+      "extractionState" : "stale",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -967,6 +991,9 @@
           }
         }
       }
+    },
+    "Select Photos" : {
+
     },
     "Separator Style" : {
       "localizations" : {
@@ -1147,6 +1174,9 @@
           }
         }
       }
+    },
+    "Using %@" : {
+
     },
     "View Progress" : {
       "localizations" : {

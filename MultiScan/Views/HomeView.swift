@@ -16,11 +16,10 @@ struct HomeView: View {
     @State private var showingError = false
     @State private var documentToDelete: Document?
     @State private var showingDeleteConfirmation = false
-    @State private var documentToRename: Document?
-    @State private var renameText: String = ""
-    @State private var showingRenameDialog = false
     @State private var processingDocumentIDs: Set<PersistentIdentifier> = []
     @State private var isDragOver = false
+    @State private var isOptimizing = false
+    @State private var optimizingDocumentID: PersistentIdentifier?
 
     // Settings
     @AppStorage("optimizeImagesOnImport") private var optimizeImagesOnImport = false
@@ -79,18 +78,35 @@ struct HomeView: View {
             if !documents.isEmpty {
                 Divider()
 
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Recent Projects")
-                        .font(.headline)
-
-                    ForEach(documents.sorted(by: { $0.createdAt > $1.createdAt }).prefix(5)) { document in
-                        documentRow(for: document)
+                ScrollView {
+                    LazyVGrid(columns: [
+                        GridItem(.adaptive(minimum: 200, maximum: 260), spacing: 16)
+                    ], spacing: 16) {
+                        ForEach(documents.sorted(by: { $0.createdAt > $1.createdAt })) { document in
+                            NavigationLink {
+                                ReviewView(document: document)
+                            } label: {
+                                DocumentCard(
+                                    document: document,
+                                    isProcessing: processingDocumentIDs.contains(document.persistentModelID),
+                                    ocrProgress: ocrService.progress,
+                                    onDelete: {
+                                        documentToDelete = document
+                                        showingDeleteConfirmation = true
+                                    },
+                                    onOptimize: { optimizeImages(for: document) }
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(processingDocumentIDs.contains(document.persistentModelID))
+                        }
                     }
+                    .padding()
                 }
-                .frame(maxWidth: 400)
             }
         }
-        .padding(50)
+        .padding(.vertical, 50)
+        .padding(.horizontal, 30)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(isDragOver ? Color.accentColor.opacity(0.1) : Color.clear)
         .onDrop(of: [.fileURL], isTargeted: $isDragOver) { providers in
@@ -121,80 +137,9 @@ struct HomeView: View {
         } message: { document in
             Text("Are you sure you want to delete the MultiScan project for \"\(document.name)\"? This can't be undone.")
         }
-        .alert("Rename Project", isPresented: $showingRenameDialog) {
-            TextField("Project Name", text: $renameText)
-            Button("Cancel", role: .cancel) {
-                documentToRename = nil
-            }
-            Button("Rename") {
-                renameDocument()
-            }
-            .disabled(renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        } message: {
-            Text("Enter a new name for this project.")
-        }
     }
 
-    @ViewBuilder
-    private func documentRow(for document: Document) -> some View {
-        HStack {
-            Image(systemName: "doc.text.fill")
-            VStack(alignment: .leading) {
-                Text(document.name)
-                    .font(.subheadline)
-                Text("\(document.totalPages) pages")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            Spacer()
-
-            HStack(spacing: 8) {
-                if processingDocumentIDs.contains(document.persistentModelID) {
-                    HStack(spacing: 10) {
-                        ProgressView(value: ocrService.progress, total: 1.0)
-                            .progressViewStyle(.linear)
-                            .frame(width: 200)
-                        ProgressView()
-                            .controlSize(.small)
-                    }
-                } else {
-                    NavigationLink(destination: ReviewView(document: document)) {
-                        Text("Review")
-                            .font(.caption)
-                    }
-                }
-
-                Button(action: {
-                    documentToDelete = document
-                    showingDeleteConfirmation = true
-                }) {
-                    Image(systemName: "trash")
-                        .font(.caption)
-                        .foregroundColor(.red)
-                }
-                .buttonStyle(.plain)
-                .help("Delete project")
-                .disabled(processingDocumentIDs.contains(document.persistentModelID))
-            }
-        }
-        .padding(.vertical, 4)
-        .contextMenu {
-            Button("Rename...", systemImage: "pencil") {
-                documentToRename = document
-                renameText = document.name
-                showingRenameDialog = true
-            }
-            .disabled(processingDocumentIDs.contains(document.persistentModelID))
-
-            Divider()
-
-            Button("Delete...", systemImage: "trash", role: .destructive) {
-                documentToDelete = document
-                showingDeleteConfirmation = true
-            }
-            .disabled(processingDocumentIDs.contains(document.persistentModelID))
-        }
-    }
+    // MARK: - Document Actions
 
     private func deleteDocument(_ document: Document) {
         modelContext.delete(document)
@@ -205,18 +150,46 @@ struct HomeView: View {
         }
     }
 
-    private func renameDocument() {
-        guard let document = documentToRename else { return }
-        let trimmedName = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty else { return }
+    private func optimizeImages(for document: Document) {
+        guard !isOptimizing else { return }
 
-        document.name = trimmedName
-        do {
-            try modelContext.save()
-        } catch {
-            print("Failed to rename document: \(error)")
+        let documentID = document.persistentModelID
+        optimizingDocumentID = documentID
+        isOptimizing = true
+
+        // Gather image data from pages on main actor
+        let pageData: [(page: Page, imageData: Data)] = document.pages.compactMap { page in
+            guard let imageData = page.imageData else { return nil }
+            return (page, imageData)
         }
-        documentToRename = nil
+
+        Task {
+            var updates: [(page: Page, compressed: Data)] = []
+
+            for (page, imageData) in pageData {
+                let originalSize = imageData.count
+                if let compressed = OCRService.compressImageData(imageData, quality: 0.8) {
+                    // Only replace if we actually saved space
+                    if compressed.count < originalSize {
+                        updates.append((page, compressed))
+                    }
+                }
+            }
+
+            // Apply updates on main actor
+            for (page, compressed) in updates {
+                page.imageData = compressed
+            }
+
+            // Recalculate storage
+            document.recalculateStorageSize()
+
+            // Save changes
+            try? modelContext.save()
+
+            isOptimizing = false
+            optimizingDocumentID = nil
+        }
     }
 
     // MARK: - File Import Handling
@@ -419,6 +392,9 @@ struct HomeView: View {
             document.pages.append(page)
         }
 
+        // Calculate storage size after all pages are added
+        document.recalculateStorageSize()
+
         do {
             try modelContext.save()
         } catch {
@@ -459,14 +435,15 @@ struct PhotoFileTransferable: Transferable {
     }
 }
 
+// Previews use ContentView since HomeView now requires coordinator
 #Preview("English") {
-    HomeView()
+    ContentView()
         .modelContainer(for: [Document.self, Page.self], inMemory: true)
         .environment(\.locale, Locale(identifier: "en"))
 }
 
 #Preview("es-419") {
-    HomeView()
+    ContentView()
         .modelContainer(for: [Document.self, Page.self], inMemory: true)
         .environment(\.locale, Locale(identifier: "es-419"))
 }

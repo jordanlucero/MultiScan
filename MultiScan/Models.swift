@@ -124,10 +124,55 @@ final class Document {
     var createdAt: Date
     @Relationship(deleteRule: .cascade) var pages: [Page]
 
+    /// Optional project emoji for visual customization
+    var emoji: String?
+
+    /// Cached storage size in bytes (external storage size isn't easily queryable)
+    var cachedStorageBytes: Int64 = 0
+
     init(name: String, totalPages: Int = 0) {
         self.name = name
         self.totalPages = totalPages
         self.createdAt = Date()
         self.pages = []
+        self.emoji = nil
+        self.cachedStorageBytes = 0
+    }
+
+    // MARK: - Computed Properties
+
+    /// Returns the most recently modified page (for thumbnail preview)
+    var lastModifiedPage: Page? {
+        pages.max(by: { $0.lastModified < $1.lastModified })
+    }
+
+    /// Returns the date of the most recent page modification
+    var lastModifiedDate: Date {
+        lastModifiedPage?.lastModified ?? createdAt
+    }
+
+    /// Completion percentage as integer (0-100)
+    var completionPercentage: Int {
+        guard totalPages > 0 else { return 0 }
+        return Int(Double(pages.filter { $0.isDone }.count) / Double(totalPages) * 100)
+    }
+
+    /// Formatted storage size string (e.g., "45.2 MB")
+    var formattedStorageSize: String {
+        ByteCountFormatter.string(fromByteCount: cachedStorageBytes, countStyle: .file)
+    }
+
+    /// Recalculates and updates the cached storage size
+    func recalculateStorageSize() {
+        var totalBytes: Int64 = 0
+        for page in pages {
+            if let imageData = page.imageData {
+                totalBytes += Int64(imageData.count)
+            }
+            if let thumbnailData = page.thumbnailData {
+                totalBytes += Int64(thumbnailData.count)
+            }
+        }
+        cachedStorageBytes = totalBytes
     }
 }

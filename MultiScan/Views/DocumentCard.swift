@@ -7,7 +7,6 @@
 
 import SwiftUI
 import SwiftData
-import AppKit
 
 struct DocumentCard: View {
     @Bindable var document: Document
@@ -18,15 +17,18 @@ struct DocumentCard: View {
 
     @Environment(\.modelContext) private var modelContext
 
+    /// Delay before focusing text fields to ensure they're in the view hierarchy
+    private static let focusDelay: TimeInterval = 0.1
+
     // Inline rename state
     @State private var isEditingName = false
     @State private var editedName: String = ""
     @FocusState private var isNameFieldFocused: Bool
 
     // Emoji picker state
-    @State private var isEditingEmoji = false
+    @State private var showingEmojiPopover = false
     @State private var emojiInput: String = ""
-    @FocusState private var isEmojiFocused: Bool
+    @FocusState private var isEmojiFieldFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -79,8 +81,8 @@ struct DocumentCard: View {
                 // Thumbnail image or placeholder
                 if let lastPage = document.lastModifiedPage,
                    let thumbData = lastPage.thumbnailData,
-                   let nsImage = NSImage(data: thumbData) {
-                    Image(nsImage: nsImage)
+                   let thumbnail = PlatformImage.from(data: thumbData) {
+                    thumbnail
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .padding(4)
@@ -114,7 +116,7 @@ struct DocumentCard: View {
                 .font(.title3)
                 .foregroundStyle(.secondary)
                 .frame(width: 28, height: 28)
-                .background(Circle().fill(.regularMaterial))
+                .glassEffect()
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
@@ -171,7 +173,7 @@ struct DocumentCard: View {
     // MARK: - Emoji/Icon Button
 
     private var emojiIconButton: some View {
-        Button(action: { showEmojiPicker() }) {
+        Button(action: { showingEmojiPopover = true }) {
             Group {
                 if let emoji = document.emoji, !emoji.isEmpty {
                     Text(emoji)
@@ -186,38 +188,70 @@ struct DocumentCard: View {
         }
         .buttonStyle(.plain)
         .disabled(isProcessing)
-        .overlay {
-            // Hidden TextField to capture emoji input
-            if isEditingEmoji {
-                TextField("", text: $emojiInput)
-                    .frame(width: 1, height: 1)
-                    .opacity(0.01)
-                    .focused($isEmojiFocused)
-                    .onChange(of: emojiInput) { _, newValue in
-                        if let firstChar = newValue.first, firstChar.isEmoji {
-                            document.emoji = String(firstChar)
-                            saveDocument()
-                            isEditingEmoji = false
-                            emojiInput = ""
-                        }
-                    }
-                    .onExitCommand {
-                        isEditingEmoji = false
+        .popover(isPresented: $showingEmojiPopover) {
+            emojiPickerPopover
+        }
+    }
+
+    // MARK: - Emoji Picker Popover (Temporary Solution)
+    // TODO: Replace with system emoji picker when SwiftUI provides native API
+
+    private var emojiPickerPopover: some View {
+        VStack(spacing: 12) {
+            Text("Enter an emoji")
+                .font(.headline)
+
+            TextField("", text: $emojiInput)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 60)
+                .multilineTextAlignment(.center)
+                .focused($isEmojiFieldFocused)
+                .onChange(of: emojiInput) { _, newValue in
+                    // Auto-accept when user types an emoji
+                    if let firstChar = newValue.first, firstChar.isEmoji {
+                        document.emoji = String(firstChar)
+                        saveDocument()
                         emojiInput = ""
+                        showingEmojiPopover = false
                     }
+                }
+                .onSubmit {
+                    commitEmoji()
+                }
+
+            HStack(spacing: 8) {
+                Button("Clear") {
+                    document.emoji = nil
+                    saveDocument()
+                    emojiInput = ""
+                    showingEmojiPopover = false
+                }
+                .buttonStyle(.bordered)
+
+                Button("Done") {
+                    commitEmoji()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding()
+        .frame(minWidth: 150)
+        .onAppear {
+            emojiInput = ""
+            // Small delay to ensure popover is ready
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.focusDelay) {
+                isEmojiFieldFocused = true
             }
         }
     }
 
-    private func showEmojiPicker() {
-        isEditingEmoji = true
-        emojiInput = ""
-
-        // Small delay to ensure TextField is in view hierarchy
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            isEmojiFocused = true
-            NSApp.orderFrontCharacterPalette(nil)
+    private func commitEmoji() {
+        if let firstChar = emojiInput.first, firstChar.isEmoji {
+            document.emoji = String(firstChar)
+            saveDocument()
         }
+        emojiInput = ""
+        showingEmojiPopover = false
     }
 
     private func startEditing() {
@@ -225,7 +259,7 @@ struct DocumentCard: View {
         editedName = document.name
         isEditingName = true
         // Delay to ensure TextField is mounted
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.focusDelay) {
             isNameFieldFocused = true
         }
     }

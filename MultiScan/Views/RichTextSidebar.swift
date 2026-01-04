@@ -226,7 +226,8 @@ struct RichTextSidebar: View {
         }
         .focusedValue(\.editableText, isEditing ? editableText : nil)
         .toolbar {
-            ToolbarItemGroup {
+            // Using .primaryAction to group with ReviewView's toolbar items
+            ToolbarItemGroup(placement: .primaryAction) {
                 if isEditing {
                     Button(action: cancelEditing) {
                         Label("Discard", systemImage: "xmark.circle")

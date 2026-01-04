@@ -7,6 +7,7 @@ struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var documents: [Document]
     @StateObject private var ocrService = OCRService()
+    private let importService = ImageImportService()
 
     // Import state
     @State private var showingFilePicker = false
@@ -105,7 +106,6 @@ struct HomeView: View {
                 }
             }
         }
-        .padding(.vertical, 50)
         .padding(.horizontal, 30)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(isDragOver ? Color.accentColor.opacity(0.1) : Color.clear)
@@ -209,68 +209,15 @@ struct HomeView: View {
 
     @MainActor
     private func processFileURLs(_ urls: [URL]) async {
-        var images: [(data: Data, fileName: String)] = []
+        let result = await importService.processFileURLs(urls, optimizeImages: optimizeImagesOnImport)
 
-        for url in urls {
-            let accessed = url.startAccessingSecurityScopedResource()
-            defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-
-            var isDirectory: ObjCBool = false
-            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
-                continue
-            }
-
-            if isDirectory.boolValue {
-                // It's a folder - enumerate contents
-                if let enumerator = FileManager.default.enumerator(
-                    at: url,
-                    includingPropertiesForKeys: [.contentTypeKey],
-                    options: [.skipsHiddenFiles, .skipsPackageDescendants]
-                ) {
-                    while let fileURL = enumerator.nextObject() as? URL {
-                        // Check if file conforms to image type using UTType
-                        if let contentType = try? fileURL.resourceValues(forKeys: [.contentTypeKey]).contentType,
-                           contentType.conforms(to: .image),
-                           let data = try? Data(contentsOf: fileURL) {
-                            let finalData = optimizeImagesOnImport ? (OCRService.compressImageData(data) ?? data) : data
-                            images.append((data: finalData, fileName: fileURL.lastPathComponent))
-                        }
-                    }
-                }
-            } else {
-                // It's an individual file - check if it's an image using UTType
-                if let contentType = try? url.resourceValues(forKeys: [.contentTypeKey]).contentType,
-                   contentType.conforms(to: .image),
-                   let data = try? Data(contentsOf: url) {
-                    let finalData = optimizeImagesOnImport ? (OCRService.compressImageData(data) ?? data) : data
-                    images.append((data: finalData, fileName: url.lastPathComponent))
-                }
-            }
-        }
-
-        guard !images.isEmpty else {
+        guard !result.images.isEmpty else {
             print("No valid images found")
             return
         }
 
-        // Sort by filename
-        images.sort { $0.fileName.localizedStandardCompare($1.fileName) == .orderedAscending }
-
-        // Generate document name
-        let documentName: String
-        if urls.count == 1, let firstURL = urls.first {
-            var isDir: ObjCBool = false
-            FileManager.default.fileExists(atPath: firstURL.path, isDirectory: &isDir)
-            if isDir.boolValue {
-                documentName = firstURL.lastPathComponent
-            } else {
-                documentName = "Import \(Date().formatted(date: .abbreviated, time: .shortened))"
-            }
-        } else {
-            documentName = "Import \(Date().formatted(date: .abbreviated, time: .shortened))"
-        }
-
-        await startOCRProcessing(images: images, documentName: documentName)
+        let documentName = result.suggestedName ?? "Import \(Date().formatted(date: .abbreviated, time: .shortened))"
+        await startOCRProcessing(images: result.images, documentName: documentName)
     }
 
     // MARK: - Photos Import Handling
@@ -279,15 +226,7 @@ struct HomeView: View {
     private func processSelectedPhotos(_ items: [PhotosPickerItem]) async {
         guard !items.isEmpty else { return }
 
-        var images: [(data: Data, fileName: String)] = []
-
-        for (index, item) in items.enumerated() {
-            // Use loadFileRepresentation to get both data and original filename
-            if let result = await loadPhotoWithFilename(item: item, index: index) {
-                let finalData = optimizeImagesOnImport ? (OCRService.compressImageData(result.data) ?? result.data) : result.data
-                images.append((data: finalData, fileName: result.fileName))
-            }
-        }
+        let images = await importService.processSelectedPhotos(items, optimizeImages: optimizeImagesOnImport)
 
         guard !images.isEmpty else {
             print("No photos could be loaded")
@@ -298,26 +237,6 @@ struct HomeView: View {
         let documentName = "Import \(Date().formatted(date: .abbreviated, time: .shortened))"
         await startOCRProcessing(images: images, documentName: documentName)
         selectedPhotos = []
-    }
-
-    /// Load photo data and retrieve original filename using file representation
-    private func loadPhotoWithFilename(item: PhotosPickerItem, index: Int) async -> (data: Data, fileName: String)? {
-        // Try to load as file representation to get the original filename
-        do {
-            let result = try await item.loadTransferable(type: PhotoFileTransferable.self)
-            if let result = result {
-                return (data: result.data, fileName: result.fileName)
-            }
-        } catch {
-            print("Failed to load file representation: \(error)")
-        }
-
-        // Fallback: load as raw data without filename
-        if let data = try? await item.loadTransferable(type: Data.self) {
-            return (data: data, fileName: String(localized: "Photo \(index + 1)", comment: "Fallback filename for imported photo"))
-        }
-
-        return nil
     }
 
     // MARK: - Drag and Drop
@@ -419,23 +338,6 @@ struct HomeView: View {
 
 }
 
-// MARK: - Photo File Transferable
-
-/// Custom Transferable type to load photos with their original filenames
-struct PhotoFileTransferable: Transferable {
-    let data: Data
-    let fileName: String
-
-    static var transferRepresentation: some TransferRepresentation {
-        FileRepresentation(importedContentType: .image) { received in
-            let fileName = received.file.lastPathComponent
-            let data = try Data(contentsOf: received.file)
-            return PhotoFileTransferable(data: data, fileName: fileName)
-        }
-    }
-}
-
-// Previews use ContentView since HomeView now requires coordinator
 #Preview("English") {
     ContentView()
         .modelContainer(for: [Document.self, Page.self], inMemory: true)

@@ -203,6 +203,9 @@
         }
       }
     },
+    "Clear" : {
+
+    },
     "Dark Gray" : {
       "comment" : "Viewer background option: dark gray color",
       "localizations" : {
@@ -356,6 +359,9 @@
           }
         }
       }
+    },
+    "Enter an emoji" : {
+
     },
     "Error" : {
       "localizations" : {

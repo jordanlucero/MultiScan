@@ -27,13 +27,6 @@ struct ProgressPopover: View {
         .padding()
         .frame(width: 280)
     }
-    
-    private func resetProgress() {
-        guard let document = navigationState.selectedDocument else { return }
-        for page in document.pages {
-            page.isDone = false
-        }
-    }
 }
 
 #Preview("English") {

@@ -8,6 +8,7 @@ struct ReviewView: View {
     @Environment(\.modelContext) private var modelContext
     @StateObject private var navigationState = NavigationState()
     @StateObject private var ocrService = OCRService()
+    private let importService = ImageImportService()
     @State private var selectedPageNumber: Int?
     @State private var showProgress: Bool = false
     @State private var showExportPanel: Bool = false
@@ -24,7 +25,7 @@ struct ReviewView: View {
     @AppStorage("optimizeImagesOnImport") private var optimizeImagesOnImport = false
 
     // Use AppStorage directly for inspector to sync with menu commands
-    @AppStorage("showTextPanel") private var inspectorIsShown = true
+    @AppStorage("showTextPanel") private var showTextPanel = true
 
     var body: some View {
         mainContent
@@ -79,7 +80,7 @@ struct ReviewView: View {
                 navigationState: navigationState
             )
         }
-        .inspector(isPresented: $inspectorIsShown) {
+        .inspector(isPresented: $showTextPanel) {
             RichTextSidebar(
                 document: document,
                 navigationState: navigationState
@@ -102,7 +103,11 @@ struct ReviewView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItemGroup {
+        // All main toolbar items grouped on the trailing side
+        // Using .primaryAction keeps them together on the right
+        // Spacers create visual separation between logical groups
+        ToolbarItemGroup(placement: .primaryAction) {
+            // Group 1: Page navigation
             Button(action: { navigationState.previousPage() }) {
                 Label("Previous", systemImage: "chevron.left")
                     .labelStyle(.iconOnly)
@@ -124,9 +129,10 @@ struct ReviewView: View {
             }
             .help(navigationState.isRandomized ? "Switch to Sequential Order" : "Switch to Shuffled Order")
 
-            Spacer()
-                .frame(width: 20)
+            //ToolbarSpacer(.fixed)
+            Spacer().frame(width: 20)
 
+            // Group 2: Review status
             Button(action: { navigationState.toggleCurrentPageDone() }) {
                 Label("Mark as Reviewed",
                       systemImage: navigationState.currentPage?.isDone == true ? "checkmark.circle.fill" : "checkmark.circle")
@@ -143,9 +149,10 @@ struct ReviewView: View {
             }
             .help("View Progress")
 
-            Spacer()
-                .frame(width: 20)
+            //ToolbarSpacer(.fixed)
+            Spacer().frame(width: 20)
 
+            // Group 3: Share/Export
             ShareLink(item: RichText(navigationState.currentPage?.richText ?? AttributedString()),
                       preview: SharePreview("Page Text")) {
                 Label("Share Page Text", systemImage: "square.and.arrow.up")
@@ -160,14 +167,15 @@ struct ReviewView: View {
             }
             .help("Export All Pages Text")
 
-            Spacer()
-                .frame(width: 20)
+            //ToolbarSpacer(.fixed)
+            Spacer().frame(width: 20)
 
-            Button(action: { inspectorIsShown.toggle() }) {
+            // Group 4: Inspector toggle (edit buttons come from RichTextSidebar)
+            Button(action: { showTextPanel.toggle() }) {
                 Label("Show Text Panel", systemImage: "sidebar.right")
                     .labelStyle(.iconOnly)
             }
-            .help(inspectorIsShown ? "Hide Text Panel" : "Show Text Panel")
+            .help(showTextPanel ? "Hide Text Panel" : "Show Text Panel")
             .keyboardShortcut("i", modifiers: [.command, .option])
         }
     }
@@ -226,46 +234,11 @@ struct ReviewView: View {
         isAddingPages = true
         defer { isAddingPages = false }
 
-        var images: [(data: Data, fileName: String)] = []
+        let result = await importService.processFileURLs(urls, optimizeImages: optimizeImagesOnImport)
 
-        for url in urls {
-            let accessed = url.startAccessingSecurityScopedResource()
-            defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+        guard !result.images.isEmpty else { return }
 
-            var isDirectory: ObjCBool = false
-            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
-                continue
-            }
-
-            if isDirectory.boolValue {
-                if let enumerator = FileManager.default.enumerator(
-                    at: url,
-                    includingPropertiesForKeys: [.contentTypeKey],
-                    options: [.skipsHiddenFiles, .skipsPackageDescendants]
-                ) {
-                    while let fileURL = enumerator.nextObject() as? URL {
-                        if let contentType = try? fileURL.resourceValues(forKeys: [.contentTypeKey]).contentType,
-                           contentType.conforms(to: .image),
-                           let data = try? Data(contentsOf: fileURL) {
-                            let finalData = optimizeImagesOnImport ? (OCRService.compressImageData(data) ?? data) : data
-                            images.append((data: finalData, fileName: fileURL.lastPathComponent))
-                        }
-                    }
-                }
-            } else {
-                if let contentType = try? url.resourceValues(forKeys: [.contentTypeKey]).contentType,
-                   contentType.conforms(to: .image),
-                   let data = try? Data(contentsOf: url) {
-                    let finalData = optimizeImagesOnImport ? (OCRService.compressImageData(data) ?? data) : data
-                    images.append((data: finalData, fileName: url.lastPathComponent))
-                }
-            }
-        }
-
-        guard !images.isEmpty else { return }
-
-        images.sort { $0.fileName.localizedStandardCompare($1.fileName) == .orderedAscending }
-        await addPagesToDocument(images: images)
+        await addPagesToDocument(images: result.images)
     }
 
     // MARK: - Photos Import Handling
@@ -281,35 +254,11 @@ struct ReviewView: View {
             selectedPhotos = []
         }
 
-        var images: [(data: Data, fileName: String)] = []
-
-        for (index, item) in items.enumerated() {
-            if let result = await loadPhotoWithFilename(item: item, index: index) {
-                let finalData = optimizeImagesOnImport ? (OCRService.compressImageData(result.data) ?? result.data) : result.data
-                images.append((data: finalData, fileName: result.fileName))
-            }
-        }
+        let images = await importService.processSelectedPhotos(items, optimizeImages: optimizeImagesOnImport)
 
         guard !images.isEmpty else { return }
 
         await addPagesToDocument(images: images)
-    }
-
-    private func loadPhotoWithFilename(item: PhotosPickerItem, index: Int) async -> (data: Data, fileName: String)? {
-        do {
-            let result = try await item.loadTransferable(type: PhotoFileTransferable.self)
-            if let result = result {
-                return (data: result.data, fileName: result.fileName)
-            }
-        } catch {
-            print("Failed to load file representation: \(error)")
-        }
-
-        if let data = try? await item.loadTransferable(type: Data.self) {
-            return (data: data, fileName: String(localized: "Photo \(index + 1)", comment: "Fallback filename for imported photo"))
-        }
-
-        return nil
     }
 
     // MARK: - Add Pages to Document
@@ -347,3 +296,4 @@ struct ReviewView: View {
         }
     }
 }
+

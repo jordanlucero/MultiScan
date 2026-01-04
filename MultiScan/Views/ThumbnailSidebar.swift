@@ -23,21 +23,8 @@ struct ThumbnailSidebar: View {
     @AppStorage("filterOption") private var filterOptionString = "all"
 
     private var filterOption: FilterOption {
-        get {
-            switch filterOptionString {
-            case "all": return .all
-            case "notDone": return .notDone
-            case "done": return .done
-            default: return .all
-            }
-        }
-        set {
-            switch newValue {
-            case .all: filterOptionString = "all"
-            case .notDone: filterOptionString = "notDone"
-            case .done: filterOptionString = "done"
-            }
-        }
+        get { FilterOption(rawValue: filterOptionString) ?? .all }
+        set { filterOptionString = newValue.rawValue }
     }
     
     var filteredPages: [Page] {
@@ -84,11 +71,7 @@ struct ThumbnailSidebar: View {
                     Menu {
                         ForEach(FilterOption.allCases, id: \.self) { option in
                             Button(action: {
-                                switch option {
-                                case .all: filterOptionString = "all"
-                                case .notDone: filterOptionString = "notDone"
-                                case .done: filterOptionString = "done"
-                                }
+                                filterOptionString = option.rawValue
                             }) {
                                 HStack {
                                     Text(option.label)
@@ -118,13 +101,8 @@ struct ThumbnailSidebar: View {
                 .frame(minHeight: 26)
                 .padding(6)
                 .background(.thickMaterial)
-                // want a blurred background with .scrollEdgeEffectStyle if possible
-        //        .glassEffect(.clear, in: UnevenRoundedRectangle(
-        //            topLeadingRadius: 0,
-        //            bottomLeadingRadius: 12,
-        //            bottomTrailingRadius: 12,
-        //            topTrailingRadius: 0
-        //        ))
+                //.glassEffect(in: Rectangle())
+                // want a blurred background with something similar to .scrollEdgeEffectStyle if possible
             }
         }
     }
@@ -250,3 +228,4 @@ struct ThumbnailView: View {
     .environment(\.locale, Locale(identifier: "es-419"))
     .frame(width: 200, height: 600)
 }
+

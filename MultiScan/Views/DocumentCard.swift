@@ -34,7 +34,6 @@ struct DocumentCard: View {
         VStack(alignment: .leading, spacing: 8) {
             thumbnailSection
             titleSection
-            metadataSection
         }
         .focusable()
         .contextMenu {
@@ -116,7 +115,6 @@ struct DocumentCard: View {
                 .font(.title3)
                 .foregroundStyle(.secondary)
                 .frame(width: 28, height: 28)
-                .glassEffect()
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
@@ -146,26 +144,32 @@ struct DocumentCard: View {
             // Emoji/Icon button to the left of the title
             emojiIconButton
 
-            // Title (inline editable)
-            Group {
-                if isEditingName {
-                    TextField("Project Name", text: $editedName)
-                        .textFieldStyle(.plain)
-                        .font(.headline)
-                        .focused($isNameFieldFocused)
-                        .onSubmit { commitRename() }
-                        .onExitCommand { cancelRename() }
-                } else {
-                    Text(document.name)
-                        .font(.headline)
-                        .lineLimit(2)
-                        .truncationMode(.tail)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                        .onTapGesture(count: 2) {
-                            startEditing()
-                        }
+            // Title and metadata in a VStack, aligned with the title
+            VStack(alignment: .leading, spacing: 4) {
+                // Title (inline editable)
+                Group {
+                    if isEditingName {
+                        TextField("Project Name", text: $editedName)
+                            .textFieldStyle(.plain)
+                            .font(.headline)
+                            .focused($isNameFieldFocused)
+                            .onSubmit { commitRename() }
+                            .onExitCommand { cancelRename() }
+                    } else {
+                        Text(document.name)
+                            .font(.headline)
+                            .lineLimit(2)
+                            .truncationMode(.tail)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                            .onTapGesture(count: 2) {
+                                startEditing()
+                            }
+                    }
                 }
+
+                // Metadata below title
+                metadataSection
             }
         }
     }

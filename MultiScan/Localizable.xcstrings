@@ -91,7 +91,34 @@
       "shouldTranslate" : false
     },
     "%lld%% pages reviewed" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld páginas revisadas"
+          }
+        }
+      }
+    },
+    "Activate to open project" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activar para abrir el proyecto"
+          }
+        }
+      }
+    },
+    "Activate to start a project using imported images from your photos or files" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Actívalo para iniciar un proyecto utilizando imágenes importadas de tus fotos o archivos"
+          }
+        }
+      }
     },
     "Add dual line breaks between pages" : {
       "localizations" : {
@@ -134,13 +161,36 @@
       }
     },
     "Append Pages from Files..." : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anexar páginas desde archivos…"
+          }
+        }
+      }
     },
     "Append Pages from Photos" : {
-
+      "comment" : "Capital “Fotos” to refer to Apple Photos, not the photos themselves",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anexar páginas desde Fotos"
+          }
+        }
+      }
     },
     "Append Pages from Photos..." : {
-
+      "comment" : "Capital “Fotos” to refer to Apple Photos, not the photos themselves",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anexar páginas desde Fotos…"
+          }
+        }
+      }
     },
     "Are you sure you want to delete the MultiScan project for \"%@\"? This can't be undone." : {
       "localizations" : {
@@ -204,7 +254,14 @@
       }
     },
     "Clear" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Borrar"
+          }
+        }
+      }
     },
     "Dark Gray" : {
       "comment" : "Viewer background option: dark gray color",
@@ -244,17 +301,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Eliminar documento"
-          }
-        }
-      }
-    },
-    "Delete project" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Eliminar proyecto"
           }
         }
       }
@@ -349,19 +395,15 @@
         }
       }
     },
-    "Enter a new name for this project." : {
-      "extractionState" : "stale",
+    "Enter an emoji" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ingrese un nuevo nombre para este proyecto."
+            "value" : "Introduce un emoji"
           }
         }
       }
-    },
-    "Enter an emoji" : {
-
     },
     "Error" : {
       "localizations" : {
@@ -524,42 +566,23 @@
         }
       }
     },
-    "Import from Files" : {
+    "Import from Files..." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Importar desde Archivos"
+            "value" : "Importar desde Archivos…"
           }
         }
       }
     },
-    "Import from iPhone or iPad" : {
+    "Import from Photos..." : {
+      "comment" : "Capital “Fotos” to refer to Apple Photos, not the photos themselves",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Importar desde iPhone o iPad"
-          }
-        }
-      }
-    },
-    "Import from Photos" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Importar desde Fotos"
-          }
-        }
-      }
-    },
-    "Import images to start scanning" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Importe imágenes para comenzar a escanear"
+            "value" : "Importar desde Fotos…"
           }
         }
       }
@@ -676,16 +699,6 @@
         }
       }
     },
-    "MultiScan" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "MultiScan"
-          }
-        }
-      }
-    },
     "MultiScan will optimize images it stores to save storage." : {
       "comment" : "Rework both",
       "localizations" : {
@@ -697,12 +710,12 @@
         }
       }
     },
-    "Next" : {
+    "New Project" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Siguiente"
+            "value" : "Nuevo proyecto"
           }
         }
       }
@@ -727,6 +740,17 @@
         }
       }
     },
+    "Not reviewed" : {
+      "comment" : "Accessibility value for unreviewed page",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No revisados"
+          }
+        }
+      }
+    },
     "Not Reviewed" : {
       "localizations" : {
         "es-419" : {
@@ -746,9 +770,6 @@
           }
         }
       }
-    },
-    "Note that these options are untested in 1.4b." : {
-      "shouldTranslate" : false
     },
     "OK" : {
       "localizations" : {
@@ -770,6 +791,17 @@
         }
       }
     },
+    "Opens this page" : {
+      "comment" : "Accessibility hint for page thumbnail button",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre esta página"
+          }
+        }
+      }
+    },
     "Optimize images on import" : {
       "localizations" : {
         "es-419" : {
@@ -781,15 +813,39 @@
       }
     },
     "Optimize Images..." : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Optimizar imágenes…"
+          }
+        }
+      }
     },
     "Page %lld" : {
-      "comment" : "Fallback page label when filename unavailable",
+      "comment" : "Thumbnail label with page number only (no filename available)",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Página %lld"
+          }
+        }
+      }
+    },
+    "Page %lld (%@)" : {
+      "comment" : "Thumbnail label with page number and filename, e.g. 'Page 3 (IMG_0003.HEIC)'",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Page %1$lld (%2$@)"
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Página %1$lld (%2$@)"
           }
         }
       }
@@ -871,16 +927,6 @@
         }
       }
     },
-    "Previous" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Anterior"
-          }
-        }
-      }
-    },
     "Previous Page" : {
       "localizations" : {
         "es-419" : {
@@ -892,7 +938,14 @@
       }
     },
     "Processing %lld%%" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Procesando %lld%"
+          }
+        }
+      }
     },
     "Progress" : {
       "localizations" : {
@@ -914,39 +967,6 @@
         }
       }
     },
-    "Recent Projects" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Proyectos recientes"
-          }
-        }
-      }
-    },
-    "Rename" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Renombrar"
-          }
-        }
-      }
-    },
-    "Rename Project" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Renombrar proyecto"
-          }
-        }
-      }
-    },
     "Rename..." : {
       "localizations" : {
         "es-419" : {
@@ -957,18 +977,8 @@
         }
       }
     },
-    "Review" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Revisar"
-          }
-        }
-      }
-    },
     "Reviewed" : {
+      "comment" : "Accessibility value for reviewed page",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -999,7 +1009,14 @@
       }
     },
     "Select Photos" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seleccionar fotos"
+          }
+        }
+      }
     },
     "Separator Style" : {
       "localizations" : {
@@ -1111,6 +1128,16 @@
         }
       }
     },
+    "Start from iPhone or iPad..." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Empezar desde iPhone o iPad…"
+          }
+        }
+      }
+    },
     "Statistics" : {
       "localizations" : {
         "es-419" : {
@@ -1182,7 +1209,14 @@
       }
     },
     "Using %@" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usando %@"
+          }
+        }
+      }
     },
     "View Progress" : {
       "localizations" : {

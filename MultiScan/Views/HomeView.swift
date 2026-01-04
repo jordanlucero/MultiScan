@@ -11,6 +11,7 @@ struct HomeView: View {
 
     // Import state
     @State private var showingFilePicker = false
+    @State private var showingPhotosPicker = false
     @State private var selectedPhotos: [PhotosPickerItem] = []
 
     // UI state
@@ -25,94 +26,33 @@ struct HomeView: View {
     // Settings
     @AppStorage("optimizeImagesOnImport") private var optimizeImagesOnImport = false
 
+    // Accessibility announcement tracking
+    @State private var hasAnnouncedHalfway = false
+    @State private var processingPageCount = 0
+
     var body: some View {
-        VStack(spacing: 30) {
-            Image(systemName: "doc.text.viewfinder")
-                .font(.system(size: 60))
-                .foregroundColor(.accentColor)
-
-            Text("MultiScan")
-                .font(.largeTitle)
-                .fontWeight(.bold)
-
-            Text("Import images to start scanning")
-                .font(.headline)
-                .foregroundColor(.secondary)
-
-            // Import buttons
-            VStack(spacing: 12) {
-                // Photos picker
-                PhotosPicker(
-                    selection: $selectedPhotos,
-                    maxSelectionCount: nil,
-                    matching: .images
-                ) {
-                    Label("Import from Photos", systemImage: "photo.on.rectangle")
-                        .frame(minWidth: 200)
-                }
-                .controlSize(.large)
-                .buttonStyle(.borderedProminent)
-                .onChange(of: selectedPhotos) { _, items in
-                    Task { await processSelectedPhotos(items) }
-                }
-
-                // Files picker (individual files OR folders)
-                Button(action: { showingFilePicker = true }) {
-                    Label("Import from Files", systemImage: "folder")
-                        .frame(minWidth: 200)
-                }
-                .controlSize(.large)
-                .buttonStyle(.bordered)
-
-                #if os(macOS)
-                // Camera (Continuity Camera on Mac)
-                Button(action: { /* TODO: Implement Continuity Camera */ }) {
-                    Label("Import from iPhone or iPad", systemImage: "camera")
-                        .frame(minWidth: 200)
-                }
-                .controlSize(.large)
-                .buttonStyle(.bordered)
-                .disabled(true) // TODO: Enable when implemented
-                #endif
-            }
-
-            if !documents.isEmpty {
-                Divider()
-
-                ScrollView {
-                    LazyVGrid(columns: [
-                        GridItem(.adaptive(minimum: 200, maximum: 260), spacing: 16)
-                    ], spacing: 16) {
-                        ForEach(documents.sorted(by: { $0.createdAt > $1.createdAt })) { document in
-                            NavigationLink {
-                                ReviewView(document: document)
-                            } label: {
-                                DocumentCard(
-                                    document: document,
-                                    isProcessing: processingDocumentIDs.contains(document.persistentModelID),
-                                    ocrProgress: ocrService.progress,
-                                    onDelete: {
-                                        documentToDelete = document
-                                        showingDeleteConfirmation = true
-                                    },
-                                    onOptimize: { optimizeImages(for: document) }
-                                )
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(processingDocumentIDs.contains(document.persistentModelID))
-                        }
-                    }
-                    .padding()
+        ScrollView {
+            LazyVGrid(columns: [
+                GridItem(.adaptive(minimum: 200, maximum: 260), spacing: 16)
+            ], spacing: 16) {
+                newDocumentCard
+                ForEach(documents.sorted(by: { $0.createdAt > $1.createdAt })) { document in
+                    documentLink(for: document)
                 }
             }
+            .padding()
         }
-        .padding(.horizontal, 30)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(isDragOver ? Color.accentColor.opacity(0.1) : Color.clear)
         .onDrop(of: [.fileURL], isTargeted: $isDragOver) { providers in
             handleDrop(providers: providers)
             return true
         }
+        .photosPicker(
+            isPresented: $showingPhotosPicker,
+            selection: $selectedPhotos,
+            matching: .images
+        )
         .fileImporter(
             isPresented: $showingFilePicker,
             allowedContentTypes: [.image, .folder],
@@ -137,6 +77,98 @@ struct HomeView: View {
         } message: { document in
             Text("Are you sure you want to delete the MultiScan project for \"\(document.name)\"? This can't be undone.")
         }
+        .onChange(of: selectedPhotos) { _, items in
+            Task { await processSelectedPhotos(items) }
+        }
+        .onChange(of: ocrService.progress) { oldValue, newValue in
+            // Announce when progress crosses 50%
+            if !hasAnnouncedHalfway && oldValue < 0.5 && newValue >= 0.5 {
+                hasAnnouncedHalfway = true
+                AccessibilityNotification.Announcement("Processing is 50% done.").post()
+            }
+        }
+    }
+
+    // MARK: - View Components
+
+    private var newDocumentCard: some View {
+        Menu {
+            Button("Import from Photos...", systemImage: "photo.on.rectangle") {
+                showingPhotosPicker = true
+            }
+
+            Button("Import from Files...", systemImage: "folder") {
+                showingFilePicker = true
+            }
+
+            #if os(macOS)
+            Button("Start from iPhone or iPad...", systemImage: "camera") {
+                // TODO: Implement Continuity Camera
+            }
+            .disabled(true)
+            #endif
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                // White page with plus sign
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.white)
+                        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+
+                    Image(systemName: "plus")
+                        .font(.system(size: 40, weight: .medium))
+                        .foregroundStyle(Color.accentColor)
+                }
+                .aspectRatio(8.5/11, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                // Title
+                Text("New Project")
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+            }
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .accessibilityLabel("New Project")
+        .accessibilityHint("Activate to start a project using imported images from your photos or files")
+    }
+
+    private func documentLink(for document: Document) -> some View {
+        NavigationLink {
+            ReviewView(document: document)
+        } label: {
+            DocumentCard(
+                document: document,
+                isProcessing: processingDocumentIDs.contains(document.persistentModelID),
+                ocrProgress: ocrService.progress,
+                onDelete: {
+                    documentToDelete = document
+                    showingDeleteConfirmation = true
+                },
+                onOptimize: { optimizeImages(for: document) }
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(processingDocumentIDs.contains(document.persistentModelID))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(documentAccessibilityLabel(for: document))
+        .accessibilityHint("Activate to open project")
+        .accessibilityAddTraits(.isButton)
+    }
+
+    // MARK: - Accessibility
+
+    private func documentAccessibilityLabel(for document: Document) -> String {
+        let emoji = document.emoji ?? ""
+        let emojiPrefix = emoji.isEmpty ? "" : "\(emoji), "
+        let pageWord = document.totalPages == 1 ? "page" : "pages"
+        let dateString = document.lastModifiedDate.formatted(date: .abbreviated, time: .shortened)
+
+        return "\(emojiPrefix)\(document.name), \(document.totalPages) \(pageWord), \(document.completionPercentage)% reviewed, last modified \(dateString)"
     }
 
     // MARK: - Document Actions
@@ -276,6 +308,12 @@ struct HomeView: View {
         let documentID = document.persistentModelID
         processingDocumentIDs.insert(documentID)
 
+        // Reset accessibility tracking and announce start
+        hasAnnouncedHalfway = false
+        processingPageCount = images.count
+        let pageWord = images.count == 1 ? "page" : "pages"
+        AccessibilityNotification.Announcement("Processing \(images.count) \(pageWord). This will take a few moments.").post()
+
         // Process images in background
         Task.detached(priority: .userInitiated) { [ocrService, images, documentID] in
             do {
@@ -321,6 +359,11 @@ struct HomeView: View {
         }
 
         processingDocumentIDs.remove(id)
+
+        // Announce completion
+        let pageCount = results.count
+        let pageWord = pageCount == 1 ? "page" : "pages"
+        AccessibilityNotification.Announcement("Scan complete. \(pageCount) \(pageWord) ready for review.").post()
     }
 
     @MainActor

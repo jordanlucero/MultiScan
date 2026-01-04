@@ -109,21 +109,21 @@ struct ReviewView: View {
         ToolbarItemGroup(placement: .primaryAction) {
             // Group 1: Page navigation
             Button(action: { navigationState.previousPage() }) {
-                Label("Previous", systemImage: "chevron.left")
+                Label("Previous Page", systemImage: "chevron.left")
                     .labelStyle(.iconOnly)
             }
             .disabled(!navigationState.hasPrevious)
             .keyboardShortcut("[", modifiers: [])
 
             Button(action: { navigationState.nextPage() }) {
-                Label("Next", systemImage: "chevron.right")
+                Label("Next Page", systemImage: "chevron.right")
                     .labelStyle(.iconOnly)
             }
             .disabled(!navigationState.hasNext)
             .keyboardShortcut("]", modifiers: [])
 
             Button(action: { navigationState.toggleRandomization() }) {
-                Label(navigationState.isRandomized ? "Sequential Order" : "Shuffled Order",
+                Label(navigationState.isRandomized ? "Switch to Sequential Order" : "Switch to Shuffled Order",
                       systemImage: navigationState.isRandomized ? "shuffle.circle.fill" : "shuffle.circle")
                     .labelStyle(.iconOnly)
             }

@@ -120,6 +120,17 @@ struct ThumbnailView: View {
         return PlatformImage.from(data: data)
     }
 
+    /// Formatted page label: "Page X (filename)" or "Page X" if no filename stored
+    var pageLabel: String {
+        let pageNumber = page.pageNumber
+        if let fileName = page.originalFileName {
+            return String(localized: "Page \(pageNumber) (\(fileName))",
+                          comment: "Thumbnail label with page number and filename, e.g. 'Page 3 (IMG_0003.HEIC)'")
+        }
+        return String(localized: "Page \(pageNumber)",
+                      comment: "Thumbnail label with page number only (no filename available)")
+    }
+
     var body: some View {
         VStack(spacing: 4) {
             Button(action: action) {
@@ -165,12 +176,19 @@ struct ThumbnailView: View {
                 .aspectRatio(8.5/11, contentMode: .fit)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(pageLabel)
+            .accessibilityValue(page.isDone
+                ? String(localized: "Reviewed", comment: "Accessibility value for reviewed page")
+                : String(localized: "Not reviewed", comment: "Accessibility value for unreviewed page"))
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
+            .accessibilityHint(String(localized: "Opens this page", comment: "Accessibility hint for page thumbnail button"))
 
-            Text(page.originalFileName ?? String(localized: "Page \(page.pageNumber)", comment: "Fallback page label when filename unavailable"))
+            Text(pageLabel)
                 .font(.caption)
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .foregroundColor(isSelected ? .accentColor : .secondary)
+                .accessibilityHidden(true)
         }
     }
 }

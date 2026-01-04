@@ -121,6 +121,16 @@ struct RichTextSidebar: View {
         return text
     }
 
+    /// Paragraphs split for accessible reading
+    private var paragraphs: [String] {
+        guard let page = currentPage else {
+            return [String(localized: "No text detected on this page.")]
+        }
+        return page.plainText
+            .components(separatedBy: "\n\n")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header
@@ -130,6 +140,7 @@ struct RichTextSidebar: View {
                     Text("Page \(page.pageNumber) of \(document.totalPages)")
                         .font(.headline)
                         .foregroundStyle(.secondary)
+                        .accessibilityAddTraits(.isHeader)
                 }
             }
             .padding(.horizontal)
@@ -149,6 +160,7 @@ struct RichTextSidebar: View {
                                 .frame(width: 24, height: 24)
                         }
                         .buttonStyle(.borderless)
+                        .accessibilityLabel("Bold")
                         .help("Bold (⌘B)")
 
                         Button(action: { editableText.applyItalic() }) {
@@ -156,6 +168,7 @@ struct RichTextSidebar: View {
                                 .frame(width: 24, height: 24)
                         }
                         .buttonStyle(.borderless)
+                        .accessibilityLabel("Italic")
                         .help("Italic (⌘I)")
 
                         Button(action: { editableText.applyUnderline() }) {
@@ -163,6 +176,7 @@ struct RichTextSidebar: View {
                                 .frame(width: 24, height: 24)
                         }
                         .buttonStyle(.borderless)
+                        .accessibilityLabel("Underline")
                         .help("Underline (⌘U)")
 
                         Button(action: { editableText.applyStrikethrough() }) {
@@ -170,6 +184,7 @@ struct RichTextSidebar: View {
                                 .frame(width: 24, height: 24)
                         }
                         .buttonStyle(.borderless)
+                        .accessibilityLabel("Strikethrough")
                         .help("Strikethrough (⌘⇧X)")
 
                         Spacer()
@@ -191,13 +206,17 @@ struct RichTextSidebar: View {
                     .safeAreaPadding()
                 }
             } else {
-                // View mode: Read-only styled text
+                // View mode: Read-only text, split into paragraphs for accessibility
                 ScrollView {
-                    Text(displayText)
-                        .font(.body)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding()
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, paragraph in
+                            Text(paragraph)
+                                .font(.body)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    .padding()
                 }
             }
 
@@ -234,18 +253,22 @@ struct RichTextSidebar: View {
                             .labelStyle(.iconOnly)
                     }
                     .help("Discard Changes")
+                    .accessibilityLabel("Discard Changes")
 
                     Button(action: saveAndExitEditing) {
                         Label("Done", systemImage: "checkmark.circle")
                             .labelStyle(.iconOnly)
                     }
                     .help("Save Changes")
+                    .accessibilityLabel("Save Changes")
+                    
                 } else {
                     Button(action: startEditing) {
                         Label("Edit Text", systemImage: "pencil.circle")
                             .labelStyle(.iconOnly)
                     }
                     .help("Edit OCR Text")
+                    .accessibilityLabel("Edit OCR Text")
                     .disabled(currentPage == nil)
                 }
             }
@@ -258,6 +281,10 @@ struct RichTextSidebar: View {
                 isEditing = false
             }
             editableText = nil
+        }
+        .onChange(of: isEditing) { _, editing in
+            let mode = editing ? "Editing mode" : "Viewing mode"
+            AccessibilityNotification.Announcement(mode).post()
         }
     }
 

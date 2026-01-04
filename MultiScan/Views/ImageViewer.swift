@@ -61,9 +61,10 @@ struct ImageViewer: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                // Use selected background color, or let system decide for default
+                // Use user-selected selected background color, or let system decide for default
                 if let backgroundColor = viewerBackground.color {
                     backgroundColor
+                        .backgroundExtensionEffect()
                 }
 
                 if let image = displayImage {

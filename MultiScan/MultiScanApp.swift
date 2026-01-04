@@ -191,7 +191,6 @@ struct MultiScanApp: App {
         }
 
         Settings {
-            Text("Note that these options are untested in 1.4b.")
             Form {
                 Section("Import") {
                     Toggle("Optimize images on import", isOn: $optimizeImagesOnImport)

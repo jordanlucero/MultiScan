@@ -15,10 +15,6 @@ This implementation of VisionKit will add line breaks at the end of each line of
 
 Be mindful of the quality of your input images. Fingers, image noise, and even specks of dust and dirt on pages might be mistaken for accented characters, or new characters entirely.
 
-# Known Issues
+# Copyright Note
 
-MultiScan may be highly memory-intensive when running OCR.
-
-# Copyright Notice
-
-MultiScan is only for use with documents you hold the copyright for, have explicit permission to digitize, or have legal permission to digitize for personal use. Please note that format-shifting is only legal in some jurisdictions and only allows for personal usage. You are responsible for complying with copyright laws in your jurisdiction. This is not legal advice.
+MultiScan is only for use with documents you hold the copyright for, have explicit permission to digitize, or are digitzing for legally permissible personal use. Users should be aware that format-shifting is only legal in some jurisdictions and only allows for personal usage. You are responsible for complying with copyright laws in your jurisdiction.

@@ -468,7 +468,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Introduce un emoji"
+            "value" : "Introduzca un emoji"
           }
         }
       }
@@ -478,7 +478,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Introducir emoji"
+            "value" : "Introduzca emoji"
           }
         }
       }
@@ -905,7 +905,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No revisado"
+            "value" : "Sin revisar"
           }
         }
       }

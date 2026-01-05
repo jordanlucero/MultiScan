@@ -72,18 +72,25 @@ struct ImageViewer: View {
                         image
                             .resizable()
                             .aspectRatio(contentMode: .fit)
-                            .scaleEffect(scale)
                             .frame(
-                                width: geometry.size.width * scale,
-                                height: geometry.size.height * scale
+                                width: fittedImageSize(in: geometry.size).width * scale,
+                                height: fittedImageSize(in: geometry.size).height * scale
+                            )
+                            .frame(
+                                minWidth: geometry.size.width,
+                                minHeight: geometry.size.height
                             )
                     }
+                    .scrollContentBackground(.hidden)
+                    .scrollBounceBehavior(.basedOnSize)
+                    .scrollIndicators(.automatic)
                     .gesture(
                         MagnificationGesture()
                             .onChanged { value in
-                                scale = lastScale * value
+                                let newScale = lastScale * value
+                                scale = min(max(newScale, 0.1), 10.0) // Clamp between 0.1x and 10x
                             }
-                            .onEnded { value in
+                            .onEnded { _ in
                                 lastScale = scale
                             }
                     )
@@ -148,6 +155,28 @@ struct ImageViewer: View {
 
     private var controlsVisible: Bool {
         isHovering || focusedButton != nil
+    }
+
+    /// Calculate the size the image would be when fit into the container while preserving aspect ratio
+    private func fittedImageSize(in containerSize: CGSize) -> CGSize {
+        guard imageSize.width > 0, imageSize.height > 0 else {
+            return containerSize
+        }
+
+        let imageAspect = imageSize.width / imageSize.height
+        let containerAspect = containerSize.width / containerSize.height
+
+        if imageAspect > containerAspect {
+            // Image is wider than container - fit to width
+            let width = containerSize.width
+            let height = width / imageAspect
+            return CGSize(width: width, height: height)
+        } else {
+            // Image is taller than container - fit to height
+            let height = containerSize.height
+            let width = height * imageAspect
+            return CGSize(width: width, height: height)
+        }
     }
 
     private func loadImage(for page: Page?) {

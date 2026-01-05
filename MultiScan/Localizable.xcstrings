@@ -202,6 +202,26 @@
         }
       }
     },
+    "Back" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Atrás"
+          }
+        }
+      }
+    },
+    "Back to Projects" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Volver a los proyectos"
+          }
+        }
+      }
+    },
     "Background" : {
       "localizations" : {
         "es-419" : {

@@ -4,6 +4,8 @@ import UniformTypeIdentifiers
 import PhotosUI
 
 struct HomeView: View {
+    var onDocumentSelected: (Document) -> Void
+
     @Environment(\.modelContext) private var modelContext
     @Query private var documents: [Document]
     @StateObject private var ocrService = OCRService()
@@ -138,8 +140,8 @@ struct HomeView: View {
     }
 
     private func documentLink(for document: Document) -> some View {
-        NavigationLink {
-            ReviewView(document: document)
+        Button {
+            onDocumentSelected(document)
         } label: {
             DocumentCard(
                 document: document,
@@ -382,13 +384,13 @@ struct HomeView: View {
 }
 
 #Preview("English") {
-    ContentView()
+    HomeView(onDocumentSelected: { _ in })
         .modelContainer(for: [Document.self, Page.self], inMemory: true)
         .environment(\.locale, Locale(identifier: "en"))
 }
 
 #Preview("es-419") {
-    ContentView()
+    HomeView(onDocumentSelected: { _ in })
         .modelContainer(for: [Document.self, Page.self], inMemory: true)
         .environment(\.locale, Locale(identifier: "es-419"))
 }

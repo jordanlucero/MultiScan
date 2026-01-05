@@ -5,6 +5,8 @@ import UniformTypeIdentifiers
 
 struct ReviewView: View {
     let document: Document
+    var onDismiss: () -> Void
+
     @Environment(\.modelContext) private var modelContext
     @StateObject private var navigationState = NavigationState()
     @StateObject private var ocrService = OCRService()
@@ -103,6 +105,15 @@ struct ReviewView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
+        // Back button in navigation position
+        ToolbarItem(placement: .navigation) {
+            Button(action: onDismiss) {
+                Label("Back", systemImage: "chevron.left")
+                    .labelStyle(.iconOnly)
+            }
+            .help("Back to Projects")
+        }
+
         // All main toolbar items grouped on the trailing side
         // Using .primaryAction keeps them together on the right
         // Spacers create visual separation between logical groups

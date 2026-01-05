@@ -263,6 +263,16 @@
         }
       }
     },
+    "Clear search filter" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Borrar filtro de búsqueda"
+          }
+        }
+      }
+    },
     "Dark Gray" : {
       "comment" : "Viewer background option: dark gray color",
       "localizations" : {
@@ -485,12 +495,32 @@
         }
       }
     },
+    "Filter by Status" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filtrar por estado"
+          }
+        }
+      }
+    },
     "Filter pages" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Filtrar páginas"
+          }
+        }
+      }
+    },
+    "Filtering: %@" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filtraje: %@"
           }
         }
       }

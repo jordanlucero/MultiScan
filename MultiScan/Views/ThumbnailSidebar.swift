@@ -1,6 +1,12 @@
 import SwiftUI
 import SwiftData
 
+#if os(macOS)
+private let searchBarEdge: VerticalEdge = .bottom
+#else
+private let searchBarEdge: VerticalEdge = .top
+#endif
+
 struct ThumbnailSidebar: View {
     let document: Document
     @ObservedObject var navigationState: NavigationState
@@ -21,22 +27,53 @@ struct ThumbnailSidebar: View {
     }
 
     @AppStorage("filterOption") private var filterOptionString = "all"
+    @State private var searchText = ""
 
     private var filterOption: FilterOption {
         get { FilterOption(rawValue: filterOptionString) ?? .all }
         set { filterOptionString = newValue.rawValue }
     }
-    
+
+    private var isFilterActive: Bool {
+        filterOption != .all
+    }
+
     var filteredPages: [Page] {
         let sortedPages = document.pages.sorted(by: { $0.pageNumber < $1.pageNumber })
-        
+
+        // Apply filter option first
+        let filtered: [Page]
         switch filterOption {
         case .all:
-            return sortedPages
+            filtered = sortedPages
         case .notDone:
-            return sortedPages.filter { !$0.isDone }
+            filtered = sortedPages.filter { !$0.isDone }
         case .done:
-            return sortedPages.filter { $0.isDone }
+            filtered = sortedPages.filter { $0.isDone }
+        }
+
+        // Apply search if searchText is not empty
+        guard !searchText.isEmpty else { return filtered }
+
+        let query = searchText.lowercased()
+        return filtered.filter { page in
+            // Match page number: "1", "Page 1", "page 1"
+            let pageNum = String(page.pageNumber)
+            if pageNum.contains(query) || "page \(pageNum)".contains(query) {
+                return true
+            }
+
+            // Match filename (case-insensitive)
+            if let filename = page.originalFileName?.lowercased(), filename.contains(query) {
+                return true
+            }
+
+            // Match page content (case-insensitive)
+            if page.plainText.lowercased().contains(query) {
+                return true
+            }
+
+            return false
         }
     }
     
@@ -65,44 +102,48 @@ struct ThumbnailSidebar: View {
                     }
                 }
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                // Bottom toolbar
+            .safeAreaInset(edge: searchBarEdge, spacing: 0) {
                 HStack(spacing: 8) {
                     Menu {
-                        ForEach(FilterOption.allCases, id: \.self) { option in
-                            Button(action: {
-                                filterOptionString = option.rawValue
-                            }) {
-                                HStack {
-                                    Text(option.label)
-                                    if filterOption == option {
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
+                        Picker(selection: $filterOptionString, label: Text("Filter by Status")) {
+                            ForEach(FilterOption.allCases, id: \.self) { option in
+                                Text(option.label).tag(option.rawValue)
                             }
                         }
+                        .pickerStyle(.inline)
                     } label: {
-                        Image(systemName: "line.3.horizontal.decrease.circle.fill")
-                            .font(.title3)
+                        HStack(spacing: 4) {
+                            Image(systemName: "line.3.horizontal.decrease")
+                        }
                     }
                     .menuStyle(.borderlessButton)
-                    .padding(.leading, 12)
-                    .help("Filter pages")
+                    .background {
+                        Capsule()
+                            .fill(isFilterActive ? Color.accentColor : .clear)
+                            .stroke(.tertiary.opacity(isFilterActive ? 0 : 1), lineWidth: 1)
+                    }
+                    .fixedSize()
+                    .help(isFilterActive ? "Filtering: \(String(localized: filterOption.label))" : "Filter pages")
 
-                    Spacer()
+                    TextField("Filter", text: $searchText)
+                        .textFieldStyle(.plain)
 
-                    if filterOption != .all {
-                        Text(filterOption.label)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .padding(.trailing, 8)
+                    if !searchText.isEmpty {
+                        Button {
+                            searchText = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Clear search filter")
                     }
                 }
-                .frame(minHeight: 26)
-                .padding(6)
-                .background(.thickMaterial)
-                //.glassEffect(in: Rectangle())
-                // want a blurred background with something similar to .scrollEdgeEffectStyle if possible
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .glassEffect()
+                .padding(8)
+                
             }
         }
     }

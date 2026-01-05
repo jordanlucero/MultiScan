@@ -1,13 +1,27 @@
 import SwiftUI
 
-/// View model for managing editable rich text during edit mode
+/// View model for managing editable rich text with debounced auto-save
 @MainActor
 @Observable
 final class EditablePageText: Identifiable {
     private let page: Page
 
-    /// The text being edited - only modified during edit sessions
-    var text: AttributedString
+    /// Debounce interval for auto-save (in seconds)
+    private static let saveDebounceInterval: UInt64 = 1_500_000_000 // 1.5 seconds in nanoseconds
+
+    /// Current debounce task - weak self in Task handles cleanup on dealloc
+    private var saveTask: Task<Void, Never>?
+
+    /// Tracks whether there are unsaved changes
+    private var hasUnsavedChanges = false
+
+    /// The text being edited
+    var text: AttributedString {
+        didSet {
+            hasUnsavedChanges = true
+            scheduleDebouncedSave()
+        }
+    }
 
     /// Selection tracking for formatting operations
     var selection: AttributedTextSelection
@@ -21,8 +35,27 @@ final class EditablePageText: Identifiable {
         self.selection = AttributedTextSelection()
     }
 
-    /// Save changes back to the page
-    func save() {
+    /// Schedule a debounced save - cancels any pending save and schedules a new one
+    private func scheduleDebouncedSave() {
+        saveTask?.cancel()
+        saveTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: Self.saveDebounceInterval)
+                self?.saveNow()
+            } catch {
+                // Task was cancelled, no action needed
+            }
+        }
+    }
+
+    /// Save changes back to the page immediately (only if there are unsaved changes)
+    func saveNow() {
+        saveTask?.cancel()
+        saveTask = nil
+
+        guard hasUnsavedChanges else { return }
+        hasUnsavedChanges = false
+
         // Strip any foreground color before saving (we apply it dynamically for display)
         var cleanText = text
         for run in cleanText.runs {
@@ -30,11 +63,6 @@ final class EditablePageText: Identifiable {
             cleanText[range].foregroundColor = nil
         }
         page.richText = cleanText
-    }
-
-    /// Discard changes and reload from page
-    func revert() {
-        text = page.richText
     }
 
     /// Apply bold formatting to the current selection
@@ -101,59 +129,28 @@ struct RichTextSidebar: View {
     let document: Document
     @ObservedObject var navigationState: NavigationState
     @AppStorage("showStatisticsPane") private var showStatisticsPane = true
-    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.modelContext) private var modelContext
 
-    @State private var isEditing: Bool = false
+    /// Editable text for the current page - always initialized when page exists
     @State private var editableText: EditablePageText?
 
     var currentPage: Page? {
         navigationState.currentPage
     }
 
-    /// Display text with proper color for current color scheme
-    private var displayText: AttributedString {
-        guard let page = currentPage else {
-            return AttributedString(localized: "No text detected on this page.")
-        }
-        var text = page.richText
-        // Apply primary color for proper dark/light mode support
-        text.foregroundColor = Color.primary
-        return text
-    }
-
-    /// Paragraphs split for accessible reading
-    private var paragraphs: [String] {
-        guard let page = currentPage else {
-            return [String(localized: "No text detected on this page.")]
-        }
-        return page.plainText
-            .components(separatedBy: "\n\n")
-            .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header
+            // Header with page info and formatting toolbar
             VStack(alignment: .leading, spacing: 6) {
-
                 if let page = currentPage {
                     Text("Page \(page.pageNumber) of \(document.totalPages)")
                         .font(.headline)
                         .foregroundStyle(.secondary)
                         .accessibilityAddTraits(.isHeader)
                 }
-            }
-            .padding(.horizontal)
-            .padding(.top, 12)
-            .padding(.bottom, 8)
 
-            Divider()
-
-            // Content area - either viewing or editing
-            if isEditing, let editableText = editableText {
-                // Edit mode: TextEditor with formatting support
-                VStack(spacing: 0) {
-                    // Formatting toolbar
+                // Formatting toolbar - always visible when editing
+                if let editableText = editableText {
                     HStack(spacing: 12) {
                         Button(action: { editableText.applyBold() }) {
                             Image(systemName: "bold")
@@ -188,36 +185,30 @@ struct RichTextSidebar: View {
                         .help("Strikethrough (⌘⇧X)")
 
                         Spacer()
-
-                        Text("Editing")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                     }
-                    .padding(.horizontal)
-                    .padding(.vertical, 8)
-                    .background(.bar)
-
-                    Divider()
-
-                    TextEditor(
-                        text: Bindable(editableText).text,
-                        selection: Bindable(editableText).selection
-                    )
-                    .safeAreaPadding()
+                    .padding(.top, 4)
                 }
+            }
+            .padding(.horizontal)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+
+            Divider()
+
+            // Content area - always editable
+            if let editableText = editableText {
+                TextEditor(
+                    text: Bindable(editableText).text,
+                    selection: Bindable(editableText).selection
+                )
+                .safeAreaPadding()
             } else {
-                // View mode: Read-only text, split into paragraphs for accessibility
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
-                        ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, paragraph in
-                            Text(paragraph)
-                                .font(.body)
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    }
-                    .padding()
-                }
+                // No page selected placeholder
+                ContentUnavailableView(
+                    "No Page Selected",
+                    systemImage: "doc.text",
+                    description: Text("Select a page from the sidebar to view and edit its text.")
+                )
             }
 
             // Statistics pane
@@ -243,68 +234,37 @@ struct RichTextSidebar: View {
                 .padding()
             }
         }
-        .focusedValue(\.editableText, isEditing ? editableText : nil)
-        .toolbar {
-            // Using .primaryAction to group with ReviewView's toolbar items
-            ToolbarItemGroup(placement: .primaryAction) {
-                if isEditing {
-                    Button(action: cancelEditing) {
-                        Label("Discard", systemImage: "xmark.circle")
-                            .labelStyle(.iconOnly)
-                    }
-                    .help("Discard Changes")
-                    .accessibilityLabel("Discard Changes")
-
-                    Button(action: saveAndExitEditing) {
-                        Label("Done", systemImage: "checkmark.circle")
-                            .labelStyle(.iconOnly)
-                    }
-                    .help("Save Changes")
-                    .accessibilityLabel("Save Changes")
-                    
-                } else {
-                    Button(action: startEditing) {
-                        Label("Edit Text", systemImage: "pencil.circle")
-                            .labelStyle(.iconOnly)
-                    }
-                    .help("Edit OCR Text")
-                    .accessibilityLabel("Edit OCR Text")
-                    .disabled(currentPage == nil)
-                }
-            }
+        .focusedValue(\.editableText, editableText)
+        .onAppear {
+            initializeEditableText()
+        }
+        .onDisappear {
+            // Save any pending changes when view disappears
+            editableText?.saveNow()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+            // Emergency save on app quit - catches the case where user quits mid-debounce
+            editableText?.saveNow()
+            // Force immediate disk write before termination
+            try? modelContext.save()
         }
         .onChange(of: currentPage) { _, newPage in
-            // When page changes, exit edit mode and reset
-            if isEditing {
-                // Auto-save when switching pages
-                editableText?.save()
-                isEditing = false
+            // Save current page before switching
+            editableText?.saveNow()
+
+            // Initialize editable text for new page
+            if let page = newPage {
+                editableText = EditablePageText(page: page)
+            } else {
+                editableText = nil
             }
-            editableText = nil
-        }
-        .onChange(of: isEditing) { _, editing in
-            let mode = editing ? "Editing mode" : "Viewing mode"
-            AccessibilityNotification.Announcement(mode).post()
         }
     }
 
-    // MARK: - Edit Mode Actions
+    // MARK: - Private Methods
 
-    private func startEditing() {
+    private func initializeEditableText() {
         guard let page = currentPage else { return }
         editableText = EditablePageText(page: page)
-        isEditing = true
-    }
-
-    private func saveAndExitEditing() {
-        editableText?.save()
-        isEditing = false
-        editableText = nil
-    }
-
-    private func cancelEditing() {
-        editableText?.revert()
-        isEditing = false
-        editableText = nil
     }
 }

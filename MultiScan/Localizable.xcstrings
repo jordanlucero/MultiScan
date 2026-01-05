@@ -345,26 +345,6 @@
         }
       }
     },
-    "Discard" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Descartar"
-          }
-        }
-      }
-    },
-    "Discard Changes" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Descartar cambios"
-          }
-        }
-      }
-    },
     "Document Text" : {
       "localizations" : {
         "es-419" : {
@@ -391,36 +371,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Cada detalle en su propia línea"
-          }
-        }
-      }
-    },
-    "Edit OCR Text" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Editar texto OCR"
-          }
-        }
-      }
-    },
-    "Edit Text" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Editar texto"
-          }
-        }
-      }
-    },
-    "Editing" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Edición"
           }
         }
       }
@@ -780,12 +730,12 @@
         }
       }
     },
-    "No text detected on this page." : {
+    "No Page Selected" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No se detectó texto en esta página."
+            "value" : "No hay ninguna página seleccionada"
           }
         }
       }
@@ -1048,12 +998,12 @@
         }
       }
     },
-    "Save Changes" : {
+    "Select a page from the sidebar to view and edit its text." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Guardar cambios"
+            "value" : "Seleccione una página en la barra lateral para ver y editar su texto."
           }
         }
       }

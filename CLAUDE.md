@@ -61,6 +61,46 @@ When extending functionality:
 3. Access `modelContext` from environment for CRUD operations
 4. Follow SwiftUI view composition patterns
 
+## Rich Text Editing Architecture
+
+The app uses an always-editable text model with debounced auto-save to balance responsiveness with storage efficiency.
+
+### EditablePageText (View Model)
+Located in `RichTextSidebar.swift`, this `@Observable` class wraps a Page's rich text for editing:
+- Initialized when a page is selected, disposed when switching pages
+- Applies display-only foreground color (stripped before saving)
+- Tracks `hasUnsavedChanges` flag to prevent unnecessary writes
+
+### Debounced Auto-Save (1.5 seconds)
+Text changes trigger a debounced save via `scheduleDebouncedSave()`:
+- Each keystroke cancels the previous pending save and schedules a new one
+- After 1.5 seconds of idle, `saveNow()` persists changes
+- Prevents disk writes on every character while saving promptly after typing stops
+
+### Save Protection Layers
+Changes are saved in these scenarios:
+| Event | Trigger |
+|-------|---------|
+| User stops typing | Debounce timer (1.5s) |
+| User switches pages | `onChange(of: currentPage)` |
+| User navigates away | `onDisappear` |
+| User quits app (⌘Q) | `willTerminateNotification` + `modelContext.save()` |
+
+All save calls check `hasUnsavedChanges` first - no-op if no edits were made.
+
+### Persistence Flow
+1. `saveNow()` assigns cleaned text to `page.richText`
+2. Page's `didSet` marks `richTextChanged = true`
+3. SwiftData's `willSave` notification triggers `Page.willSave()`
+4. Rich text is JSON-encoded to `richTextData` (external storage)
+5. SwiftData commits to SQLite
+
+### Important Notes
+- No separate "view mode" vs "edit mode" - always editable
+- Click outside TextEditor to unfocus (removes cursor)
+- Formatting toolbar always visible in header when page selected
+- `modelContext.save()` on app quit ensures synchronous disk write before termination
+
 ## Full Document Text Cache
 
 The `NavigationState` class maintains a cached copy of the full document text:

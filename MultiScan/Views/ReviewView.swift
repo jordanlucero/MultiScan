@@ -29,6 +29,16 @@ struct ReviewView: View {
     // Use AppStorage directly for inspector to sync with menu commands
     @AppStorage("showTextPanel") private var showTextPanel = true
 
+    /// Sorted pages for rotor navigation
+    private var sortedPages: [Page] {
+        document.pages.sorted(by: { $0.pageNumber < $1.pageNumber })
+    }
+
+    /// Unreviewed pages for rotor navigation
+    private var unreviewedPages: [Page] {
+        document.pages.filter { !$0.isDone }.sorted(by: { $0.pageNumber < $1.pageNumber })
+    }
+
     var body: some View {
         mainContent
             .sheet(isPresented: $showExportPanel) {
@@ -50,6 +60,11 @@ struct ReviewView: View {
                     selectedPageNumber = firstPage.pageNumber
                 }
                 columnVisibility = showThumbnails ? .all : .detailOnly
+
+                // Announce document opening for VoiceOver users
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    AccessibilityNotification.Announcement("\(document.name) opened. \(document.totalPages) pages.").post()
+                }
             }
             .onChange(of: navigationState.currentPageNumber) { _, newPageNumber in
                 selectedPageNumber = newPageNumber
@@ -69,6 +84,36 @@ struct ReviewView: View {
 
     @ViewBuilder
     private var mainContent: some View {
+        splitView
+            .focusedSceneValue(\.document, document)
+            .focusedSceneValue(\.navigationState, navigationState)
+            .focusedSceneValue(\.showExportPanel, $showExportPanel)
+            .focusedSceneValue(\.fullDocumentText, navigationState.fullDocumentPlainText)
+            .focusedSceneValue(\.showAddFromPhotos, $showAddFromPhotos)
+            .focusedSceneValue(\.showAddFromFiles, $showAddFromFiles)
+            .navigationTitle(navigationTitle)
+            .navigationSubtitle(Text(document.totalPages == 1 ? "1 page" : "\(document.totalPages) pages"))
+            .toolbarRole(.editor)
+            .toolbar { toolbarContent }
+            .accessibilityRotor("Pages") {
+                ForEach(sortedPages) { page in
+                    AccessibilityRotorEntry(page.rotorLabel, id: page.pageNumber) {
+                        navigationState.goToPage(pageNumber: page.pageNumber)
+                        selectedPageNumber = page.pageNumber
+                    }
+                }
+            }
+            .accessibilityRotor("Unreviewed") {
+                ForEach(unreviewedPages) { page in
+                    AccessibilityRotorEntry(page.rotorLabel, id: page.pageNumber) {
+                        navigationState.goToPage(pageNumber: page.pageNumber)
+                        selectedPageNumber = page.pageNumber
+                    }
+                }
+            }
+    }
+
+    private var splitView: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             ThumbnailSidebar(
                 document: document,
@@ -89,16 +134,14 @@ struct ReviewView: View {
             )
             .inspectorColumnWidth(min: 250, ideal: 350, max: 500)
         }
-        .focusedSceneValue(\.document, document)
-        .focusedSceneValue(\.navigationState, navigationState)
-        .focusedSceneValue(\.showExportPanel, $showExportPanel)
-        .focusedSceneValue(\.fullDocumentText, navigationState.fullDocumentPlainText)
-        .focusedSceneValue(\.showAddFromPhotos, $showAddFromPhotos)
-        .focusedSceneValue(\.showAddFromFiles, $showAddFromFiles)
-        .navigationTitle(String(document.name.prefix(30)) + (document.name.count > 30 ? "..." : ""))
-        .navigationSubtitle(Text("\(document.totalPages) pages"))
-        .toolbarRole(.editor)
-        .toolbar { toolbarContent }
+    }
+
+    private var navigationTitle: String {
+        let name = document.name
+        if name.count > 30 {
+            return String(name.prefix(30)) + "…"
+        }
+        return name
     }
 
     // MARK: - Toolbar Content
@@ -111,6 +154,7 @@ struct ReviewView: View {
                 Label("Back", systemImage: "chevron.left")
                     .labelStyle(.iconOnly)
             }
+            .accessibilityLabel("Back to Projects")
             .help("Back to Projects")
         }
 
@@ -138,6 +182,8 @@ struct ReviewView: View {
                       systemImage: navigationState.isRandomized ? "shuffle.circle.fill" : "shuffle.circle")
                     .labelStyle(.iconOnly)
             }
+            .accessibilityLabel("Page Order")
+            .accessibilityValue(navigationState.isRandomized ? "Shuffled" : "Sequential")
             .help(navigationState.isRandomized ? "Switch to Sequential Order" : "Switch to Shuffled Order")
 
             //ToolbarSpacer(.fixed)
@@ -149,6 +195,8 @@ struct ReviewView: View {
                       systemImage: navigationState.currentPage?.isDone == true ? "checkmark.circle.fill" : "checkmark.circle")
                     .labelStyle(.iconOnly)
             }
+            .accessibilityLabel("Review Status")
+            .accessibilityValue(navigationState.currentPage?.isDone == true ? "Reviewed" : "Not reviewed")
             .help(navigationState.currentPage?.isDone == true ? "Mark as Not Reviewed" : "Mark as Reviewed")
 
             Button(action: { showProgress.toggle() }) {
@@ -158,6 +206,8 @@ struct ReviewView: View {
             .popover(isPresented: $showProgress, arrowEdge: .bottom) {
                 ProgressPopover(navigationState: navigationState)
             }
+            .accessibilityLabel("View Progress")
+            .accessibilityValue("\(navigationState.donePageCount) of \(navigationState.totalPageCount) reviewed")
             .help("View Progress")
 
             //ToolbarSpacer(.fixed)
@@ -169,6 +219,7 @@ struct ReviewView: View {
                 Label("Share Page Text", systemImage: "square.and.arrow.up")
                     .labelStyle(.iconOnly)
             }
+            .accessibilityLabel("Share Page Text")
             .help("Share Current Page Text")
             .disabled(navigationState.currentPage == nil)
 
@@ -176,6 +227,7 @@ struct ReviewView: View {
                 Label("Export All Pages", systemImage: "doc.on.doc")
                     .labelStyle(.iconOnly)
             }
+            .accessibilityLabel("Export All Pages")
             .help("Export All Pages Text")
 
             //ToolbarSpacer(.fixed)
@@ -186,6 +238,8 @@ struct ReviewView: View {
                 Label("Show Text Panel", systemImage: "sidebar.right")
                     .labelStyle(.iconOnly)
             }
+            .accessibilityLabel("Text Panel")
+            .accessibilityValue(showTextPanel ? "Showing" : "Hidden")
             .help(showTextPanel ? "Hide Text Panel" : "Show Text Panel")
             .keyboardShortcut("i", modifiers: [.command, .option])
         }

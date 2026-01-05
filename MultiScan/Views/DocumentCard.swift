@@ -45,7 +45,7 @@ struct DocumentCard: View {
 
     @ViewBuilder
     private var contextMenuContent: some View {
-        Button("Rename...", systemImage: "pencil") {
+        Button("Rename…", systemImage: "pencil") {
             startEditing()
         }
         .disabled(isProcessing)
@@ -54,14 +54,14 @@ struct DocumentCard: View {
 
         Text("Using \(document.formattedStorageSize)")
 
-        Button("Optimize Images...", systemImage: "arrow.down.circle") {
+        Button("Optimize Images…", systemImage: "arrow.down.circle") {
             onOptimize()
         }
         .disabled(isProcessing)
 
         Divider()
 
-        Button("Delete...", systemImage: "trash", role: .destructive) {
+        Button("Delete…", systemImage: "trash", role: .destructive) {
             onDelete()
         }
         .disabled(isProcessing)
@@ -118,6 +118,8 @@ struct DocumentCard: View {
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
+        .accessibilityLabel("Project options")
+        .accessibilityHint("Opens menu with rename, optimize, and delete options")
     }
 
     // MARK: - Processing Overlay
@@ -192,6 +194,9 @@ struct DocumentCard: View {
         }
         .buttonStyle(.plain)
         .disabled(isProcessing)
+        .accessibilityLabel("Project icon")
+        .accessibilityValue(document.emoji ?? "Default document icon")
+        .accessibilityHint("Activate to change the project emoji")
         .popover(isPresented: $showingEmojiPopover) {
             emojiPickerPopover
         }
@@ -205,11 +210,12 @@ struct DocumentCard: View {
             Text("Enter an emoji")
                 .font(.headline)
 
-            TextField("", text: $emojiInput)
+            TextField("Emoji", text: $emojiInput)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 60)
                 .multilineTextAlignment(.center)
                 .focused($isEmojiFieldFocused)
+                .accessibilityLabel("Enter emoji")
                 .onChange(of: emojiInput) { _, newValue in
                     // Auto-accept when user types an emoji
                     if let firstChar = newValue.first, firstChar.isEmoji {
@@ -291,8 +297,8 @@ struct DocumentCard: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
 
-            // Completion percentage
-            Text("\(document.completionPercentage)% pages reviewed")
+            // Completion status
+            Text("\(document.pages.filter { $0.isDone }.count) of \(document.totalPages) pages reviewed (\(document.completionPercentage)%)")
                 .font(.caption)
                 .foregroundColor(.secondary)
         }

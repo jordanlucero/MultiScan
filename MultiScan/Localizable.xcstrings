@@ -22,6 +22,22 @@
         }
       }
     },
+    "%@, %lld of %lld pages visible" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, %2$lld of %3$lld pages visible"
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, %2$lld de %3$lld páginas visibles"
+          }
+        }
+      }
+    },
     "%lld characters" : {
       "localizations" : {
         "es-419" : {
@@ -45,6 +61,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%1$lld de las %2$lld páginas completadas"
+          }
+        }
+      }
+    },
+    "%lld of %lld pages reviewed (%lld%%)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld pages reviewed (%3$lld%%)"
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld de %2$lld páginas revisadas (%3$lld%)"
+          }
+        }
+      }
+    },
+    "%lld of %lld reviewed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld reviewed"
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld de %2$lld revisadas"
           }
         }
       }
@@ -90,12 +138,22 @@
       "comment" : "Numerical percentage shown in ProgressPopover",
       "shouldTranslate" : false
     },
-    "%lld%% pages reviewed" : {
+    "1 page" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld páginas revisadas"
+            "value" : "1 página"
+          }
+        }
+      }
+    },
+    "Activate to change the project emoji" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Actívelo para cambiar el emoji del proyecto"
           }
         }
       }
@@ -115,7 +173,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Actívalo para iniciar un proyecto utilizando imágenes importadas de tus fotos o archivos"
+            "value" : "Actívelo para iniciar un proyecto utilizando imágenes importadas de sus fotos o archivos"
           }
         }
       }
@@ -150,6 +208,16 @@
         }
       }
     },
+    "All %lld pages" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todas las %lld páginas"
+          }
+        }
+      }
+    },
     "All Pages" : {
       "localizations" : {
         "es-419" : {
@@ -160,7 +228,7 @@
         }
       }
     },
-    "Append Pages from Files..." : {
+    "Append Pages from Files…" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -181,7 +249,7 @@
         }
       }
     },
-    "Append Pages from Photos..." : {
+    "Append Pages from Photos…" : {
       "comment" : "Capital “Fotos” to refer to Apple Photos, not the photos themselves",
       "localizations" : {
         "es-419" : {
@@ -293,6 +361,16 @@
         }
       }
     },
+    "Clear text filter" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Borrar filtro de texto"
+          }
+        }
+      }
+    },
     "Dark Gray" : {
       "comment" : "Viewer background option: dark gray color",
       "localizations" : {
@@ -335,12 +413,12 @@
         }
       }
     },
-    "Delete..." : {
+    "Delete…" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Eliminar..."
+            "value" : "Eliminar…"
           }
         }
       }
@@ -375,12 +453,32 @@
         }
       }
     },
+    "Emoji" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Emoji"
+          }
+        }
+      }
+    },
     "Enter an emoji" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Introduce un emoji"
+          }
+        }
+      }
+    },
+    "Enter emoji" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Introducir emoji"
           }
         }
       }
@@ -405,6 +503,16 @@
         }
       }
     },
+    "Exit text editor" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salir del editor de texto"
+          }
+        }
+      }
+    },
     "Export All Pages" : {
       "localizations" : {
         "es-419" : {
@@ -425,12 +533,12 @@
         }
       }
     },
-    "Export All Pages..." : {
+    "Export All Pages…" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Exportar todas las páginas..."
+            "value" : "Exportar todas las páginas…"
           }
         }
       }
@@ -465,12 +573,22 @@
         }
       }
     },
-    "Filter by Status" : {
+    "Filter by status" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Filtrar por estado"
+          }
+        }
+      }
+    },
+    "Filter by text" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filtrar por texto"
           }
         }
       }
@@ -485,12 +603,22 @@
         }
       }
     },
+    "Filter text" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filtrar texto"
+          }
+        }
+      }
+    },
     "Filtering: %@" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Filtraje: %@"
+            "value" : "Filtrando: %@"
           }
         }
       }
@@ -515,6 +643,26 @@
         }
       }
     },
+    "Go to next page" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ir a página siguiente"
+          }
+        }
+      }
+    },
+    "Go to previous page" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ir a página anterior"
+          }
+        }
+      }
+    },
     "Gray" : {
       "comment" : "Viewer background option: gray color",
       "localizations" : {
@@ -522,6 +670,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Gris"
+          }
+        }
+      }
+    },
+    "Hidden" : {
+      "comment" : "Text editor is hidden via RichTextSidebar, accessibility announcement",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Oculto"
           }
         }
       }
@@ -566,17 +725,17 @@
         }
       }
     },
-    "Import from Files..." : {
+    "Import from Files…" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Importar desde Archivos…"
+            "value" : "Importar desde archivos…"
           }
         }
       }
     },
-    "Import from Photos..." : {
+    "Import from Photos…" : {
       "comment" : "Capital “Fotos” to refer to Apple Photos, not the photos themselves",
       "localizations" : {
         "es-419" : {
@@ -648,12 +807,12 @@
         }
       }
     },
-    "Loading image..." : {
+    "Loading image…" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Cargando imagen..."
+            "value" : "Cargando imagen…"
           }
         }
       }
@@ -746,12 +905,13 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No revisados"
+            "value" : "No revisado"
           }
         }
       }
     },
     "Not Reviewed" : {
+      "comment" : "Not reviewed filter option, keep plural",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -762,6 +922,7 @@
       }
     },
     "Not Reviewed Only" : {
+      "comment" : "Not reviewed filter option, keep plural",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -791,6 +952,16 @@
         }
       }
     },
+    "Opens menu with rename, optimize, and delete options" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre un menú con opciones para renombrar, optimizar y eliminar"
+          }
+        }
+      }
+    },
     "Opens this page" : {
       "comment" : "Accessibility hint for page thumbnail button",
       "localizations" : {
@@ -812,7 +983,7 @@
         }
       }
     },
-    "Optimize Images..." : {
+    "Optimize Images…" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -866,12 +1037,32 @@
         }
       }
     },
+    "Page image" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Imagen de página"
+          }
+        }
+      }
+    },
     "Page number" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Número de página"
+          }
+        }
+      }
+    },
+    "Page Order" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orden de páginas"
           }
         }
       }
@@ -892,6 +1083,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Texto de la página"
+          }
+        }
+      }
+    },
+    "Page text editor" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Editor de texto de página"
+          }
+        }
+      }
+    },
+    "Pages" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Páginas"
           }
         }
       }
@@ -957,6 +1168,16 @@
         }
       }
     },
+    "Project icon" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Icono del proyecto"
+          }
+        }
+      }
+    },
     "Project Name" : {
       "localizations" : {
         "es-419" : {
@@ -967,12 +1188,32 @@
         }
       }
     },
-    "Rename..." : {
+    "Project options" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Renombrar..."
+            "value" : "Opciones del proyecto"
+          }
+        }
+      }
+    },
+    "Rename…" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Renombrar…"
+          }
+        }
+      }
+    },
+    "Review Status" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Estado de la revisión"
           }
         }
       }
@@ -983,17 +1224,28 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Revisados"
+            "value" : "Revisado"
           }
         }
       }
     },
     "Reviewed Only" : {
+      "comment" : "Reviewed filter option, keep plural",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Solo revisados"
+          }
+        }
+      }
+    },
+    "Search by page number, filename, or content" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Busque por número de página, nombre de archivo o contenido"
           }
         }
       }
@@ -1028,6 +1280,16 @@
         }
       }
     },
+    "Sequential" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Secuencial"
+          }
+        }
+      }
+    },
     "Sequential Order" : {
       "localizations" : {
         "es-419" : {
@@ -1058,22 +1320,22 @@
         }
       }
     },
-    "Share Page Text..." : {
+    "Share Page Text…" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Compartir texto de la página..."
+            "value" : "Compartir texto de la página…"
           }
         }
       }
     },
-    "Share..." : {
+    "Share…" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Compartir..."
+            "value" : "Compartir…"
           }
         }
       }
@@ -1108,6 +1370,27 @@
         }
       }
     },
+    "Showing" : {
+      "comment" : "Text editor is visible via RichTextSidebar, accessibility announcement",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostrando"
+          }
+        }
+      }
+    },
+    "Shuffled" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aleatorio"
+          }
+        }
+      }
+    },
     "Shuffled Order" : {
       "localizations" : {
         "es-419" : {
@@ -1128,7 +1411,7 @@
         }
       }
     },
-    "Start from iPhone or iPad..." : {
+    "Start from iPhone or iPad…" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -1188,6 +1471,42 @@
         }
       }
     },
+    "Text Editor, Page %lld of %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Text Editor, Page %1$lld of %2$lld"
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Editor de texto, página %1$lld de %2$lld"
+          }
+        }
+      }
+    },
+    "Text formatting: Bold, Italic, Underline, Strikethrough" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Formato de texto: Negrita, Cursiva, Subrayado, Tachado"
+          }
+        }
+      }
+    },
+    "Text Panel" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Panel de texto"
+          }
+        }
+      }
+    },
     "Underline" : {
       "localizations" : {
         "es-419" : {
@@ -1204,6 +1523,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Subrayado (⌘U)"
+          }
+        }
+      }
+    },
+    "Unreviewed" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sin revisar"
+          }
+        }
+      }
+    },
+    "Use Actions menu to exit editor" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Utilice el menú de acciones para salir del editor"
           }
         }
       }
@@ -1255,6 +1594,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Blanco"
+          }
+        }
+      }
+    },
+    "Zoom %lld percent" : {
+      "comment" : "Change zoom value, can describe a zoom in or out",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zoom %lld por ciento"
           }
         }
       }

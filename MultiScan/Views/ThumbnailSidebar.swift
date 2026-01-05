@@ -28,6 +28,7 @@ struct ThumbnailSidebar: View {
 
     @AppStorage("filterOption") private var filterOptionString = "all"
     @State private var searchText = ""
+    @State private var textFilterAnnounceTask: Task<Void, Never>?
 
     private var filterOption: FilterOption {
         get { FilterOption(rawValue: filterOptionString) ?? .all }
@@ -36,6 +37,52 @@ struct ThumbnailSidebar: View {
 
     private var isFilterActive: Bool {
         filterOption != .all
+    }
+
+    private var isAnyFilterActive: Bool {
+        isFilterActive || !searchText.isEmpty
+    }
+
+    /// Total number of pages in the document
+    private var totalPageCount: Int {
+        document.pages.count
+    }
+
+    /// Number of pages currently visible after filtering
+    private var visiblePageCount: Int {
+        filteredPages.count
+    }
+
+    /// Builds a descriptive string for the current filter state
+    private var filterDescription: String {
+        var parts: [String] = []
+
+        if isFilterActive {
+            parts.append("status: \(String(localized: filterOption.label))")
+        }
+
+        if !searchText.isEmpty {
+            parts.append("text: \"\(searchText)\"")
+        }
+
+        if parts.isEmpty {
+            return "No filter active"
+        }
+
+        return "Filtered by \(parts.joined(separator: " and "))"
+    }
+
+    /// Announces filter changes to VoiceOver users
+    private func announceFilterChange() {
+        let visible = visiblePageCount
+        let total = totalPageCount
+
+        if !isAnyFilterActive {
+            AccessibilityNotification.Announcement("Filter cleared. Showing all \(total) pages.").post()
+        } else {
+            let description = filterDescription
+            AccessibilityNotification.Announcement("\(description). Showing \(visible) of \(total) pages.").post()
+        }
     }
 
     var filteredPages: [Page] {
@@ -105,7 +152,7 @@ struct ThumbnailSidebar: View {
             .safeAreaInset(edge: searchBarEdge, spacing: 0) {
                 HStack(spacing: 8) {
                     Menu {
-                        Picker(selection: $filterOptionString, label: Text("Filter by Status")) {
+                        Picker(selection: $filterOptionString, label: Text("Filter by status")) {
                             ForEach(FilterOption.allCases, id: \.self) { option in
                                 Text(option.label).tag(option.rawValue)
                             }
@@ -123,10 +170,16 @@ struct ThumbnailSidebar: View {
                             .stroke(.tertiary.opacity(isFilterActive ? 0 : 1), lineWidth: 1)
                     }
                     .fixedSize()
+                    .accessibilityLabel("Filter by status")
+                    .accessibilityValue(isFilterActive
+                        ? "\(String(localized: filterOption.label)), \(visiblePageCount) of \(totalPageCount) pages visible"
+                        : "All \(totalPageCount) pages")
                     .help(isFilterActive ? "Filtering: \(String(localized: filterOption.label))" : "Filter pages")
 
-                    TextField("Filter", text: $searchText)
+                    TextField("Filter text", text: $searchText)
                         .textFieldStyle(.plain)
+                        .accessibilityLabel("Filter by text")
+                        .accessibilityHint("Search by page number, filename, or content")
 
                     if !searchText.isEmpty {
                         Button {
@@ -136,6 +189,7 @@ struct ThumbnailSidebar: View {
                                 .foregroundStyle(.secondary)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("Clear text filter")
                         .help("Clear search filter")
                     }
                 }
@@ -143,7 +197,24 @@ struct ThumbnailSidebar: View {
                 .padding(.vertical, 6)
                 .glassEffect()
                 .padding(8)
-                
+
+            }
+            .onChange(of: filterOptionString) { _, _ in
+                // Announce immediately when status filter changes
+                announceFilterChange()
+            }
+            .onChange(of: searchText) { _, newValue in
+                // Debounce text filter announcements to avoid announcing on every keystroke
+                textFilterAnnounceTask?.cancel()
+                textFilterAnnounceTask = Task {
+                    do {
+                        // Wait for typing to stop (0.8 seconds)
+                        try await Task.sleep(for: .milliseconds(800))
+                        announceFilterChange()
+                    } catch {
+                        // Task was cancelled, no announcement needed
+                    }
+                }
             }
         }
     }

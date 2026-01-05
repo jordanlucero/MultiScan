@@ -49,12 +49,12 @@ struct MultiScanApp: App {
             CommandGroup(after: .newItem) {
                 Divider()
 
-                Button("Append Pages from Photos...", systemImage: "photo.on.rectangle") {
+                Button("Append Pages from Photos…", systemImage: "photo.on.rectangle") {
                     showAddFromPhotosBinding?.wrappedValue = true
                 }
                 .disabled(showAddFromPhotosBinding == nil)
 
-                Button("Append Pages from Files...", systemImage: "folder") {
+                Button("Append Pages from Files…", systemImage: "folder") {
                     showAddFromFilesBinding?.wrappedValue = true
                 }
                 .disabled(showAddFromFilesBinding == nil)
@@ -62,13 +62,13 @@ struct MultiScanApp: App {
 
             // Edit Menu Commands
             CommandGroup(after: .pasteboard) {
-                ShareLink("Share Page Text...",
+                ShareLink("Share Page Text…",
                           item: RichText(focusedNavigationState?.currentPage?.richText ?? AttributedString()),
                           preview: SharePreview("Page Text"))
                 .keyboardShortcut("C", modifiers: [.command, .shift])
                 .disabled(focusedNavigationState?.currentPage == nil)
 
-                Button("Export All Pages...", systemImage: "doc.on.doc") {
+                Button("Export All Pages…", systemImage: "doc.on.doc") {
                     showExportPanelBinding?.wrappedValue = true
                 }
                 .keyboardShortcut("C", modifiers: [.command, .option])

@@ -134,6 +134,9 @@ struct RichTextSidebar: View {
     /// Editable text for the current page - always initialized when page exists
     @State private var editableText: EditablePageText?
 
+    /// Accessibility focus state for VoiceOver navigation
+    @AccessibilityFocusState private var isHeaderFocused: Bool
+
     var currentPage: Page? {
         navigationState.currentPage
     }
@@ -147,6 +150,8 @@ struct RichTextSidebar: View {
                         .font(.headline)
                         .foregroundStyle(.secondary)
                         .accessibilityAddTraits(.isHeader)
+                        .accessibilityLabel("Text Editor, Page \(page.pageNumber) of \(document.totalPages)")
+                        .accessibilityFocused($isHeaderFocused)
                 }
 
                 // Formatting toolbar - always visible when editing
@@ -187,6 +192,8 @@ struct RichTextSidebar: View {
                         Spacer()
                     }
                     .padding(.top, 4)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Text formatting: Bold, Italic, Underline, Strikethrough")
                 }
             }
             .padding(.horizontal)
@@ -202,6 +209,18 @@ struct RichTextSidebar: View {
                     selection: Bindable(editableText).selection
                 )
                 .safeAreaPadding()
+                .accessibilityLabel("Page text editor")
+                .accessibilityHint("Use Actions menu to exit editor")
+                .accessibilityAction(named: "Exit text editor") {
+                    // Move focus back to the header
+                    isHeaderFocused = true
+                }
+                .accessibilityAction(named: "Go to next page") {
+                    navigationState.nextPage()
+                }
+                .accessibilityAction(named: "Go to previous page") {
+                    navigationState.previousPage()
+                }
             } else {
                 // No page selected placeholder
                 ContentUnavailableView(
@@ -237,6 +256,10 @@ struct RichTextSidebar: View {
         .focusedValue(\.editableText, editableText)
         .onAppear {
             initializeEditableText()
+            // Set VoiceOver focus to the header when view appears
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                isHeaderFocused = true
+            }
         }
         .onDisappear {
             // Save any pending changes when view disappears

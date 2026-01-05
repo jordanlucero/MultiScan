@@ -176,3 +176,12 @@ final class Document {
         cachedStorageBytes = totalBytes
     }
 }
+
+// MARK: - Accessibility Extensions
+
+extension Page {
+    /// Label for VoiceOver rotor navigation
+    var rotorLabel: String {
+        "Page \(pageNumber)"
+    }
+}

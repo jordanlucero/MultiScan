@@ -95,16 +95,16 @@ struct HomeView: View {
 
     private var newDocumentCard: some View {
         Menu {
-            Button("Import from Photos...", systemImage: "photo.on.rectangle") {
+            Button("Import from Photos…", systemImage: "photo.on.rectangle") {
                 showingPhotosPicker = true
             }
 
-            Button("Import from Files...", systemImage: "folder") {
+            Button("Import from Files…", systemImage: "folder") {
                 showingFilePicker = true
             }
 
             #if os(macOS)
-            Button("Start from iPhone or iPad...", systemImage: "camera") {
+            Button("Start from iPhone or iPad…", systemImage: "camera") {
                 // TODO: Implement Continuity Camera
             }
             .disabled(true)

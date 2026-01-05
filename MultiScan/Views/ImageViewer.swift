@@ -94,8 +94,22 @@ struct ImageViewer: View {
                                 lastScale = scale
                             }
                     )
+                    .accessibilityLabel("Page image")
+                    .accessibilityValue("Zoom \(Int(scale * 100)) percent")
+                    .accessibilityAction(named: "Zoom In") {
+                        scale *= 1.25
+                        lastScale = scale
+                    }
+                    .accessibilityAction(named: "Zoom Out") {
+                        scale *= 0.8
+                        lastScale = scale
+                    }
+                    .accessibilityAction(named: "Fit to Window") {
+                        scale = 1.0
+                        lastScale = 1.0
+                    }
                 } else {
-                    ProgressView("Loading image...")
+                    ProgressView("Loading image…")
                 }
             }
             .overlay(alignment: .topTrailing) {
@@ -131,18 +145,21 @@ struct ImageViewer: View {
             Button(action: { scale = 1.0; lastScale = 1.0 }) {
                 Image(systemName: "arrow.up.left.and.arrow.down.right")
             }
+            .accessibilityLabel("Fit to Window")
             .help("Fit to Window")
             .focused($focusedButton, equals: .fit)
 
             Button(action: { scale *= 1.25; lastScale = scale }) {
                 Image(systemName: "plus.magnifyingglass")
             }
+            .accessibilityLabel("Zoom In")
             .help("Zoom In")
             .focused($focusedButton, equals: .zoomIn)
 
             Button(action: { scale *= 0.8; lastScale = scale }) {
                 Image(systemName: "minus.magnifyingglass")
             }
+            .accessibilityLabel("Zoom Out")
             .help("Zoom Out")
             .focused($focusedButton, equals: .zoomOut)
         }
@@ -151,6 +168,7 @@ struct ImageViewer: View {
         .padding()
         .opacity(controlsVisible ? 1.0 : 0.0)
         .animation(.easeInOut(duration: 0.25), value: controlsVisible)
+        .accessibilityHidden(false) // Keep accessible to VoiceOver regardless of opacity
     }
 
     private var controlsVisible: Bool {

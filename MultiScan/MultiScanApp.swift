@@ -20,9 +20,12 @@ struct MultiScanApp: App {
     @FocusedValue(\.document) private var focusedDocument: Document?
     @FocusedValue(\.navigationState) private var focusedNavigationState: NavigationState?
     @FocusedValue(\.editableText) private var focusedEditableText: EditablePageText?
+    @FocusedValue(\.currentPage) private var focusedCurrentPage: Page?
     @FocusedValue(\.showExportPanel) private var showExportPanelBinding: Binding<Bool>?
     @FocusedValue(\.showAddFromPhotos) private var showAddFromPhotosBinding: Binding<Bool>?
     @FocusedValue(\.showAddFromFiles) private var showAddFromFilesBinding: Binding<Bool>?
+
+    @State private var showDeletePageConfirmation = false
 
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
@@ -41,6 +44,19 @@ struct MultiScanApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .confirmationDialog(
+                    "Delete Page?",
+                    isPresented: $showDeletePageConfirmation,
+                    titleVisibility: .visible
+                ) {
+                    Button("Delete", role: .destructive) {
+                        let context = sharedModelContainer.mainContext
+                        focusedNavigationState?.deleteCurrentPage(modelContext: context)
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("This will permanently delete the page from your project. This can't be undone.")
+                }
         }
         .modelContainer(sharedModelContainer)
         .commands {
@@ -77,13 +93,34 @@ struct MultiScanApp: App {
                 Divider()
                 
                 Button(focusedNavigationState?.currentPage?.isDone == true ? "Mark as Not Reviewed" : "Mark as Reviewed",
-                       systemImage: focusedNavigationState?.currentPage?.isDone == true ? "checkmark.circle" : "x.circle") {
+                       systemImage: focusedNavigationState?.currentPage?.isDone == true ? "x.circle" : "checkmark.circle") {
                     focusedNavigationState?.toggleCurrentPageDone()
                 }
                 .keyboardShortcut("D", modifiers: [.command])
                 .disabled(focusedNavigationState?.currentPage == nil)
+
+                Divider()
+
+                Button("Move Page Up", systemImage: "arrow.up") {
+                    focusedNavigationState?.moveCurrentPageUp()
+                }
+                .keyboardShortcut(.upArrow, modifiers: [.command, .option])
+                .disabled(focusedNavigationState?.canMoveCurrentPageUp != true)
+
+                Button("Move Page Down", systemImage: "arrow.down") {
+                    focusedNavigationState?.moveCurrentPageDown()
+                }
+                .keyboardShortcut(.downArrow, modifiers: [.command, .option])
+                .disabled(focusedNavigationState?.canMoveCurrentPageDown != true)
+
+                Divider()
+
+                Button("Delete Page…", systemImage: "trash", role: .destructive) {
+                    showDeletePageConfirmation = true
+                }
+                .disabled(focusedNavigationState?.currentPage == nil || focusedDocument?.totalPages ?? 0 <= 1)
             }
-            
+
             // Format Menu Commands
             CommandMenu("Format") {
                 Button("Bold", systemImage: "bold") {
@@ -110,7 +147,44 @@ struct MultiScanApp: App {
                 .keyboardShortcut("X", modifiers: [.command, .shift])
                 .disabled(focusedEditableText == nil || focusedEditableText?.hasSelection != true)
             }
-            
+
+            // Image Menu Commands
+            CommandMenu("Image") {
+                Button("Rotate Clockwise", systemImage: "rotate.right") {
+                    if let page = focusedCurrentPage {
+                        page.rotation = (page.rotation + 90) % 360
+                    }
+                }
+                .keyboardShortcut("R", modifiers: [.command])
+                .disabled(focusedCurrentPage == nil)
+
+                Button("Rotate Counterclockwise", systemImage: "rotate.left") {
+                    if let page = focusedCurrentPage {
+                        page.rotation = (page.rotation + 270) % 360
+                    }
+                }
+                .keyboardShortcut("R", modifiers: [.command, .shift])
+                .disabled(focusedCurrentPage == nil)
+
+                Divider()
+
+                Toggle(isOn: Binding(
+                    get: { focusedCurrentPage?.increaseContrast ?? false },
+                    set: { newValue in focusedCurrentPage?.increaseContrast = newValue }
+                )) {
+                    Label("Increase Contrast", systemImage: "circle.lefthalf.filled")
+                }
+                .disabled(focusedCurrentPage == nil)
+
+                Toggle(isOn: Binding(
+                    get: { focusedCurrentPage?.increaseBlackPoint ?? false },
+                    set: { newValue in focusedCurrentPage?.increaseBlackPoint = newValue }
+                )) {
+                    Label("Increase Black Point", systemImage: "circle.bottomhalf.filled")
+                }
+                .disabled(focusedCurrentPage == nil)
+            }
+
             // View Menu Commands
             CommandGroup(after: .sidebar) {
                 Toggle("Show Thumbnails", systemImage: "sidebar.squares.leading", isOn: $showThumbnails)
@@ -156,7 +230,6 @@ struct MultiScanApp: App {
                        systemImage: focusedNavigationState?.isRandomized == true ? "arrow.left.and.line.vertical.and.arrow.right" : "shuffle") {
                     focusedNavigationState?.toggleRandomization()
                 }
-                .keyboardShortcut("R", modifiers: [.command])
                 .disabled(focusedDocument == nil)
 
                 Divider()

@@ -413,6 +413,36 @@
         }
       }
     },
+    "Delete Page %lld?" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eliminar página %lld?"
+          }
+        }
+      }
+    },
+    "Delete Page?" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Eliminar página?"
+          }
+        }
+      }
+    },
+    "Delete Page…" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eliminar página…"
+          }
+        }
+      }
+    },
     "Delete…" : {
       "localizations" : {
         "es-419" : {
@@ -715,6 +745,16 @@
         }
       }
     },
+    "Image" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Imagen"
+          }
+        }
+      }
+    },
     "Import" : {
       "localizations" : {
         "es-419" : {
@@ -752,6 +792,27 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Incluir en divisor"
+          }
+        }
+      }
+    },
+    "Increase Black Point" : {
+      "comment" : "“Black Point” as a term is typically translated",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aumente punto negro"
+          }
+        }
+      }
+    },
+    "Increase Contrast" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aumente el contraste"
           }
         }
       }
@@ -844,6 +905,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Gris medio"
+          }
+        }
+      }
+    },
+    "Move Page Down" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bajar página"
+          }
+        }
+      }
+    },
+    "Move Page Up" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Subir página"
           }
         }
       }
@@ -994,29 +1075,12 @@
       }
     },
     "Page %lld" : {
-      "comment" : "Thumbnail label with page number only (no filename available)",
+      "comment" : "Thumbnail label with page number",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Página %lld"
-          }
-        }
-      }
-    },
-    "Page %lld (%@)" : {
-      "comment" : "Thumbnail label with page number and filename, e.g. 'Page 3 (IMG_0003.HEIC)'",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Page %1$lld (%2$@)"
-          }
-        },
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Página %1$lld (%2$@)"
           }
         }
       }
@@ -1236,6 +1300,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Solo revisados"
+          }
+        }
+      }
+    },
+    "Rotate Clockwise" : {
+      "comment" : "Rotate rightwards",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Girar a la derecha"
+          }
+        }
+      }
+    },
+    "Rotate Counterclockwise" : {
+      "comment" : "Rotate leftwards",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Girar a la izquierda"
           }
         }
       }
@@ -1503,6 +1589,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Panel de texto"
+          }
+        }
+      }
+    },
+    "This will permanently delete the page from your project. This can't be undone." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esto eliminará permanentemente la página de su proyecto. Esta acción no se puede deshacer."
           }
         }
       }

@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import SwiftData
 
 @MainActor
 class NavigationState: ObservableObject {
@@ -26,6 +27,9 @@ class NavigationState: ObservableObject {
 
     /// Attributed text version of the entire document with formatting
     @Published private(set) var fullDocumentAttributedText: AttributedString = AttributedString()
+
+    /// Version counter that increments when page order changes, used to trigger view updates
+    @Published private(set) var pageOrderVersion: Int = 0
 
     // MARK: - Current Page
 
@@ -236,6 +240,72 @@ class NavigationState: ObservableObject {
         currentPage?.isDone.toggle()
     }
 
+    /// Whether the current page can be moved up
+    var canMoveCurrentPageUp: Bool {
+        guard let page = currentPage, let document = selectedDocument else { return false }
+        return document.pages.contains { $0.pageNumber == page.pageNumber - 1 }
+    }
+
+    /// Whether the current page can be moved down
+    var canMoveCurrentPageDown: Bool {
+        guard let page = currentPage, let document = selectedDocument else { return false }
+        return document.pages.contains { $0.pageNumber == page.pageNumber + 1 }
+    }
+
+    /// Move current page up by swapping with adjacent page
+    func moveCurrentPageUp() {
+        guard let page = currentPage,
+              let document = selectedDocument,
+              let adjacent = document.pages.first(where: { $0.pageNumber == page.pageNumber - 1 }) else { return }
+        let temp = page.pageNumber
+        page.pageNumber = adjacent.pageNumber
+        adjacent.pageNumber = temp
+        refreshPageOrder()
+    }
+
+    /// Move current page down by swapping with adjacent page
+    func moveCurrentPageDown() {
+        guard let page = currentPage,
+              let document = selectedDocument,
+              let adjacent = document.pages.first(where: { $0.pageNumber == page.pageNumber + 1 }) else { return }
+        let temp = page.pageNumber
+        page.pageNumber = adjacent.pageNumber
+        adjacent.pageNumber = temp
+        refreshPageOrder()
+    }
+
+    /// Delete the current page from the document
+    func deleteCurrentPage(modelContext: ModelContext) {
+        guard let page = currentPage,
+              let document = selectedDocument else { return }
+
+        let deletedPageNumber = page.pageNumber
+
+        // Decrement pageNumber for all pages after the deleted one
+        for otherPage in document.pages where otherPage.pageNumber > deletedPageNumber {
+            otherPage.pageNumber -= 1
+        }
+
+        // Remove from document's pages array
+        document.pages.removeAll { $0.persistentModelID == page.persistentModelID }
+        document.totalPages -= 1
+        document.recalculateStorageSize()
+
+        // Delete the page from the model context
+        modelContext.delete(page)
+
+        // Refresh navigation state
+        refreshPageOrder()
+
+        // Navigate to an adjacent page
+        let newPageNumber = min(deletedPageNumber, document.totalPages)
+        if newPageNumber > 0 {
+            goToPage(pageNumber: newPageNumber)
+        } else {
+            currentPageNumber = nil
+        }
+    }
+
     var donePageCount: Int {
         selectedDocument?.pages.filter { $0.isDone }.count ?? 0
     }
@@ -273,5 +343,15 @@ class NavigationState: ObservableObject {
             attributed.append(page.richText)
         }
         fullDocumentAttributedText = attributed
+    }
+
+    /// Refreshes page ordering arrays after pages have been reordered
+    /// Call this after swapping page numbers to ensure navigation stays consistent
+    func refreshPageOrder() {
+        guard let document = selectedDocument else { return }
+        originalOrder = document.pages.map { $0.pageNumber }.sorted()
+        shuffledOrder = originalOrder.shuffled()
+        rebuildTextCache()
+        pageOrderVersion += 1
     }
 }

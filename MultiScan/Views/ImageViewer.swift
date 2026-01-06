@@ -72,6 +72,8 @@ struct ImageViewer: View {
                         image
                             .resizable()
                             .aspectRatio(contentMode: .fit)
+                            .contrast(navigationState.currentPage?.increaseContrast == true ? 1.3 : 1.0)
+                            .brightness(navigationState.currentPage?.increaseBlackPoint == true ? -0.1 : 0.0)
                             .frame(
                                 width: fittedImageSize(in: geometry.size).width * scale,
                                 height: fittedImageSize(in: geometry.size).height * scale
@@ -121,6 +123,9 @@ struct ImageViewer: View {
         }
         .onChange(of: navigationState.currentPage) { _, newPage in
             loadImage(for: newPage)
+        }
+        .onChange(of: navigationState.currentPage?.rotation) { _, _ in
+            reloadImageForRotation()
         }
         .onAppear {
             loadImage(for: navigationState.currentPage)
@@ -204,10 +209,12 @@ struct ImageViewer: View {
             return
         }
 
+        let rotation = page.rotation
+
         Task {
-            // Use cross-platform helper to create SwiftUI Image from Data
-            if let image = PlatformImage.from(data: imageData) {
-                let size = PlatformImage.dimensions(of: imageData) ?? .zero
+            // Use cross-platform helper to create SwiftUI Image from Data with rotation
+            if let image = PlatformImage.from(data: imageData, userRotation: rotation) {
+                let size = PlatformImage.dimensions(of: imageData, userRotation: rotation) ?? .zero
                 await MainActor.run {
                     self.displayImage = image
                     self.imageSize = size
@@ -221,5 +228,10 @@ struct ImageViewer: View {
                 }
             }
         }
+    }
+
+    /// Reload image when rotation changes
+    private func reloadImageForRotation() {
+        loadImage(for: navigationState.currentPage)
     }
 }

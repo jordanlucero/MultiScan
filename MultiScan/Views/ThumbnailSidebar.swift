@@ -86,6 +86,8 @@ struct ThumbnailSidebar: View {
     }
 
     var filteredPages: [Page] {
+        // Reference pageOrderVersion to trigger re-computation when page order changes
+        _ = navigationState.pageOrderVersion
         let sortedPages = document.pages.sorted(by: { $0.pageNumber < $1.pageNumber })
 
         // Apply filter option first
@@ -132,20 +134,24 @@ struct ThumbnailSidebar: View {
                         ThumbnailView(
                             page: page,
                             document: document,
-                            isSelected: selectedPageNumber == page.pageNumber
+                            isSelected: selectedPageNumber == page.pageNumber,
+                            navigationState: navigationState
                         ) {
                             navigationState.goToPage(pageNumber: page.pageNumber)
                             selectedPageNumber = page.pageNumber
                         }
-                        .id(page.pageNumber)
+                        .id(page.persistentModelID)  // Use stable model ID for animation
                     }
                 }
                 .padding()
+                .animation(.easeInOut(duration: 0.3), value: navigationState.pageOrderVersion)
             }
             .onChange(of: selectedPageNumber) { _, newValue in
-                if let pageNumber = newValue {
+                // Scroll to page by finding its stable ID
+                if let pageNumber = newValue,
+                   let page = filteredPages.first(where: { $0.pageNumber == pageNumber }) {
                     withAnimation {
-                        proxy.scrollTo(pageNumber, anchor: .center)
+                        proxy.scrollTo(page.persistentModelID, anchor: .center)
                     }
                 }
             }
@@ -224,23 +230,81 @@ struct ThumbnailView: View {
     let page: Page
     let document: Document
     let isSelected: Bool
+    var navigationState: NavigationState?
     let action: () -> Void
 
-    /// Cross-platform thumbnail using PlatformImage helper
+    @Environment(\.modelContext) private var modelContext
+    @State private var showDeleteConfirmation = false
+
+    /// Cross-platform thumbnail using PlatformImage helper with user rotation applied
     var thumbnail: Image? {
         guard let data = page.thumbnailData else { return nil }
-        return PlatformImage.from(data: data)
+        return PlatformImage.from(data: data, userRotation: page.rotation)
     }
 
-    /// Formatted page label: "Page X (filename)" or "Page X" if no filename stored
-    var pageLabel: String {
-        let pageNumber = page.pageNumber
-        if let fileName = page.originalFileName {
-            return String(localized: "Page \(pageNumber) (\(fileName))",
-                          comment: "Thumbnail label with page number and filename, e.g. 'Page 3 (IMG_0003.HEIC)'")
+    // MARK: - Reordering Helpers
+
+    /// Whether this page can be moved up (has an adjacent page with pageNumber - 1)
+    private var canMoveUp: Bool {
+        document.pages.contains { $0.pageNumber == page.pageNumber - 1 }
+    }
+
+    /// Whether this page can be moved down (has an adjacent page with pageNumber + 1)
+    private var canMoveDown: Bool {
+        document.pages.contains { $0.pageNumber == page.pageNumber + 1 }
+    }
+
+    /// Move this page up by swapping pageNumbers with adjacent page
+    private func movePageUp() {
+        guard let adjacent = document.pages.first(where: { $0.pageNumber == page.pageNumber - 1 }) else { return }
+        let temp = page.pageNumber
+        page.pageNumber = adjacent.pageNumber
+        adjacent.pageNumber = temp
+        navigationState?.refreshPageOrder()
+    }
+
+    /// Move this page down by swapping pageNumbers with adjacent page
+    private func movePageDown() {
+        guard let adjacent = document.pages.first(where: { $0.pageNumber == page.pageNumber + 1 }) else { return }
+        let temp = page.pageNumber
+        page.pageNumber = adjacent.pageNumber
+        adjacent.pageNumber = temp
+        navigationState?.refreshPageOrder()
+    }
+
+    /// Delete this page from the document
+    private func deletePage() {
+        let deletedPageNumber = page.pageNumber
+
+        // Decrement pageNumber for all pages after the deleted one
+        for otherPage in document.pages where otherPage.pageNumber > deletedPageNumber {
+            otherPage.pageNumber -= 1
         }
-        return String(localized: "Page \(pageNumber)",
-                      comment: "Thumbnail label with page number only (no filename available)")
+
+        // Remove from document's pages array
+        document.pages.removeAll { $0.persistentModelID == page.persistentModelID }
+        document.totalPages -= 1
+        document.recalculateStorageSize()
+
+        // Delete the page from the model context
+        modelContext.delete(page)
+
+        // Refresh navigation state
+        navigationState?.refreshPageOrder()
+
+        // If we deleted the current page, navigate to an adjacent page
+        if navigationState?.currentPageNumber == deletedPageNumber {
+            let newPageNumber = min(deletedPageNumber, document.totalPages)
+            if newPageNumber > 0 {
+                navigationState?.goToPage(pageNumber: newPageNumber)
+            }
+        }
+    }
+
+    /// Formatted page label: "Page X"
+    var pageLabel: String {
+        String(localized: "Page \(page.pageNumber)",
+               comment: "Thumbnail label with page number")
     }
 
     var body: some View {
@@ -258,6 +322,8 @@ struct ThumbnailView: View {
                         thumbnail
                             .resizable()
                             .aspectRatio(contentMode: .fit)
+                            .contrast(page.increaseContrast ? 1.3 : 1.0)
+                            .brightness(page.increaseBlackPoint ? -0.1 : 0.0)
                             .padding(4)
                     } else {
                         // Placeholder for pages without thumbnails
@@ -294,6 +360,89 @@ struct ThumbnailView: View {
                 : String(localized: "Not reviewed", comment: "Accessibility value for unreviewed page"))
             .accessibilityAddTraits(isSelected ? .isSelected : [])
             .accessibilityHint(String(localized: "Opens this page", comment: "Accessibility hint for page thumbnail button"))
+            .contextMenu {
+                // MARK: - Page Info Header
+                Section {
+                    Text("Page \(page.pageNumber) of \(document.totalPages)")
+                    if let filename = page.originalFileName {
+                        Text(filename)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                // MARK: - Rotation Section
+                Section {
+                    Button {
+                        page.rotation = (page.rotation + 90) % 360
+                    } label: {
+                        Label("Rotate Clockwise", systemImage: "rotate.right")
+                    }
+
+                    Button {
+                        page.rotation = (page.rotation + 270) % 360
+                    } label: {
+                        Label("Rotate Counterclockwise", systemImage: "rotate.left")
+                    }
+                }
+
+                // MARK: - Adjustments Section
+                Section {
+                    Toggle(isOn: Binding(
+                        get: { page.increaseContrast },
+                        set: { page.increaseContrast = $0 }
+                    )) {
+                        Label("Increase Contrast", systemImage: "circle.lefthalf.filled")
+                    }
+
+                    Toggle(isOn: Binding(
+                        get: { page.increaseBlackPoint },
+                        set: { page.increaseBlackPoint = $0 }
+                    )) {
+                        Label("Increase Black Point", systemImage: "circle.bottomhalf.filled")
+                    }
+                }
+
+                // MARK: - Reordering Section
+                Section {
+                    Button {
+                        movePageUp()
+                    } label: {
+                        Label("Move Page Up", systemImage: "arrow.up")
+                    }
+                    .disabled(!canMoveUp)
+
+                    Button {
+                        movePageDown()
+                    } label: {
+                        Label("Move Page Down", systemImage: "arrow.down")
+                    }
+                    .disabled(!canMoveDown)
+                }
+
+                // MARK: - Delete Section
+                Section {
+                    Button(role: .destructive) {
+                        showDeleteConfirmation = true
+                    } label: {
+                        Label("Delete Page…", systemImage: "trash")
+                    }
+                    .disabled(document.totalPages <= 1)
+                }
+            }
+            .confirmationDialog(
+                "Delete Page \(page.pageNumber)?",
+                isPresented: $showDeleteConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive) {
+                    withAnimation {
+                        deletePage()
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This will permanently delete the page from your project. This can't be undone.")
+            }
 
             Text(pageLabel)
                 .font(.caption)

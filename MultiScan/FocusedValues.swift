@@ -29,6 +29,10 @@ struct FocusedShowAddFromFilesKey: FocusedValueKey {
     typealias Value = Binding<Bool>
 }
 
+struct FocusedCurrentPageKey: FocusedValueKey {
+    typealias Value = Page
+}
+
 extension FocusedValues {
     var document: Document? {
         get { self[FocusedDocumentKey.self] }
@@ -63,5 +67,10 @@ extension FocusedValues {
     var showAddFromFiles: Binding<Bool>? {
         get { self[FocusedShowAddFromFilesKey.self] }
         set { self[FocusedShowAddFromFilesKey.self] = newValue }
+    }
+
+    var currentPage: Page? {
+        get { self[FocusedCurrentPageKey.self] }
+        set { self[FocusedCurrentPageKey.self] = newValue }
     }
 }

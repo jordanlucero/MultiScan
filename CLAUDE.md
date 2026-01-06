@@ -123,3 +123,104 @@ To implement document search:
 2. Use `String.range(of:)` for matching (AVOID `NSRegularExpression` TO AVOID APPKIT)
 3. Map character positions back to page numbers for navigation
 4. Consider adding a search index for large documents (100+ pages)
+
+## Image Display & Transformation Architecture
+
+Images are stored as `Data` with `@Attribute(.externalStorage)` in the Page model. All transformations are **non-destructive** - stored as Page properties and applied at display time.
+
+### Page Image Properties
+```swift
+var rotation: Int = 0              // Degrees: 0, 90, 180, 270
+var increaseContrast: Bool = false // Applies .contrast(1.3) modifier
+var increaseBlackPoint: Bool = false // Applies .brightness(-0.1) modifier
+```
+
+### PlatformImage Helper (`Services/PlatformImage.swift`)
+Cross-platform image loading that combines EXIF orientation with user rotation:
+- `from(data:userRotation:)` - Creates SwiftUI Image with combined orientation
+- `dimensions(of:userRotation:)` - Returns apparent dimensions accounting for rotation
+- `combinedOrientation(exif:userRotation:)` - Lookup table merging EXIF + user rotation
+
+### Display Pipeline
+1. `PlatformImage.from(data:userRotation:)` creates rotated SwiftUI Image
+2. `.contrast()` and `.brightness()` modifiers applied based on Page properties
+3. Same transforms applied to both `ImageViewer` (main view) and `ThumbnailView` (sidebar)
+
+### Rotation Change Detection
+`ImageViewer` observes `navigationState.currentPage?.rotation` via `.onChange()` and reloads the image when rotation changes.
+
+## Page Reordering
+
+Pages are ordered by their `pageNumber: Int` property (NOT array indices). All views sort dynamically by pageNumber.
+
+### Reordering Mechanism
+- **Move Up**: Swap pageNumbers with page at `pageNumber - 1`
+- **Move Down**: Swap pageNumbers with page at `pageNumber + 1`
+- Filter-safe: Operations work on actual document order, not filtered view order
+
+### NavigationState Methods
+```swift
+var canMoveCurrentPageUp: Bool
+var canMoveCurrentPageDown: Bool
+func moveCurrentPageUp()
+func moveCurrentPageDown()
+func refreshPageOrder()  // Call after any reorder to update internal arrays
+```
+
+### Animation
+- `NavigationState.pageOrderVersion` increments on reorder
+- `ThumbnailSidebar` uses `.animation(.easeInOut, value: pageOrderVersion)`
+- Pages use `persistentModelID` for stable identity (enables smooth position animation)
+
+## Page Deletion
+
+### Delete Flow
+1. Decrement `pageNumber` for all pages after deleted page
+2. Remove from `document.pages` array
+3. Update `document.totalPages`
+4. Call `modelContext.delete(page)`
+5. Refresh navigation state
+6. Navigate to adjacent page if deleted page was current
+
+### Safeguards
+- Confirmation dialog required before deletion
+- Cannot delete if document has only one page
+- Warning that deletion is permanent (not moved to trash)
+
+### NavigationState Method
+```swift
+func deleteCurrentPage(modelContext: ModelContext)
+```
+
+## Thumbnail Context Menu
+
+Right-click on any thumbnail in `ThumbnailSidebar` shows context menu with:
+
+| Section | Options |
+|---------|---------|
+| **Header** | "Page X of Y" + filename (non-interactive) |
+| **Rotation** | Rotate Clockwise, Rotate Counterclockwise |
+| **Adjustments** | Increase Contrast (toggle), Increase Black Point (toggle) |
+| **Reordering** | Move Up, Move Down |
+| **Delete** | Delete Page… (with confirmation) |
+
+## Menu Bar Commands
+
+### Image Menu (new)
+| Command | Shortcut |
+|---------|----------|
+| Rotate Clockwise | ⌘R |
+| Rotate Counterclockwise | ⌘⇧R |
+| Increase Contrast | (toggle) |
+| Increase Black Point | (toggle) |
+
+### Edit Menu (page operations)
+| Command | Shortcut |
+|---------|----------|
+| Move Page Up | ⌘⌥↑ |
+| Move Page Down | ⌘⌥↓ |
+| Delete Page… | (none) |
+
+### FocusedValues for Menu Bar
+- `currentPage: Page?` - Exposed from ReviewView for menu commands
+- Menu commands use `focusedNavigationState` for move/delete operations

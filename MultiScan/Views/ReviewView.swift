@@ -87,6 +87,7 @@ struct ReviewView: View {
         splitView
             .focusedSceneValue(\.document, document)
             .focusedSceneValue(\.navigationState, navigationState)
+            .focusedSceneValue(\.currentPage, navigationState.currentPage)
             .focusedSceneValue(\.showExportPanel, $showExportPanel)
             .focusedSceneValue(\.fullDocumentText, navigationState.fullDocumentPlainText)
             .focusedSceneValue(\.showAddFromPhotos, $showAddFromPhotos)

@@ -20,6 +20,15 @@ final class Page {
     var boundingBoxesData: Data? // Encoded array of CGRect from VisionKit
     var lastModified: Date = Date()
 
+    /// User rotation in degrees (0, 90, 180, 270) - non-destructive, applied at display time
+    var rotation: Int = 0
+
+    /// Toggle for increased contrast display adjustment
+    var increaseContrast: Bool = false
+
+    /// Toggle for increased black point display adjustment
+    var increaseBlackPoint: Bool = false
+
     /// Original filename for display purposes
     var originalFileName: String?
 

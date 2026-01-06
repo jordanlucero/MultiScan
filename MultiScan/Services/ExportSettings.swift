@@ -53,43 +53,68 @@ enum SeparatorStyle: String, CaseIterable, Codable {
     }
 }
 
-/// Observable wrapper for export settings with AppStorage persistence
+/// Observable wrapper for export settings with UserDefaults persistence
 @MainActor
 @Observable
 final class ExportSettings {
-    // Store raw strings for @AppStorage compatibility
-    @ObservationIgnored
-    @AppStorage("exportFlowStyle")
-    private var flowStyleRaw: String = ExportFlowStyle.lineBreak.rawValue
-
-    @ObservationIgnored
-    @AppStorage("exportIncludePageNumber")
-    var includePageNumber: Bool = true
-
-    @ObservationIgnored
-    @AppStorage("exportIncludeFilename")
-    var includeFilename: Bool = false
-
-    @ObservationIgnored
-    @AppStorage("exportIncludeStatistics")
-    var includeStatistics: Bool = false
-
-    @ObservationIgnored
-    @AppStorage("exportSeparatorStyle")
-    private var separatorStyleRaw: String = SeparatorStyle.singleLine.rawValue
+    private static let flowStyleKey = "exportFlowStyle"
+    private static let includePageNumberKey = "exportIncludePageNumber"
+    private static let includeFilenameKey = "exportIncludeFilename"
+    private static let includeStatisticsKey = "exportIncludeStatistics"
+    private static let separatorStyleKey = "exportSeparatorStyle"
 
     var flowStyle: ExportFlowStyle {
-        get { ExportFlowStyle(rawValue: flowStyleRaw) ?? .lineBreak }
-        set { flowStyleRaw = newValue.rawValue }
+        didSet { UserDefaults.standard.set(flowStyle.rawValue, forKey: Self.flowStyleKey) }
+    }
+
+    var includePageNumber: Bool {
+        didSet { UserDefaults.standard.set(includePageNumber, forKey: Self.includePageNumberKey) }
+    }
+
+    var includeFilename: Bool {
+        didSet { UserDefaults.standard.set(includeFilename, forKey: Self.includeFilenameKey) }
+    }
+
+    var includeStatistics: Bool {
+        didSet { UserDefaults.standard.set(includeStatistics, forKey: Self.includeStatisticsKey) }
     }
 
     var separatorStyle: SeparatorStyle {
-        get { SeparatorStyle(rawValue: separatorStyleRaw) ?? .singleLine }
-        set { separatorStyleRaw = newValue.rawValue }
+        didSet { UserDefaults.standard.set(separatorStyle.rawValue, forKey: Self.separatorStyleKey) }
     }
 
     /// Whether visual separation options should be enabled
     var visualSeparationEnabled: Bool {
         flowStyle == .visualSeparation
+    }
+
+    init() {
+        let defaults = UserDefaults.standard
+
+        // Load flow style
+        if let raw = defaults.string(forKey: Self.flowStyleKey),
+           let style = ExportFlowStyle(rawValue: raw) {
+            self.flowStyle = style
+        } else {
+            self.flowStyle = .lineBreak
+        }
+
+        // Load booleans (check if key exists to distinguish false from unset)
+        if defaults.object(forKey: Self.includePageNumberKey) != nil {
+            self.includePageNumber = defaults.bool(forKey: Self.includePageNumberKey)
+        } else {
+            self.includePageNumber = true
+        }
+
+        self.includeFilename = defaults.bool(forKey: Self.includeFilenameKey)
+        self.includeStatistics = defaults.bool(forKey: Self.includeStatisticsKey)
+
+        // Load separator style
+        if let raw = defaults.string(forKey: Self.separatorStyleKey),
+           let style = SeparatorStyle(rawValue: raw) {
+            self.separatorStyle = style
+        } else {
+            self.separatorStyle = .singleLine
+        }
     }
 }

@@ -44,6 +44,10 @@ final class Page {
     @Transient
     private var richTextChanged: Bool = false
 
+    /// Flag to prevent duplicate observer registration
+    @Transient
+    private var observerRegistered: Bool = false
+
     /// The rich text content as an AttributedString
     @Transient
     lazy var richText: AttributedString = initializeRichText() {
@@ -56,6 +60,11 @@ final class Page {
     /// Plain text accessor for convenience (e.g., statistics)
     var plainText: String {
         String(richText.characters)
+    }
+
+    /// Internal accessor for raw rich text data (for async export without triggering lazy init)
+    var rawRichTextData: Data {
+        richTextData
     }
 
     init(pageNumber: Int, text: String, imageData: Data?, originalFileName: String? = nil, boundingBoxesData: Data? = nil) {
@@ -96,6 +105,9 @@ final class Page {
 
     /// Set up observer to serialize rich text before SwiftData saves
     private func setupSaveObserver() {
+        guard !observerRegistered else { return }
+        observerRegistered = true
+
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(willSave),

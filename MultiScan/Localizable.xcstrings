@@ -12,16 +12,6 @@
       },
       "shouldTranslate" : false
     },
-    "[Page 1 of 5 | filename.heic | 245 words]" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "[Página 1 de 5 | nombre_de_archivo.heic | 245 palabras]"
-          }
-        }
-      }
-    },
     "%@, %lld of %lld pages visible" : {
       "localizations" : {
         "en" : {
@@ -119,6 +109,7 @@
       }
     },
     "%lld words, %lld characters" : {
+      "comment" : "Word and character count in export separator",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -178,22 +169,12 @@
         }
       }
     },
-    "Add dual line breaks between pages" : {
+    "Add visual separation" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Agregar saltos de línea dobles entre páginas"
-          }
-        }
-      }
-    },
-    "Add identifying information between pages" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Agregar información de identificación entre páginas"
+            "value" : "Agregar separación visual"
           }
         }
       }
@@ -473,16 +454,6 @@
         }
       }
     },
-    "Each detail on its own line" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cada detalle en su propia línea"
-          }
-        }
-      }
-    },
     "Emoji" : {
       "localizations" : {
         "es-419" : {
@@ -725,22 +696,12 @@
         }
       }
     },
-    "Horizontal line of hyphens" : {
+    "Hyphenated Divider" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Línea horizontal de guiones"
-          }
-        }
-      }
-    },
-    "Hyphen Divider" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Divisor de guiones"
+            "value" : "Divisor con guiones"
           }
         }
       }
@@ -786,16 +747,6 @@
         }
       }
     },
-    "Include in Separator" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Incluir en divisor"
-          }
-        }
-      }
-    },
     "Increase Black Point" : {
       "comment" : "“Black Point” as a term is typically translated",
       "localizations" : {
@@ -813,16 +764,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aumente el contraste"
-          }
-        }
-      }
-    },
-    "Inline" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "En línea"
           }
         }
       }
@@ -925,16 +866,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Subir página"
-          }
-        }
-      }
-    },
-    "Multiple Lines" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Múltiples líneas"
           }
         }
       }
@@ -1086,6 +1017,7 @@
       }
     },
     "Page %lld of %lld" : {
+      "comment" : "Page number indicator in export separator",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1131,16 +1063,6 @@
         }
       }
     },
-    "Page Separation" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Divisor de páginas"
-          }
-        }
-      }
-    },
     "Page Text" : {
       "localizations" : {
         "es-419" : {
@@ -1171,16 +1093,6 @@
         }
       }
     },
-    "Pages flow continuously without breaks" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Las páginas fluyen de forma continua sin interrupciones"
-          }
-        }
-      }
-    },
     "Photo %lld" : {
       "comment" : "Fallback filename for imported photo",
       "localizations" : {
@@ -1188,6 +1100,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Foto %lld"
+          }
+        }
+      }
+    },
+    "Preparing export…" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preparando la exportación…"
           }
         }
       }
@@ -1356,6 +1278,16 @@
         }
       }
     },
+    "Separator Mods" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adiciones de separadores"
+          }
+        }
+      }
+    },
     "Separator Style" : {
       "localizations" : {
         "es-419" : {
@@ -1483,16 +1415,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orden aleatorio"
-          }
-        }
-      }
-    },
-    "Single Line" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Línea única"
           }
         }
       }
@@ -1669,16 +1591,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Visor"
-          }
-        }
-      }
-    },
-    "Visual Separation" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Divisor visual"
           }
         }
       }

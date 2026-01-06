@@ -2,53 +2,20 @@
 //  ExportSettings.swift
 //  MultiScan
 //
-//  Settings for text export with @AppStorage persistence.
+//  Settings for text export with UserDefaults persistence.
 //
 
 import SwiftUI
 
-/// How pages should flow together in the export
-enum ExportFlowStyle: String, CaseIterable, Codable {
-    case inline           // No separation between pages
-    case lineBreak        // Double line break between pages (default)
-    case visualSeparation // Custom separators with metadata
-
-    var label: LocalizedStringResource {
-        switch self {
-        case .inline: "Inline"
-        case .lineBreak: "Line Break"
-        case .visualSeparation: "Visual Separation"
-        }
-    }
-
-    var description: LocalizedStringResource {
-        switch self {
-        case .inline: "Pages flow continuously without breaks"
-        case .lineBreak: "Add dual line breaks between pages"
-        case .visualSeparation: "Add identifying information between pages"
-        }
-    }
-}
-
-/// Style for the visual separator between pages
+/// Style for visual separators between pages
 enum SeparatorStyle: String, CaseIterable, Codable {
-    case singleLine    // All metadata on one line with pipes
-    case multipleLines // Metadata on separate lines
-    case hyphenLine    // Row of hyphens as visual divider
+    case lineBreak         // Double line break between pages
+    case hyphenatedDivider // Row of hyphens as visual divider
 
     var label: LocalizedStringResource {
         switch self {
-        case .singleLine: "Single Line"
-        case .multipleLines: "Multiple Lines"
-        case .hyphenLine: "Hyphen Divider"
-        }
-    }
-
-    var description: LocalizedStringResource {
-        switch self {
-        case .singleLine: "[Page 1 of 5 | filename.heic | 245 words]"
-        case .multipleLines: "Each detail on its own line"
-        case .hyphenLine: "Horizontal line of hyphens"
+        case .lineBreak: "Line Break"
+        case .hyphenatedDivider: "Hyphenated Divider"
         }
     }
 }
@@ -57,49 +24,52 @@ enum SeparatorStyle: String, CaseIterable, Codable {
 @MainActor
 @Observable
 final class ExportSettings {
-    private static let flowStyleKey = "exportFlowStyle"
+    private static let createVisualSeparationKey = "exportCreateVisualSeparation"
+    private static let separatorStyleKey = "exportSeparatorStyle"
     private static let includePageNumberKey = "exportIncludePageNumber"
     private static let includeFilenameKey = "exportIncludeFilename"
     private static let includeStatisticsKey = "exportIncludeStatistics"
-    private static let separatorStyleKey = "exportSeparatorStyle"
 
-    var flowStyle: ExportFlowStyle {
-        didSet { UserDefaults.standard.set(flowStyle.rawValue, forKey: Self.flowStyleKey) }
+    /// Whether to add visual separation between pages (default: false = inline)
+    var createVisualSeparation: Bool {
+        didSet { UserDefaults.standard.set(createVisualSeparation, forKey: Self.createVisualSeparationKey) }
     }
 
-    var includePageNumber: Bool {
-        didSet { UserDefaults.standard.set(includePageNumber, forKey: Self.includePageNumberKey) }
-    }
-
-    var includeFilename: Bool {
-        didSet { UserDefaults.standard.set(includeFilename, forKey: Self.includeFilenameKey) }
-    }
-
-    var includeStatistics: Bool {
-        didSet { UserDefaults.standard.set(includeStatistics, forKey: Self.includeStatisticsKey) }
-    }
-
+    /// Style of separator when visual separation is enabled
     var separatorStyle: SeparatorStyle {
         didSet { UserDefaults.standard.set(separatorStyle.rawValue, forKey: Self.separatorStyleKey) }
     }
 
-    /// Whether visual separation options should be enabled
-    var visualSeparationEnabled: Bool {
-        flowStyle == .visualSeparation
+    /// Include page number in separator
+    var includePageNumber: Bool {
+        didSet { UserDefaults.standard.set(includePageNumber, forKey: Self.includePageNumberKey) }
+    }
+
+    /// Include filename in separator
+    var includeFilename: Bool {
+        didSet { UserDefaults.standard.set(includeFilename, forKey: Self.includeFilenameKey) }
+    }
+
+    /// Include word/character statistics in separator
+    var includeStatistics: Bool {
+        didSet { UserDefaults.standard.set(includeStatistics, forKey: Self.includeStatisticsKey) }
     }
 
     init() {
         let defaults = UserDefaults.standard
 
-        // Load flow style
-        if let raw = defaults.string(forKey: Self.flowStyleKey),
-           let style = ExportFlowStyle(rawValue: raw) {
-            self.flowStyle = style
+        // Load visual separation toggle (default: false = inline)
+        self.createVisualSeparation = defaults.bool(forKey: Self.createVisualSeparationKey)
+
+        // Load separator style (default: lineBreak)
+        if let raw = defaults.string(forKey: Self.separatorStyleKey),
+           let style = SeparatorStyle(rawValue: raw) {
+            self.separatorStyle = style
         } else {
-            self.flowStyle = .lineBreak
+            self.separatorStyle = .lineBreak
         }
 
-        // Load booleans (check if key exists to distinguish false from unset)
+        // Load include options (page number defaults to true)
         if defaults.object(forKey: Self.includePageNumberKey) != nil {
             self.includePageNumber = defaults.bool(forKey: Self.includePageNumberKey)
         } else {
@@ -108,13 +78,5 @@ final class ExportSettings {
 
         self.includeFilename = defaults.bool(forKey: Self.includeFilenameKey)
         self.includeStatistics = defaults.bool(forKey: Self.includeStatisticsKey)
-
-        // Load separator style
-        if let raw = defaults.string(forKey: Self.separatorStyleKey),
-           let style = SeparatorStyle(rawValue: raw) {
-            self.separatorStyle = style
-        } else {
-            self.separatorStyle = .singleLine
-        }
     }
 }

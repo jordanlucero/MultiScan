@@ -224,3 +224,61 @@ Right-click on any thumbnail in `ThumbnailSidebar` shows context menu with:
 ### FocusedValues for Menu Bar
 - `currentPage: Page?` - Exposed from ReviewView for menu commands
 - Menu commands use `focusedNavigationState` for move/delete operations
+
+## Text Export Architecture
+
+The export system combines all page text into a single document with configurable separators. Optimized for large documents (500+ pages).
+
+### ExportSettings (`Services/ExportSettings.swift`)
+`@Observable` class with UserDefaults persistence:
+```swift
+var createVisualSeparation: Bool  // false = inline (pages flow together)
+var separatorStyle: SeparatorStyle  // .lineBreak or .hyphenatedDivider
+var includePageNumber: Bool
+var includeFilename: Bool
+var includeStatistics: Bool
+```
+
+**Important**: Uses manual UserDefaults sync with `didSet` (not `@AppStorage`) to ensure `@Observable` reactivity works correctly.
+
+### TextExporter (`Services/TextExporter.swift`)
+Two export methods:
+- `buildCombinedText()` - Synchronous, for small documents
+- `buildCombinedTextAsync()` - Async with parallel processing, for large documents
+
+### Performance Optimizations
+The async pipeline addresses several bottlenecks for large documents:
+
+| Optimization | Implementation |
+|--------------|----------------|
+| Parallel JSON decoding | `TaskGroup` decodes page rich text off main thread |
+| O(n) string building | Uses `NSMutableAttributedString` instead of repeated `AttributedString.append()` |
+| Settings snapshot | `ExportSettingsSnapshot` struct captures settings for thread-safe access |
+| Debounced preview | 300ms delay prevents rapid rebuilds when clicking options |
+| Duplicate observer guard | `observerRegistered` flag in Page prevents multiple notification registrations |
+
+### ExportPanelView (`Views/ExportPanelView.swift`)
+Print-panel-style sheet with live preview:
+- Left pane: Scrollable preview of exported text
+- Right pane: Options (visual separation toggle, separator style, mods)
+- Shows spinner during async export
+- Debounces setting changes by 300ms
+
+### Separator Logic
+- **Inline** (createVisualSeparation = false): Single space between pages
+- **Line Break**: Double newline + optional `[Page X of Y | filename | stats]`
+- **Hyphenated Divider**: 40 hyphens + metadata below
+
+First page special case: Line break style with no mods returns empty separator (no leading whitespace).
+
+### Localization
+Exported text respects user's system language via `String(localized:)`:
+```swift
+// Automatically uses Spanish for es-419 users:
+// "Page 1 of 5" → "Página 1 de 5"
+// "245 words, 1234 characters" → "245 palabras, 1234 caracteres"
+String(localized: "Page \(pageNumber) of \(totalPages)")
+String(localized: "\(words) words, \(chars) characters")
+```
+
+Translations stored in `Localizable.xcstrings` (Xcode String Catalog format).

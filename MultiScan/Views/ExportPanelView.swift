@@ -13,6 +13,9 @@ struct ExportPanelView: View {
 
     @State private var settings = ExportSettings()
     @State private var previewText: AttributedString = AttributedString()
+    @State private var isLoading = false
+    @State private var exportTask: Task<Void, Never>?
+    @State private var debounceTask: Task<Void, Never>?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -27,12 +30,16 @@ struct ExportPanelView: View {
                 .frame(width: 280)
         }
         .frame(minWidth: 700, minHeight: 500)
-        .onAppear(perform: updatePreview)
-        .onChange(of: settings.flowStyle) { updatePreview() }
-        .onChange(of: settings.includePageNumber) { updatePreview() }
-        .onChange(of: settings.includeFilename) { updatePreview() }
-        .onChange(of: settings.includeStatistics) { updatePreview() }
-        .onChange(of: settings.separatorStyle) { updatePreview() }
+        .onAppear { schedulePreviewUpdate(immediate: true) }
+        .onChange(of: settings.createVisualSeparation) { schedulePreviewUpdate() }
+        .onChange(of: settings.separatorStyle) { schedulePreviewUpdate() }
+        .onChange(of: settings.includePageNumber) { schedulePreviewUpdate() }
+        .onChange(of: settings.includeFilename) { schedulePreviewUpdate() }
+        .onChange(of: settings.includeStatistics) { schedulePreviewUpdate() }
+        .onDisappear {
+            exportTask?.cancel()
+            debounceTask?.cancel()
+        }
     }
 
     // MARK: - Preview Pane (Left)
@@ -43,6 +50,11 @@ struct ExportPanelView: View {
                 Text("Preview")
                     .font(.headline)
                 Spacer()
+                if isLoading {
+                    ProgressView()
+                        .scaleEffect(0.6)
+                        .frame(width: 16, height: 16)
+                }
                 Text(pages.count == 1 ? "1 page" : "\(pages.count) pages", comment: "Page count in export panel")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -51,14 +63,25 @@ struct ExportPanelView: View {
 
             Divider()
 
-            ScrollView {
-                Text(displayPreviewText)
-                    .font(.system(.body))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
+            ZStack {
+                ScrollView {
+                    Text(displayPreviewText)
+                        .font(.system(.body))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                }
+                .background(Color(nsColor: .textBackgroundColor))
+
+                if isLoading && previewText.characters.isEmpty {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                        Text("Preparing export…")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
-            .background(Color(nsColor: .textBackgroundColor))
         }
     }
 
@@ -75,35 +98,10 @@ struct ExportPanelView: View {
             Text("Export Options")
                 .font(.headline)
 
-            // Flow style picker
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Page Separation")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+            // Visual separation toggle
+            Toggle("Add visual separation", isOn: $settings.createVisualSeparation)
 
-                Picker("", selection: $settings.flowStyle) {
-                    ForEach(ExportFlowStyle.allCases, id: \.self) { style in
-                        Text(style.label).tag(style)
-                    }
-                }
-                .pickerStyle(.radioGroup)
-                .labelsHidden()
-            }
-
-            // Visual separation options
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Include in Separator")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                Toggle("Page number", isOn: $settings.includePageNumber)
-                Toggle("Filename", isOn: $settings.includeFilename)
-                Toggle("Statistics", isOn: $settings.includeStatistics)
-            }
-            .disabled(!settings.visualSeparationEnabled)
-            .opacity(settings.visualSeparationEnabled ? 1.0 : 0.5)
-
-            // Separator style picker
+            // Separator style picker (only shown when visual separation is enabled)
             VStack(alignment: .leading, spacing: 8) {
                 Text("Separator Style")
                     .font(.subheadline)
@@ -117,8 +115,21 @@ struct ExportPanelView: View {
                 .pickerStyle(.radioGroup)
                 .labelsHidden()
             }
-            .disabled(!settings.visualSeparationEnabled)
-            .opacity(settings.visualSeparationEnabled ? 1.0 : 0.5)
+            .disabled(!settings.createVisualSeparation)
+            .opacity(settings.createVisualSeparation ? 1.0 : 0.5)
+
+            // Separator mods (metadata options)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Separator Mods")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                Toggle("Page number", isOn: $settings.includePageNumber)
+                Toggle("Filename", isOn: $settings.includeFilename)
+                Toggle("Statistics", isOn: $settings.includeStatistics)
+            }
+            .disabled(!settings.createVisualSeparation)
+            .opacity(settings.createVisualSeparation ? 1.0 : 0.5)
 
             Spacer()
 
@@ -145,9 +156,37 @@ struct ExportPanelView: View {
 
     // MARK: - Logic
 
-    private func updatePreview() {
-        let exporter = TextExporter(pages: pages, settings: settings)
-        previewText = exporter.buildCombinedText()
+    /// Schedule a debounced preview update
+    private func schedulePreviewUpdate(immediate: Bool = false) {
+        debounceTask?.cancel()
+
+        if immediate {
+            runExport()
+            return
+        }
+
+        // Debounce by 300ms to avoid rapid rebuilds
+        debounceTask = Task {
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            await MainActor.run { runExport() }
+        }
+    }
+
+    /// Run the async export
+    private func runExport() {
+        exportTask?.cancel()
+
+        exportTask = Task {
+            isLoading = true
+            defer { isLoading = false }
+
+            let exporter = TextExporter(pages: pages, settings: settings)
+            let result = await exporter.buildCombinedTextAsync()
+
+            guard !Task.isCancelled else { return }
+            previewText = result
+        }
     }
 }
 

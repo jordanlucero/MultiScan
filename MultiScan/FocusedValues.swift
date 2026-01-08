@@ -33,6 +33,10 @@ struct FocusedCurrentPageKey: FocusedValueKey {
     typealias Value = Page
 }
 
+struct FocusedShowFindNavigatorKey: FocusedValueKey {
+    typealias Value = Binding<Bool>
+}
+
 extension FocusedValues {
     var document: Document? {
         get { self[FocusedDocumentKey.self] }
@@ -72,5 +76,10 @@ extension FocusedValues {
     var currentPage: Page? {
         get { self[FocusedCurrentPageKey.self] }
         set { self[FocusedCurrentPageKey.self] = newValue }
+    }
+
+    var showFindNavigator: Binding<Bool>? {
+        get { self[FocusedShowFindNavigatorKey.self] }
+        set { self[FocusedShowFindNavigatorKey.self] = newValue }
     }
 }

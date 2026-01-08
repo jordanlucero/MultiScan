@@ -134,6 +134,9 @@ struct RichTextSidebar: View {
     /// Editable text for the current page - always initialized when page exists
     @State private var editableText: EditablePageText?
 
+    /// Controls visibility of the find navigator
+    @State private var isFindNavigatorPresented = false
+
     /// Accessibility focus state for VoiceOver navigation
     @AccessibilityFocusState private var isHeaderFocused: Bool
 
@@ -208,6 +211,7 @@ struct RichTextSidebar: View {
                     text: Bindable(editableText).text,
                     selection: Bindable(editableText).selection
                 )
+                .findNavigator(isPresented: $isFindNavigatorPresented)
                 .safeAreaPadding()
                 .accessibilityLabel("Page text editor")
                 .accessibilityHint("Use Actions menu to exit editor")
@@ -254,6 +258,7 @@ struct RichTextSidebar: View {
             }
         }
         .focusedValue(\.editableText, editableText)
+        .focusedValue(\.showFindNavigator, $isFindNavigatorPresented)
         .onAppear {
             initializeEditableText()
             // Set VoiceOver focus to the header when view appears

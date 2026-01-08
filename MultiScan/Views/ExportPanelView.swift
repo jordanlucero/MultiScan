@@ -133,8 +133,6 @@ struct ExportPanelView: View {
 
             Spacer()
 
-            Divider()
-
             // Action buttons
             HStack {
                 Button("Cancel") {

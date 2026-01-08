@@ -165,9 +165,7 @@ struct ThumbnailSidebar: View {
                         }
                         .pickerStyle(.inline)
                     } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "line.3.horizontal.decrease")
-                        }
+                        Image(systemName: "line.3.horizontal.decrease")
                     }
                     .menuStyle(.borderlessButton)
                     .background {

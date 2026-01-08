@@ -24,6 +24,7 @@ struct MultiScanApp: App {
     @FocusedValue(\.showExportPanel) private var showExportPanelBinding: Binding<Bool>?
     @FocusedValue(\.showAddFromPhotos) private var showAddFromPhotosBinding: Binding<Bool>?
     @FocusedValue(\.showAddFromFiles) private var showAddFromFilesBinding: Binding<Bool>?
+    @FocusedValue(\.showFindNavigator) private var showFindNavigatorBinding: Binding<Bool>?
 
     @State private var showDeletePageConfirmation = false
 
@@ -78,6 +79,14 @@ struct MultiScanApp: App {
 
             // Edit Menu Commands
             CommandGroup(after: .pasteboard) {
+                Button("Find…") {
+                    showFindNavigatorBinding?.wrappedValue = true
+                }
+                .keyboardShortcut("F", modifiers: [.command])
+                .disabled(showFindNavigatorBinding == nil)
+
+                Divider()
+
                 ShareLink("Share Page Text…",
                           item: RichText(focusedNavigationState?.currentPage?.richText ?? AttributedString()),
                           preview: SharePreview("Page Text"))
@@ -180,7 +189,7 @@ struct MultiScanApp: App {
                     get: { focusedCurrentPage?.increaseBlackPoint ?? false },
                     set: { newValue in focusedCurrentPage?.increaseBlackPoint = newValue }
                 )) {
-                    Label("Increase Black Point", systemImage: "circle.bottomhalf.filled")
+                    Label("Increase Black Point", systemImage: "")
                 }
                 .disabled(focusedCurrentPage == nil)
             }
@@ -240,13 +249,13 @@ struct MultiScanApp: App {
                 .keyboardShortcut("+", modifiers: [.command])
                 .disabled(focusedDocument == nil)
 
-                Button("Zoom Out", systemImage: "minus.magnifyingglass") {
+                Button("Zoom Out", systemImage: "") {
                     NotificationCenter.default.post(name: .zoomOut, object: nil)
                 }
                 .keyboardShortcut("-", modifiers: [.command])
                 .disabled(focusedDocument == nil)
 
-                Button("Fit to Window", systemImage: "arrow.down.left.and.arrow.up.right.rectangle") {
+                Button("Fit to Window", systemImage: "") {
                     NotificationCenter.default.post(name: .zoomActualSize, object: nil)
                 }
                 .keyboardShortcut("0", modifiers: [.command])

@@ -399,7 +399,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Eliminar página %lld?"
+            "value" : "¿Eliminar página %lld?"
           }
         }
       }
@@ -623,6 +623,9 @@
           }
         }
       }
+    },
+    "Find…" : {
+
     },
     "Fit to Window" : {
       "localizations" : {
@@ -1415,16 +1418,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orden aleatorio"
-          }
-        }
-      }
-    },
-    "Start from iPhone or iPad…" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Empezar desde iPhone o iPad…"
           }
         }
       }

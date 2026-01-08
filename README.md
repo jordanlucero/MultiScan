@@ -1,9 +1,9 @@
 # MultiScan
-A macOS app that runs OCR on folders containing images and lets you check its work. Perfect for turning your physical notes and documents into readable and workable text. Built with fully-native Swift, SwiftUI, SwiftData, and VisionKit frameworks. Swift 6. Requires macOS Tahoe.
+MultiScan provides a dedicated frontend to VisionKit that makes it easy to digitize your multi-page physical documents into text. MultiScan is built to let you review VisionKit output on a page-by-page basis, search content within pages, and to feed physical documents into the system Accessibility Reader. Built with fully-native Swift, SwiftUI, SwiftData, and VisionKit frameworks. Swift 6. Requires macOS Tahoe.
 
 ![MultiScan running on an iMac with macOS Tahoe.](https://github.com/user-attachments/assets/92505022-c688-4126-98cc-3533444fda16)
 
-**MultiScan is designed for casual reading or very particular workflows where the OCR output can be reviewed. This implementation of VisionKit might place text out of order, or make simple mistakes that you will catch while reading. I don't recommend using MultiScan for workflows that require absolute accuracy.**
+**MultiScan is designed for casual reading or particular workflows where the OCR output can be reviewed. Text might be placed out of order, among other simple mistakes that you will catch while reading. I don't recommend using MultiScan for workflows that require absolute accuracy.**
 
 Built with Claude Code and Codex running Claude 4 Opus, Claude 4 Sonnet, Claude 4.1 Opus, Claude 4.5 Sonnet, GPT-5.1-Codex-Max, and Claude 4.5 Opus. MultiScan does not have network access and is appropriately sandboxed.
 

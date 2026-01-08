@@ -102,13 +102,7 @@ struct HomeView: View {
             Button("Import from Files…", systemImage: "folder") {
                 showingFilePicker = true
             }
-
-            #if os(macOS)
-            Button("Start from iPhone or iPad…", systemImage: "camera") {
-                // TODO: Implement Continuity Camera
-            }
-            .disabled(true)
-            #endif
+            
         } label: {
             VStack(alignment: .leading, spacing: 8) {
                 // White page with plus sign

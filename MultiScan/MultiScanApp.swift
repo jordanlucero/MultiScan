@@ -46,7 +46,7 @@ struct MultiScanApp: App {
         WindowGroup {
             ContentView()
                 .confirmationDialog(
-                    "Delete Page?",
+                    "Delete Page \(focusedNavigationState?.currentPageNumber ?? 0)?",
                     isPresented: $showDeletePageConfirmation,
                     titleVisibility: .visible
                 ) {
@@ -56,7 +56,7 @@ struct MultiScanApp: App {
                     }
                     Button("Cancel", role: .cancel) {}
                 } message: {
-                    Text("This will permanently delete the page from your project. This can't be undone.")
+                    Text("This will permanently delete the page from your project. This cannot be undone.")
                 }
         }
         .modelContainer(sharedModelContainer)
@@ -127,6 +127,7 @@ struct MultiScanApp: App {
                 Button("Delete Page…", systemImage: "trash", role: .destructive) {
                     showDeletePageConfirmation = true
                 }
+                .keyboardShortcut(.delete, modifiers: [.command])
                 .disabled(focusedNavigationState?.currentPage == nil || focusedDocument?.totalPages ?? 0 <= 1)
             }
 

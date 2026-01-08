@@ -49,7 +49,7 @@ struct ReviewView: View {
             }
             .fileImporter(
                 isPresented: $showAddFromFiles,
-                allowedContentTypes: [.image, .folder],
+                allowedContentTypes: [.image, .pdf, .folder],
                 allowsMultipleSelection: true
             ) { result in
                 handleFileImport(result)
@@ -302,9 +302,27 @@ struct ReviewView: View {
 
         let result = await importService.processFileURLs(urls, optimizeImages: optimizeImagesOnImport)
 
-        guard !result.images.isEmpty else { return }
+        var allImages = result.images
 
-        await addPagesToDocument(images: result.images)
+        // Process any PDFs by rendering pages to images
+        if !result.pdfURLs.isEmpty {
+            let pdfService = PDFImportService()
+            for pdfURL in result.pdfURLs {
+                let accessed = pdfURL.startAccessingSecurityScopedResource()
+                defer { if accessed { pdfURL.stopAccessingSecurityScopedResource() } }
+
+                do {
+                    let pdfImages = try await pdfService.renderPDF(at: pdfURL)
+                    allImages.append(contentsOf: pdfImages)
+                } catch {
+                    print("PDF import error: \(error)")
+                }
+            }
+        }
+
+        guard !allImages.isEmpty else { return }
+
+        await addPagesToDocument(images: allImages)
     }
 
     // MARK: - Photos Import Handling

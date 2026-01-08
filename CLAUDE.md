@@ -282,3 +282,62 @@ String(localized: "\(words) words, \(chars) characters")
 ```
 
 Translations stored in `Localizable.xcstrings` (Xcode String Catalog format).
+
+## PDF Import Architecture
+
+PDFs can be imported alongside images via the unified file picker. Each PDF page is rendered to an image and processed through the existing OCR pipeline.
+
+### Import Flow
+```
+PDF File → PDFImportService → [HEIC images per page] → OCRService → Page objects
+```
+
+1. User selects PDF via file picker (accepts `.image`, `.pdf`, `.folder`)
+2. `ImageImportService` detects PDF and returns URL in `ImportResult.pdfURLs`
+3. Page count is read immediately via `PDFImportService.pageCount(for:)` for VoiceOver announcement
+4. `PDFImportService.renderPDF(at:)` renders pages to images in parallel
+5. Rendered images feed into existing `OCRService.processImages()` pipeline
+6. Each PDF page becomes a `Page` with thumbnails and OCR text
+
+### PDFImportService (`Services/PDFImportService.swift`)
+
+Key methods:
+```swift
+static func isPDF(url: URL) -> Bool           // Check if URL is a PDF
+static func pageCount(for url: URL) -> Int    // Quick page count without rendering
+func renderPDF(at url: URL, dpi: CGFloat = 300) async throws -> [(data: Data, fileName: String)]
+```
+
+### Rendering Details
+- **Resolution**: 300 DPI (letter-size page ≈ 2550×3300 pixels)
+- **Output Format**: Always HEIC at 0.8 quality (regardless of "optimize images" setting)
+- **Parallel Processing**: Uses `TaskGroup` with concurrency limited to CPU core count (max 6)
+- **Memory Management**: `autoreleasepool` around each page render
+- **Thread Safety**: `SendablePDFDocument` wrapper for Swift 6 concurrency compliance
+
+### Error Handling
+```swift
+enum PDFImportError: LocalizedError {
+    case cannotLoad           // PDF file couldn't be opened
+    case passwordProtected    // Encrypted PDFs not supported
+    case noPages              // PDF has zero pages
+    case renderingFailed(page: Int)  // Specific page failed to render
+}
+```
+
+### UI Feedback
+- **Spinner**: "New Project" card shows spinner with "Preparing…" during PDF rendering
+- **VoiceOver**: Announces "Processing X pages" immediately after file picker closes (uses quick page count)
+- **Progress**: Once OCR starts, document card shows standard progress indicator
+
+### HomeView Integration
+The `processFileURLs()` method handles mixed imports:
+1. Scans files via `ImageImportService.processFileURLs()`
+2. Counts PDF pages immediately for accessibility announcement
+3. Renders PDFs via `PDFImportService`
+4. Combines all images and starts OCR processing
+
+### Image Compression Notes
+- **Imported images**: Use HEIC only if "Optimize images on import" is enabled
+- **PDF pages**: Always rendered to HEIC (since we're creating new images, not preserving originals)
+- **Thumbnails**: Always HEIC at 200px max dimension, 0.7 quality

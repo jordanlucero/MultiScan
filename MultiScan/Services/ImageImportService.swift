@@ -17,21 +17,29 @@ final class ImageImportService {
     /// Result of processing file URLs
     struct ImportResult {
         let images: [(data: Data, fileName: String)]
+        let pdfURLs: [URL]
         let suggestedName: String?
+    }
+
+    /// Internal type to distinguish between images and PDFs during processing
+    private enum ImportItem {
+        case image(data: Data, fileName: String)
+        case pdf(url: URL)
     }
 
     // MARK: - File URL Processing
 
-    /// Process file URLs (files or folders) into image data
+    /// Process file URLs (files or folders) into image data and PDF URLs
     /// - Parameters:
     ///   - urls: File URLs to process
     ///   - optimizeImages: Whether to compress images during import
-    /// - Returns: Array of image data with filenames, sorted by filename, plus suggested document name
+    /// - Returns: Array of image data with filenames, PDF URLs, and suggested document name
     func processFileURLs(
         _ urls: [URL],
         optimizeImages: Bool
     ) async -> ImportResult {
         var images: [(data: Data, fileName: String)] = []
+        var pdfURLs: [URL] = []
 
         for url in urls {
             let accessed = url.startAccessingSecurityScopedResource()
@@ -43,52 +51,77 @@ final class ImageImportService {
             }
 
             if isDirectory.boolValue {
-                images.append(contentsOf: processDirectory(url, optimizeImages: optimizeImages))
+                let items = processDirectory(url, optimizeImages: optimizeImages)
+                for item in items {
+                    switch item {
+                    case .image(let data, let fileName):
+                        images.append((data: data, fileName: fileName))
+                    case .pdf(let pdfURL):
+                        pdfURLs.append(pdfURL)
+                    }
+                }
             } else {
-                if let image = processSingleFile(url, optimizeImages: optimizeImages) {
-                    images.append(image)
+                if let item = processSingleFile(url, optimizeImages: optimizeImages) {
+                    switch item {
+                    case .image(let data, let fileName):
+                        images.append((data: data, fileName: fileName))
+                    case .pdf(let pdfURL):
+                        pdfURLs.append(pdfURL)
+                    }
                 }
             }
         }
 
-        // Sort by filename
+        // Sort images by filename
         images.sort { $0.fileName.localizedStandardCompare($1.fileName) == .orderedAscending }
+
+        // Sort PDFs by filename
+        pdfURLs.sort { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
 
         // Generate suggested document name
         let suggestedName = generateDocumentName(from: urls)
 
-        return ImportResult(images: images, suggestedName: suggestedName)
+        return ImportResult(images: images, pdfURLs: pdfURLs, suggestedName: suggestedName)
     }
 
-    private func processDirectory(_ url: URL, optimizeImages: Bool) -> [(data: Data, fileName: String)] {
-        var images: [(data: Data, fileName: String)] = []
+    private func processDirectory(_ url: URL, optimizeImages: Bool) -> [ImportItem] {
+        var items: [ImportItem] = []
 
         guard let enumerator = FileManager.default.enumerator(
             at: url,
             includingPropertiesForKeys: [.contentTypeKey],
             options: [.skipsHiddenFiles, .skipsPackageDescendants]
         ) else {
-            return images
+            return items
         }
 
         while let fileURL = enumerator.nextObject() as? URL {
-            if let image = processSingleFile(fileURL, optimizeImages: optimizeImages) {
-                images.append(image)
+            if let item = processSingleFile(fileURL, optimizeImages: optimizeImages) {
+                items.append(item)
             }
         }
 
-        return images
+        return items
     }
 
-    private func processSingleFile(_ url: URL, optimizeImages: Bool) -> (data: Data, fileName: String)? {
-        guard let contentType = try? url.resourceValues(forKeys: [.contentTypeKey]).contentType,
-              contentType.conforms(to: .image),
+    private func processSingleFile(_ url: URL, optimizeImages: Bool) -> ImportItem? {
+        guard let contentType = try? url.resourceValues(forKeys: [.contentTypeKey]).contentType else {
+            return nil
+        }
+
+        // Check for PDF first
+        if contentType.conforms(to: .pdf) {
+            return .pdf(url: url)
+        }
+
+        // Handle images
+        guard contentType.conforms(to: .image),
               let data = try? Data(contentsOf: url) else {
             return nil
         }
 
         let finalData = optimizeImages ? (OCRService.compressImageData(data) ?? data) : data
-        return (data: finalData, fileName: url.lastPathComponent)
+        return .image(data: finalData, fileName: url.lastPathComponent)
     }
 
     private func generateDocumentName(from urls: [URL]) -> String? {

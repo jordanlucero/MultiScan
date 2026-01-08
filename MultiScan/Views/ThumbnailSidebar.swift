@@ -439,7 +439,7 @@ struct ThumbnailView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("This will permanently delete the page from your project. This can't be undone.")
+                Text("This will permanently delete the page from your project. This cannot be undone.")
             }
 
             Text(pageLabel)

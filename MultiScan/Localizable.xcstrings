@@ -241,7 +241,7 @@
         }
       }
     },
-    "Are you sure you want to delete the MultiScan project for \"%@\"? This can't be undone." : {
+    "Are you sure you want to delete the MultiScan project for \"%@\"? This cannot be undone." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -404,16 +404,6 @@
         }
       }
     },
-    "Delete Page?" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "¿Eliminar página?"
-          }
-        }
-      }
-    },
     "Delete Page…" : {
       "localizations" : {
         "es-419" : {
@@ -554,6 +544,16 @@
         }
       }
     },
+    "Failed to render page %lld." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo renderizar la página %lld."
+          }
+        }
+      }
+    },
     "Filename" : {
       "localizations" : {
         "es-419" : {
@@ -625,7 +625,14 @@
       }
     },
     "Find…" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buscar…"
+          }
+        }
+      }
     },
     "Fit to Window" : {
       "localizations" : {
@@ -746,6 +753,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Importar desde Fotos…"
+          }
+        }
+      }
+    },
+    "Import in progress" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Importación en progreso"
           }
         }
       }
@@ -1096,6 +1113,16 @@
         }
       }
     },
+    "Password-protected PDFs are not supported. Please unlock the document and save it without a password in Preview." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se admiten archivos PDF protegidos con contraseña. Desbloquee el documento y guárdelo sin contraseña en Vista Previa."
+          }
+        }
+      }
+    },
     "Photo %lld" : {
       "comment" : "Fallback filename for imported photo",
       "localizations" : {
@@ -1113,6 +1140,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Preparando la exportación…"
+          }
+        }
+      }
+    },
+    "Preparing import" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preparando importación"
+          }
+        }
+      }
+    },
+    "Preparing…" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preparando…"
           }
         }
       }
@@ -1508,7 +1555,27 @@
         }
       }
     },
-    "This will permanently delete the page from your project. This can't be undone." : {
+    "The PDF file could not be opened." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo abrir el archivo PDF."
+          }
+        }
+      }
+    },
+    "This PDF is empty." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este PDF está vacío."
+          }
+        }
+      }
+    },
+    "This will permanently delete the page from your project. This cannot be undone." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {

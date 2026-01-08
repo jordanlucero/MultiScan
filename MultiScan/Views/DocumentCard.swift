@@ -30,15 +30,22 @@ struct DocumentCard: View {
     @State private var emojiInput: String = ""
     @FocusState private var isEmojiFieldFocused: Bool
 
+    // Hover and focus state for menu button visibility
+    @State private var isHovered = false
+    @FocusState private var isCardFocused: Bool
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             thumbnailSection
             titleSection
         }
+        .frame(maxHeight: .infinity, alignment: .top)
         .focusable()
-        .contextMenu {
-            contextMenuContent
+        .focused($isCardFocused)
+        .onHover { hovering in
+            isHovered = hovering
         }
+        .contextMenu {contextMenuContent}
     }
 
     // MARK: - Context Menu Content
@@ -94,9 +101,11 @@ struct DocumentCard: View {
             .aspectRatio(8.5/11, contentMode: .fit)
             .clipShape(RoundedRectangle(cornerRadius: 8))
 
-            // Ellipsis menu (top-right)
+            // Ellipsis menu (top-right) - only visible on hover or keyboard focus
             menuButton
                 .padding(8)
+                .opacity(isHovered || isCardFocused ? 1 : 0)
+                .shadow(color: .primary.opacity(0.8), radius: 2)
 
             // Processing overlay
             if isProcessing {
@@ -126,14 +135,14 @@ struct DocumentCard: View {
 
     private var processingOverlay: some View {
         RoundedRectangle(cornerRadius: 8)
-            .fill(Color.black.opacity(0.5))
+            .fill(Color.black.opacity(0.75))
             .aspectRatio(8.5/11, contentMode: .fit)
             .overlay(
                 VStack(spacing: 8) {
                     ProgressView()
                         .controlSize(.regular)
                     Text("\(Int(ocrProgress * 100))%")
-                        .font(.caption)
+                        .font(.body)
                         .foregroundColor(.white)
                 }
             )

@@ -24,6 +24,7 @@ struct HomeView: View {
     @State private var isDragOver = false
     @State private var isOptimizing = false
     @State private var optimizingDocumentID: PersistentIdentifier?
+    @State private var isPreparingImport = false
 
     // Settings
     @AppStorage("optimizeImagesOnImport") private var optimizeImagesOnImport = false
@@ -35,9 +36,10 @@ struct HomeView: View {
     var body: some View {
         ScrollView {
             LazyVGrid(columns: [
-                GridItem(.adaptive(minimum: 200, maximum: 260), spacing: 16)
-            ], spacing: 16) {
+                GridItem(.adaptive(minimum: 200, maximum: 260), spacing: 24, alignment: .top)
+            ], alignment: .leading, spacing: 16) {
                 newDocumentCard
+                    .frame(maxHeight: .infinity, alignment: .top)
                 ForEach(documents.sorted(by: { $0.createdAt > $1.createdAt })) { document in
                     documentLink(for: document)
                 }
@@ -57,7 +59,7 @@ struct HomeView: View {
         )
         .fileImporter(
             isPresented: $showingFilePicker,
-            allowedContentTypes: [.image, .folder],
+            allowedContentTypes: [.image, .pdf, .folder],
             allowsMultipleSelection: true
         ) { result in
             handleFileImport(result)
@@ -77,7 +79,7 @@ struct HomeView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: { document in
-            Text("Are you sure you want to delete the MultiScan project for \"\(document.name)\"? This can't be undone.")
+            Text("Are you sure you want to delete the MultiScan project for \"\(document.name)\"? This cannot be undone.")
         }
         .onChange(of: selectedPhotos) { _, items in
             Task { await processSelectedPhotos(items) }
@@ -102,18 +104,28 @@ struct HomeView: View {
             Button("Import from Files…", systemImage: "folder") {
                 showingFilePicker = true
             }
-            
+
         } label: {
             VStack(alignment: .leading, spacing: 8) {
-                // White page with plus sign
+                // White page with plus sign or spinner
                 ZStack {
                     RoundedRectangle(cornerRadius: 8)
                         .fill(Color.white)
                         .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
 
-                    Image(systemName: "plus")
-                        .font(.system(size: 40, weight: .medium))
-                        .foregroundStyle(Color.accentColor)
+                    if isPreparingImport {
+                        VStack(spacing: 8) {
+                            ProgressView()
+                                .controlSize(.large)
+                            Text("Preparing…")
+                                .font(.caption)
+                                .foregroundStyle(.primary)
+                        }
+                    } else {
+                        Image(systemName: "plus")
+                            .font(.system(size: 40, weight: .medium))
+                            .foregroundStyle(Color.accentColor)
+                    }
                 }
                 .aspectRatio(8.5/11, contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -129,8 +141,9 @@ struct HomeView: View {
         .menuStyle(.button)
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
-        .accessibilityLabel("New Project")
-        .accessibilityHint("Activate to start a project using imported images from your photos or files")
+        .disabled(isPreparingImport)
+        .accessibilityLabel(isPreparingImport ? "Preparing import" : "New Project")
+        .accessibilityHint(isPreparingImport ? "Import in progress" : "Activate to start a project using imported images from your photos or files")
     }
 
     private func documentLink(for document: Document) -> some View {
@@ -237,15 +250,59 @@ struct HomeView: View {
 
     @MainActor
     private func processFileURLs(_ urls: [URL]) async {
+        isPreparingImport = true
+
         let result = await importService.processFileURLs(urls, optimizeImages: optimizeImagesOnImport)
 
-        guard !result.images.isEmpty else {
+        // Quick page count for immediate announcement (images + PDF pages)
+        var estimatedPageCount = result.images.count
+        for pdfURL in result.pdfURLs {
+            let accessed = pdfURL.startAccessingSecurityScopedResource()
+            estimatedPageCount += PDFImportService.pageCount(for: pdfURL)
+            if accessed { pdfURL.stopAccessingSecurityScopedResource() }
+        }
+
+        // Announce immediately if we have content to process
+        if estimatedPageCount > 0 {
+            hasAnnouncedHalfway = false
+            processingPageCount = estimatedPageCount
+            let pageWord = estimatedPageCount == 1 ? "page" : "pages"
+            AccessibilityNotification.Announcement("Processing \(estimatedPageCount) \(pageWord). This will take a few moments.").post()
+        }
+
+        var allImages = result.images
+
+        // Process any PDFs by rendering pages to images
+        if !result.pdfURLs.isEmpty {
+            let pdfService = PDFImportService()
+            for pdfURL in result.pdfURLs {
+                let accessed = pdfURL.startAccessingSecurityScopedResource()
+                defer { if accessed { pdfURL.stopAccessingSecurityScopedResource() } }
+
+                do {
+                    let pdfImages = try await pdfService.renderPDF(at: pdfURL)
+                    allImages.append(contentsOf: pdfImages)
+                } catch {
+                    print("PDF import error: \(error)")
+                    ocrService.error = error
+                    showingError = true
+                    isPreparingImport = false
+                    return
+                }
+            }
+        }
+
+        guard !allImages.isEmpty else {
             print("No valid images found")
+            isPreparingImport = false
             return
         }
 
+        // Spinner will be replaced by document card's progress indicator
+        isPreparingImport = false
+
         let documentName = result.suggestedName ?? "Import \(Date().formatted(date: .abbreviated, time: .shortened))"
-        await startOCRProcessing(images: result.images, documentName: documentName)
+        await startOCRProcessing(images: allImages, documentName: documentName)
     }
 
     // MARK: - Photos Import Handling
@@ -261,6 +318,12 @@ struct HomeView: View {
             selectedPhotos = []
             return
         }
+
+        // Announce processing start before document card appears
+        hasAnnouncedHalfway = false
+        processingPageCount = images.count
+        let pageWord = images.count == 1 ? "page" : "pages"
+        AccessibilityNotification.Announcement("Processing \(images.count) \(pageWord). This will take a few moments.").post()
 
         let documentName = "Import \(Date().formatted(date: .abbreviated, time: .shortened))"
         await startOCRProcessing(images: images, documentName: documentName)
@@ -303,12 +366,6 @@ struct HomeView: View {
 
         let documentID = document.persistentModelID
         processingDocumentIDs.insert(documentID)
-
-        // Reset accessibility tracking and announce start
-        hasAnnouncedHalfway = false
-        processingPageCount = images.count
-        let pageWord = images.count == 1 ? "page" : "pages"
-        AccessibilityNotification.Announcement("Processing \(images.count) \(pageWord). This will take a few moments.").post()
 
         // Process images in background
         Task.detached(priority: .userInitiated) { [ocrService, images, documentID] in

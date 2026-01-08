@@ -101,8 +101,7 @@ final class OCRService: ObservableObject, @unchecked Sendable {
         }
 
         let data = NSMutableData()
-        let typeIdentifier = UTType.jpeg.identifier as CFString
-        guard let destination = CGImageDestinationCreateWithData(data, typeIdentifier, 1, nil) else {
+        guard let destination = CGImageDestinationCreateWithData(data, UTType.heic.identifier as CFString, 1, nil) else {
             return nil
         }
 
@@ -173,12 +172,11 @@ enum OCRError: LocalizedError {
 // MARK: - Image Compression Utilities
 
 extension OCRService {
-    // Change this to HEIC ideally
-    /// Compress image data to JPEG with specified quality
+    /// Compress image data to HEIC with specified quality
     /// - Parameters:
     ///   - data: Original image data
-    ///   - quality: JPEG compression quality (0.0 to 1.0)
-    /// - Returns: Compressed JPEG data, or nil if compression failed
+    ///   - quality: HEIC compression quality (0.0 to 1.0)
+    /// - Returns: Compressed HEIC data, or nil if compression failed
     static func compressImageData(_ data: Data, quality: CGFloat = 0.8) -> Data? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
               let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
@@ -188,7 +186,7 @@ extension OCRService {
         let mutableData = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(
             mutableData,
-            UTType.jpeg.identifier as CFString,
+            UTType.heic.identifier as CFString,
             1,
             nil
         ) else {

@@ -14,7 +14,7 @@ import ImageIO
 enum PlatformImage {
     /// Create SwiftUI Image from raw image Data
     /// - Parameters:
-    ///   - data: Image data in any supported format (JPEG, PNG, HEIC, etc.)
+    ///   - data: Image data in any system-supported format
     ///   - userRotation: User-applied rotation in degrees (0, 90, 180, 270). Default is 0.
     /// - Returns: A SwiftUI Image, or nil if the data couldn't be decoded
     static func from(data: Data, userRotation: Int = 0) -> Image? {

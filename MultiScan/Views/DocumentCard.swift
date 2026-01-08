@@ -105,7 +105,7 @@ struct DocumentCard: View {
             menuButton
                 .padding(8)
                 .opacity(isHovered || isCardFocused ? 1 : 0)
-                .shadow(color: .primary.opacity(0.8), radius: 2)
+                .shadow(color: .black.opacity(0.8), radius: 2)
 
             // Processing overlay
             if isProcessing {
@@ -122,7 +122,9 @@ struct DocumentCard: View {
         } label: {
             Image(systemName: "ellipsis.circle.fill")
                 .font(.title3)
-                .foregroundStyle(.secondary)
+                .symbolRenderingMode(.monochrome)
+                .foregroundStyle(.white)
+            // not working?????????
                 .frame(width: 28, height: 28)
         }
         .menuStyle(.borderlessButton)

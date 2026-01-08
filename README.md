@@ -1,5 +1,7 @@
 # MultiScan
-MultiScan provides a dedicated frontend to VisionKit that makes it easy to digitize your multi-page physical documents into text. MultiScan is built to let you review VisionKit output on a page-by-page basis, search content within pages, and to feed physical documents into the system Accessibility Reader. Built with fully-native Swift, SwiftUI, SwiftData, and VisionKit frameworks. Swift 6. Requires macOS Tahoe.
+MultiScan provides a dedicated frontend to VisionKit that makes it easy to digitize your multi-page physical documents into text. MultiScan is built to let you review VisionKit output on a page-by-page basis, search content within pages, and feed documents into the system Accessibility Reader. 
+
+Built with fully-native Swift, SwiftUI, SwiftData, and VisionKit frameworks. Swift 6. Requires macOS Tahoe.
 
 ![MultiScan running on an iMac with macOS Tahoe.](https://github.com/user-attachments/assets/92505022-c688-4126-98cc-3533444fda16)
 
@@ -11,7 +13,7 @@ Built with Claude Code and Codex running Claude 4 Opus, Claude 4 Sonnet, Claude 
 
 MultiScan doesn't have the capacity to identify illustrations or images on document pages. VisionKit will attempt to transcribe the text within artwork in a way that doesn't make sense. It's useful to include an in-line note to yourself when you export from MultiScan in case you want to add a screenshot or external scan of the artwork in an external word processor.
 
-This implementation of VisionKit will add line breaks at the end of each line of text that's shown on the physical document's pages. At this time, you may need to manually delete these line breaks so that text will flow more naturally in external usage.
+This implementation of VisionKit will add line breaks at the end of each line of text that's shown on the physical document's pages. You may need to manually delete these line breaks so that text will flow more naturally in external usage.
 
 Be mindful of the quality of your input images. Fingers, image noise, and even specks of dust and dirt on pages might be mistaken for accented characters, or new characters entirely.
 

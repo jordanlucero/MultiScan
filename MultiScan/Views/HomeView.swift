@@ -110,8 +110,7 @@ struct HomeView: View {
                 // White page with plus sign or spinner
                 ZStack {
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.white)
-                        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+                        .fill(Color.gray.opacity(0.1))
 
                     if isPreparingImport {
                         VStack(spacing: 8) {

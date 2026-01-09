@@ -80,22 +80,18 @@ struct DocumentCard: View {
         ZStack(alignment: .topTrailing) {
             // Main thumbnail with 8.5:11 aspect ratio (US Letter)
             ZStack {
-                // Background
+                // Background visible only without thumbnail and during processing
                 RoundedRectangle(cornerRadius: 8)
                     .fill(Color.gray.opacity(0.1))
 
-                // Thumbnail image or placeholder
+                // Thumbnail image or empty fallback placeholder
                 if let lastPage = document.lastModifiedPage,
                    let thumbData = lastPage.thumbnailData,
                    let thumbnail = PlatformImage.from(data: thumbData) {
                     thumbnail
                         .resizable()
                         .aspectRatio(contentMode: .fit)
-                        .padding(4)
                 } else {
-                    Image(systemName: "doc.text.fill")
-                        .font(.largeTitle)
-                        .foregroundColor(.secondary)
                 }
             }
             .aspectRatio(8.5/11, contentMode: .fit)

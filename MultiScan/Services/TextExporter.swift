@@ -7,14 +7,7 @@
 
 import SwiftUI
 
-/// Metadata extracted from pages on main thread for async processing
-private struct PageExportData: Sendable {
-    let pageNumber: Int
-    let richTextData: Data
-    let originalFileName: String?
-}
-
-/// Settings snapshot for off-main-thread processing
+/// Settings snapshot for thread-safe processing
 private struct ExportSettingsSnapshot: Sendable {
     let createVisualSeparation: Bool
     let separatorStyle: SeparatorStyle
@@ -29,93 +22,121 @@ struct TextExporter {
 
     // MARK: - Async Export (for large documents)
 
-    /// Async version that processes pages off the main thread
-    /// Uses parallel JSON decoding and O(n) string building
+    /// Chunk size for cooperative multitasking — yields to UI after this many pages
+    private static let chunkSize = 50
+
+    /// Builds combined AttributedString from all pages
+    /// Extracts data on main actor, builds on background thread to keep UI responsive
     @MainActor
     func buildCombinedTextAsync() async -> AttributedString {
-        // Step 1: Extract raw data on main actor (fast, just pointer copies)
         let sortedPages = pages.sorted { $0.pageNumber < $1.pageNumber }
-        let pageData = sortedPages.map { PageExportData(
-            pageNumber: $0.pageNumber,
-            richTextData: $0.rawRichTextData,
-            originalFileName: $0.originalFileName
-        )}
-
-        // Capture settings snapshot before leaving main actor
-        let settingsSnapshot = ExportSettingsSnapshot(
-            createVisualSeparation: settings.createVisualSeparation,
-            separatorStyle: settings.separatorStyle,
-            includePageNumber: settings.includePageNumber,
-            includeFilename: settings.includeFilename,
-            includeStatistics: settings.includeStatistics
-        )
-
-        let totalPages = pageData.count
+        let totalPages = sortedPages.count
         guard totalPages > 0 else { return AttributedString() }
 
-        // Step 2: Decode JSON in parallel (expensive, off main thread)
-        let decoded: [(Int, AttributedString, String)] = await withTaskGroup(
-            of: (Int, AttributedString, String).self
-        ) { group in
-            for data in pageData {
-                group.addTask {
-                    let richText = (try? AttributedString.decodeFromJSON(data.richTextData))
-                        ?? AttributedString("")
-                    let plainText = String(richText.characters)
-                    return (data.pageNumber, richText, plainText)
+        // Step 1: Extract all data on main actor (SwiftData requirement)
+        // This is fast — just copying AttributedStrings out of SwiftData
+        let pageData: [(text: AttributedString, number: Int, fileName: String?, plainText: String)] =
+            sortedPages.map { ($0.richText, $0.pageNumber, $0.originalFileName, $0.plainText) }
+
+        // Capture settings for background use
+        let createVisualSeparation = settings.createVisualSeparation
+        let separatorStyle = settings.separatorStyle
+        let includePageNumber = settings.includePageNumber
+        let includeFilename = settings.includeFilename
+        let includeStatistics = settings.includeStatistics
+
+        // Step 2: Build combined string on background thread (expensive O(n²) work)
+        let result = await Task.detached(priority: .userInitiated) {
+            var combined = AttributedString()
+
+            for (index, data) in pageData.enumerated() {
+                // Check for cancellation periodically
+                if index > 0 && index % 50 == 0 && Task.isCancelled {
+                    return AttributedString()
                 }
+
+                // Add separator
+                if index > 0 || createVisualSeparation {
+                    let separator = Self.buildSeparatorStatic(
+                        pageNumber: data.number,
+                        fileName: data.fileName,
+                        plainText: data.plainText,
+                        totalPages: totalPages,
+                        isFirstPage: index == 0,
+                        createVisualSeparation: createVisualSeparation,
+                        separatorStyle: separatorStyle,
+                        includePageNumber: includePageNumber,
+                        includeFilename: includeFilename,
+                        includeStatistics: includeStatistics
+                    )
+                    combined.append(separator)
+                }
+
+                // Add page content
+                combined.append(data.text)
             }
 
-            var results: [(Int, AttributedString, String)] = []
-            results.reserveCapacity(totalPages)
-            for await result in group {
-                results.append(result)
-            }
-            return results.sorted { $0.0 < $1.0 }
-        }
+            return combined
+        }.value
 
-        // Step 3: Build combined string with O(n) appends using NSMutableAttributedString
-        let pageDataByNumber = Dictionary(uniqueKeysWithValues: pageData.map { ($0.pageNumber, $0) })
-
-        return buildCombinedFromDecoded(
-            decoded: decoded,
-            pageData: pageDataByNumber,
-            totalPages: totalPages,
-            settings: settingsSnapshot
-        )
+        return result
     }
 
-    /// Build combined text from pre-decoded data (O(n) using NSMutableAttributedString)
-    private func buildCombinedFromDecoded(
-        decoded: [(Int, AttributedString, String)],
-        pageData: [Int: PageExportData],
+    /// Static separator builder for background thread use
+    private static func buildSeparatorStatic(
+        pageNumber: Int,
+        fileName: String?,
+        plainText: String,
         totalPages: Int,
-        settings: ExportSettingsSnapshot
+        isFirstPage: Bool,
+        createVisualSeparation: Bool,
+        separatorStyle: SeparatorStyle,
+        includePageNumber: Bool,
+        includeFilename: Bool,
+        includeStatistics: Bool
     ) -> AttributedString {
-        let mutable = NSMutableAttributedString()
-
-        for (index, (pageNumber, richText, plainText)) in decoded.enumerated() {
-            let data = pageData[pageNumber]
-
-            // Add separator between pages (not before first page for inline)
-            if index > 0 || settings.createVisualSeparation {
-                let separator = buildSeparatorFromData(
-                    pageNumber: pageNumber,
-                    fileName: data?.originalFileName,
-                    plainText: plainText,
-                    pageIndex: index,
-                    totalPages: totalPages,
-                    isFirstPage: index == 0,
-                    settings: settings
-                )
-                mutable.append(NSAttributedString(separator))
-            }
-
-            // Add page content
-            mutable.append(NSAttributedString(richText))
+        guard createVisualSeparation else {
+            return AttributedString(" ")
         }
 
-        return AttributedString(mutable)
+        var components: [String] = []
+
+        if includePageNumber {
+            components.append(String(localized: "Page \(pageNumber) of \(totalPages)", comment: "Page number indicator in export separator"))
+        }
+
+        if includeFilename, let filename = fileName {
+            components.append(filename)
+        }
+
+        if includeStatistics {
+            let words = plainText.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
+            let chars = plainText.count
+            components.append(String(localized: "\(words) words, \(chars) characters", comment: "Word and character count in export separator"))
+        }
+
+        if isFirstPage && separatorStyle == .lineBreak && components.isEmpty {
+            return AttributedString()
+        }
+
+        var separator = isFirstPage ? "" : "\n\n"
+
+        switch separatorStyle {
+        case .lineBreak:
+            if !components.isEmpty {
+                separator += "[\(components.joined(separator: " | "))]"
+            }
+
+        case .hyphenatedDivider:
+            separator += String(repeating: "-", count: 40)
+            if !components.isEmpty {
+                separator += "\n"
+                separator += components.joined(separator: " | ")
+            }
+        }
+
+        separator += "\n\n"
+        return AttributedString(separator)
     }
 
     /// Build separator from pre-extracted data (no Page access needed)

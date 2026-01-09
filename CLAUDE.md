@@ -19,13 +19,19 @@ MultiScan is a macOS SwiftUI application that uses SwiftData for persistence. Cu
 ### Core Components
 
 1. **MultiScanApp.swift**: Entry point, configures SwiftData model container
-2. **ContentView.swift**: Main UI with NavigationSplitView (sidebar + detail)
-3. **Item.swift**: SwiftData model for timestamp-based items
+2. **HomeView.swift**: Document list with creation/import functionality
+3. **ReviewView.swift**: Main document editing UI with NavigationSplitView
+4. **Models.swift**: SwiftData models (`Document`, `Page`)
+
+### Data Models
+- **Document**: Container for pages with metadata (name, emoji, storage size)
+- **Page**: Individual page with image, rich text, thumbnails, and display settings
 
 ### Data Flow
-- SwiftData `@Model` class (Item) for persistence
+- SwiftData `@Model` classes for persistence
 - `@Query` property wrapper for reactive data fetching
-- `modelContext` from environment for data operations
+- `modelContext` from environment for CRUD operations
+- `NavigationState` (`@Observable`) for UI state management
 
 ## Development Commands
 
@@ -61,6 +67,41 @@ When extending functionality:
 3. Access `modelContext` from environment for CRUD operations
 4. Follow SwiftUI view composition patterns
 
+## Rich Text Storage Architecture
+
+The app uses **native SwiftData storage for AttributedString** (macOS 26+), eliminating the need for manual JSON encoding.
+
+### Page Model (`Models.swift`)
+```swift
+@Model
+final class Page {
+    /// Rich text stored natively by SwiftData — no manual encoding needed
+    @Attribute(.externalStorage)
+    var richText: AttributedString = AttributedString() {
+        didSet { lastModified = Date() }
+    }
+
+    /// Plain text accessor for search/statistics (computed from richText)
+    var plainText: String {
+        String(richText.characters)
+    }
+}
+```
+
+**Key points:**
+- `AttributedString` stored directly with `@Attribute(.externalStorage)`
+- SwiftData handles serialization automatically
+- No transient/persistent split, no `willSave` observers, no JSON encoding
+- `plainText` is computed on-the-fly for search/filter (independent of storage)
+
+### RichTextSupport (`Services/RichTextSupport.swift`)
+Provides formatting helpers and RTF export:
+- `toggleBold(in:)`, `toggleItalic(in:)` — formatting mutations
+- `isBold(at:)`, `isItalic(at:)` — formatting queries
+- `RichText` struct — Transferable wrapper for ShareLink export to RTF
+
+**Note:** RTF export still requires bridging to `NSAttributedString` via CoreText for font trait conversion. This is isolated to the `RichText.toRTFData()` method.
+
 ## Rich Text Editing Architecture
 
 The app uses an always-editable text model with debounced auto-save to balance responsiveness with storage efficiency.
@@ -71,32 +112,32 @@ Located in `RichTextSidebar.swift`, this `@Observable` class wraps a Page's rich
 - Applies display-only foreground color (stripped before saving)
 - Tracks `hasUnsavedChanges` flag to prevent unnecessary writes
 
-### Debounced Auto-Save (1.5 seconds)
+### Debounced Auto-Save (1 second)
 Text changes trigger a debounced save via `scheduleDebouncedSave()`:
 - Each keystroke cancels the previous pending save and schedules a new one
-- After 1.5 seconds of idle, `saveNow()` persists changes
+- After 1 second of idle, `saveNow()` persists changes
 - Prevents disk writes on every character while saving promptly after typing stops
 
 ### Save Protection Layers
 Changes are saved in these scenarios:
 | Event | Trigger |
 |-------|---------|
-| User stops typing | Debounce timer (1.5s) |
+| User stops typing | Debounce timer (1s) |
 | User switches pages | `onChange(of: currentPage)` |
 | User navigates away | `onDisappear` |
+| User opens export panel | `editableText?.saveNow()` before panel opens |
 | User quits app (⌘Q) | `willTerminateNotification` + `modelContext.save()` |
 
-All save calls check `hasUnsavedChanges` first - no-op if no edits were made.
+All save calls check `hasUnsavedChanges` first — no-op if no edits were made.
 
-### Persistence Flow
-1. `saveNow()` assigns cleaned text to `page.richText`
-2. Page's `didSet` marks `richTextChanged = true`
-3. SwiftData's `willSave` notification triggers `Page.willSave()`
-4. Rich text is JSON-encoded to `richTextData` (external storage)
-5. SwiftData commits to SQLite
+### Persistence Flow (Simplified)
+1. `saveNow()` strips foreground color and assigns to `page.richText`
+2. Page's `didSet` updates `lastModified` timestamp
+3. SwiftData automatically persists `AttributedString` to external storage
+4. No manual encoding — SwiftData handles serialization natively
 
 ### Important Notes
-- No separate "view mode" vs "edit mode" - always editable
+- No separate "view mode" vs "edit mode" — always editable
 - Click outside TextEditor to unfocus (removes cursor)
 - Formatting toolbar always visible in header when page selected
 - `modelContext.save()` on app quit ensures synchronous disk write before termination
@@ -227,7 +268,7 @@ Right-click on any thumbnail in `ThumbnailSidebar` shows context menu with:
 
 ## Text Export Architecture
 
-The export system combines all page text into a single document with configurable separators. Optimized for large documents (500+ pages).
+The export system combines all page text into a single document with configurable separators.
 
 ### ExportSettings (`Services/ExportSettings.swift`)
 `@Observable` class with UserDefaults persistence:
@@ -242,24 +283,44 @@ var includeStatistics: Bool
 **Important**: Uses manual UserDefaults sync with `didSet` (not `@AppStorage`) to ensure `@Observable` reactivity works correctly.
 
 ### TextExporter (`Services/TextExporter.swift`)
-Two export methods:
-- `buildCombinedText()` - Synchronous, for small documents
-- `buildCombinedTextAsync()` - Async with parallel processing, for large documents
+Builds combined `AttributedString` from all pages:
+- `buildCombinedTextAsync()` — Main export method, runs heavy work on background thread
+- `buildCombinedText()` — Synchronous version for small documents
 
-### Performance Optimizations
-The async pipeline addresses several bottlenecks for large documents:
+### Export Pipeline
+```
+1. Extract page data on main actor (SwiftData requirement)
+   → Copies AttributedString, pageNumber, fileName, plainText for each page
 
-| Optimization | Implementation |
-|--------------|----------------|
-| Parallel JSON decoding | `TaskGroup` decodes page rich text off main thread |
-| O(n) string building | Uses `NSMutableAttributedString` instead of repeated `AttributedString.append()` |
-| Settings snapshot | `ExportSettingsSnapshot` struct captures settings for thread-safe access |
-| Debounced preview | 300ms delay prevents rapid rebuilds when clicking options |
-| Duplicate observer guard | `observerRegistered` flag in Page prevents multiple notification registrations |
+2. Build combined string on background thread (Task.detached)
+   → Appends separators and page content using AttributedString.append()
+
+3. Return result to main actor for display
+```
+
+### Performance Considerations
+
+**Known limitation**: `AttributedString.append()` is O(n) per call, making the total export O(n²) for large documents. This is a Swift standard library limitation — there's no `AttributedString.init(joining:)` equivalent.
+
+| Document Size | Performance |
+|---------------|-------------|
+| Small (< 50 pages) | Instant |
+| Medium (50-200 pages) | Fast (< 2 seconds) |
+| Large (500+ pages) | Slow (may take 30+ seconds) |
+
+**Mitigations applied:**
+- Background thread processing keeps UI responsive
+- Periodic cancellation checks allow aborting long exports
+- Save-before-export ensures latest edits are included
+
+**Future optimization options:**
+- Chunked combining (divide-and-conquer) to reduce O(n²) to O(n log n)
+- Pre-compute combined text when document opens
+- Lazy preview with on-demand building at share time
 
 ### ExportPanelView (`Views/ExportPanelView.swift`)
 Print-panel-style sheet with live preview:
-- Left pane: Scrollable preview of exported text
+- Left pane: Scrollable preview of exported text (AttributedString in SwiftUI Text)
 - Right pane: Options (visual separation toggle, separator style, mods)
 - Shows spinner during async export
 - Debounces setting changes by 300ms

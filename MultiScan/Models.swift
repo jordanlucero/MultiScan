@@ -36,35 +36,17 @@ final class Page {
     @Attribute(.externalStorage)
     var imageData: Data?
 
-    /// JSON-encoded AttributedString data for rich text storage
+    /// Rich text content stored natively by SwiftData
     @Attribute(.externalStorage)
-    private var richTextData: Data = Data()
-
-    /// Flag to track if rich text has been modified
-    @Transient
-    private var richTextChanged: Bool = false
-
-    /// Flag to prevent duplicate observer registration
-    @Transient
-    private var observerRegistered: Bool = false
-
-    /// The rich text content as an AttributedString
-    @Transient
-    lazy var richText: AttributedString = initializeRichText() {
+    var richText: AttributedString = AttributedString() {
         didSet {
-            richTextChanged = true
             lastModified = Date()
         }
     }
 
-    /// Plain text accessor for convenience (e.g., statistics)
+    /// Plain text accessor for convenience (e.g., statistics, search)
     var plainText: String {
         String(richText.characters)
-    }
-
-    /// Internal accessor for raw rich text data (for async export without triggering lazy init)
-    var rawRichTextData: Data {
-        richTextData
     }
 
     init(pageNumber: Int, text: String, imageData: Data?, originalFileName: String? = nil, boundingBoxesData: Data? = nil) {
@@ -76,56 +58,7 @@ final class Page {
         self.thumbnailData = nil
         self.boundingBoxesData = boundingBoxesData
         self.lastModified = Date()
-
-        // Initialize rich text from plain text
         self.richText = AttributedString(text)
-
-        // Immediately serialize
-        if let data = try? richText.encodeToJSON() {
-            self.richTextData = data
-        }
-
-        // Set up save observer
-        setupSaveObserver()
-    }
-
-    /// Initialize rich text from stored data
-    private func initializeRichText() -> AttributedString {
-        setupSaveObserver()
-
-        // Try to decode from JSON data
-        if !richTextData.isEmpty,
-           let decoded = try? AttributedString.decodeFromJSON(richTextData) {
-            return decoded
-        }
-
-        // Return empty attributed string if no data
-        return AttributedString("")
-    }
-
-    /// Set up observer to serialize rich text before SwiftData saves
-    private func setupSaveObserver() {
-        guard !observerRegistered else { return }
-        observerRegistered = true
-
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(willSave),
-            name: ModelContext.willSave,
-            object: nil
-        )
-    }
-
-    @objc
-    private func willSave() {
-        guard richTextChanged else { return }
-        richTextChanged = false
-
-        do {
-            richTextData = try richText.encodeToJSON()
-        } catch {
-            print("Failed to encode rich text: \(error)")
-        }
     }
 
     /// Decode stored bounding boxes

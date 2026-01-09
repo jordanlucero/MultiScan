@@ -65,7 +65,7 @@ struct ExportPanelView: View {
 
             ZStack {
                 ScrollView {
-                    Text(displayPreviewText)
+                    Text(previewText)
                         .font(.system(.body))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -80,15 +80,11 @@ struct ExportPanelView: View {
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color(nsColor: .textBackgroundColor))
                 }
             }
         }
-    }
-
-    private var displayPreviewText: AttributedString {
-        var text = previewText
-        text.foregroundColor = .primary
-        return text
     }
 
     // MARK: - Options Pane (Right)

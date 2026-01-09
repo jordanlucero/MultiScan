@@ -6,8 +6,8 @@ import SwiftUI
 final class EditablePageText: Identifiable {
     private let page: Page
 
-    /// Debounce interval for auto-save (in seconds)
-    private static let saveDebounceInterval: UInt64 = 1_500_000_000 // 1.5 seconds in nanoseconds
+    /// Debounce interval for auto-save
+    private static let saveDebounceInterval: UInt64 = 1_000_000_000 // 1 second in nanoseconds
 
     /// Current debounce task - weak self in Task handles cleanup on dealloc
     private var saveTask: Task<Void, Never>?

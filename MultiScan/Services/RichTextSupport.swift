@@ -136,17 +136,3 @@ extension AttributedString {
     }
 }
 
-// MARK: - JSON Serialization Helpers
-
-extension AttributedString {
-    /// Encodes the attributed string to JSON data for SwiftData storage
-    /// Uses SwiftUI attribute scope to preserve font formatting
-    func encodeToJSON() throws -> Data {
-        try JSONEncoder().encode(self, configuration: AttributeScopes.SwiftUIAttributes.self)
-    }
-
-    /// Decodes an attributed string from JSON data
-    static func decodeFromJSON(_ data: Data) throws -> AttributedString {
-        try JSONDecoder().decode(AttributedString.self, from: data, configuration: AttributeScopes.SwiftUIAttributes.self)
-    }
-}

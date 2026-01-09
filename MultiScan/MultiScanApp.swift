@@ -94,6 +94,7 @@ struct MultiScanApp: App {
                 .disabled(focusedNavigationState?.currentPage == nil)
 
                 Button("Export All Pages…", systemImage: "doc.on.doc") {
+                    focusedEditableText?.saveNow()
                     showExportPanelBinding?.wrappedValue = true
                 }
                 .keyboardShortcut("C", modifiers: [.command, .option])

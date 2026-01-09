@@ -29,6 +29,9 @@ struct ReviewView: View {
     // Use AppStorage directly for inspector to sync with menu commands
     @AppStorage("showTextPanel") private var showTextPanel = true
 
+    // Access editable text for save-before-export
+    @FocusedValue(\.editableText) private var editableText
+
     /// Sorted pages for rotor navigation
     private var sortedPages: [Page] {
         document.pages.sorted(by: { $0.pageNumber < $1.pageNumber })
@@ -224,7 +227,10 @@ struct ReviewView: View {
             .help("Share Current Page Text")
             .disabled(navigationState.currentPage == nil)
 
-            Button(action: { showExportPanel = true }) {
+            Button(action: {
+                editableText?.saveNow()
+                showExportPanel = true
+            }) {
                 Label("Export All Pages", systemImage: "doc.on.doc")
                     .labelStyle(.iconOnly)
             }

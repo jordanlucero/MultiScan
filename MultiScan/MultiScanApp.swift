@@ -265,9 +265,14 @@ struct MultiScanApp: App {
             }
 
             // Help Menu Commands
-            CommandGroup(after: .help) {
+            CommandGroup(replacing: .help) {
+                Button("MultiScan Known Issues", systemImage: "") { // bulb icon used by system apps missing from SF symbols?? temporarily just pointing to GitHub releases for Known Issues
+                    if let url = URL(string: "https://github.com/jordanlucero/MultiScan/releases") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
                 Button("Open MultiScan Repository on GitHub", systemImage: "safari") {
-                    if let url = URL(string: "https://github.com/jordanlucero/multiscan") {
+                    if let url = URL(string: "https://github.com/jordanlucero/MultiScan") {
                         NSWorkspace.shared.open(url)
                     }
                 }

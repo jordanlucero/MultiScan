@@ -890,6 +890,9 @@
         }
       }
     },
+    "MultiScan User Guide" : {
+
+    },
     "MultiScan will optimize images it stores to save storage." : {
       "comment" : "Rework both",
       "localizations" : {

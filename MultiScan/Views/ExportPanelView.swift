@@ -35,9 +35,9 @@ struct ExportPanelView: View {
         let fullCount = previewText.characters.count
         guard fullCount > Self.previewCharacterLimit else { return previewText }
 
-        // Truncate and add indicator
+        // Truncate while preserving attributes (use direct subscript, not .characters which strips formatting)
         let endIndex = previewText.characters.index(previewText.startIndex, offsetBy: Self.previewCharacterLimit)
-        var truncated = AttributedString(previewText.characters[previewText.startIndex..<endIndex])
+        var truncated = AttributedString(previewText[previewText.startIndex..<endIndex])
         truncated.append(AttributedString("\n\n[Preview truncated — \(fullCount - Self.previewCharacterLimit) more characters]\n[Full text will be exported]"))
         return truncated
     }
@@ -91,8 +91,8 @@ struct ExportPanelView: View {
             ZStack {
                 ScrollView {
                     Text(displayPreviewText)
-                        .font(.system(.body))
-                        .textSelection(.enabled)
+                        .font(.body)
+                        .textSelection(.disabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding()
                 }

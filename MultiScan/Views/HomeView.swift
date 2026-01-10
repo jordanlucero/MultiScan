@@ -404,6 +404,10 @@ struct HomeView: View {
         // Calculate storage size after all pages are added
         document.recalculateStorageSize()
 
+        // Build text export cache while page richText is still in memory
+        // This avoids external storage loads when exporting later
+        TextExportCacheService.buildInitialCache(for: document, from: document.pages)
+
         do {
             try modelContext.save()
         } catch {

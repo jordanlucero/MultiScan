@@ -63,6 +63,16 @@ final class EditablePageText: Identifiable {
             cleanText[range].foregroundColor = nil
         }
         page.richText = cleanText
+
+        // Update the export cache with the new text (using cleanText to avoid re-accessing page.richText)
+        // This keeps the cache in sync for efficient export later
+        if let document = page.document {
+            TextExportCacheService.updateEntry(
+                pageNumber: page.pageNumber,
+                richText: cleanText,
+                in: document
+            )
+        }
     }
 
     /// Apply bold formatting to the current selection

@@ -4,11 +4,18 @@
 //
 //  Print-panel-style export view with preview and options.
 //
+//  ## Performance
+//  Uses `TextExporter` with document-based initialization to enable cache-based export.
+//  This loads page data from a single cached file instead of N external storage files,
+//  dramatically improving performance for large documents.
+//
 
 import SwiftUI
 
 struct ExportPanelView: View {
-    let pages: [Page]
+    /// Document to export (enables cache-based export for performance)
+    let document: Document
+
     @Environment(\.dismiss) private var dismiss
 
     @State private var settings = ExportSettings()
@@ -16,6 +23,24 @@ struct ExportPanelView: View {
     @State private var isLoading = false
     @State private var exportTask: Task<Void, Never>?
     @State private var debounceTask: Task<Void, Never>?
+
+    /// Convenience accessor for page count display
+    private var pageCount: Int { document.pages.count }
+
+    /// Maximum characters to display in preview (SwiftUI Text chokes on huge strings)
+    private static let previewCharacterLimit = 50_000
+
+    /// Truncated preview for display — full text is still used for export/share
+    private var displayPreviewText: AttributedString {
+        let fullCount = previewText.characters.count
+        guard fullCount > Self.previewCharacterLimit else { return previewText }
+
+        // Truncate and add indicator
+        let endIndex = previewText.characters.index(previewText.startIndex, offsetBy: Self.previewCharacterLimit)
+        var truncated = AttributedString(previewText.characters[previewText.startIndex..<endIndex])
+        truncated.append(AttributedString("\n\n[Preview truncated — \(fullCount - Self.previewCharacterLimit) more characters]\n[Full text will be exported]"))
+        return truncated
+    }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -55,7 +80,7 @@ struct ExportPanelView: View {
                         .scaleEffect(0.6)
                         .frame(width: 16, height: 16)
                 }
-                Text(pages.count == 1 ? "1 page" : "\(pages.count) pages", comment: "Page count in export panel")
+                Text(pageCount == 1 ? "1 page" : "\(pageCount) pages", comment: "Page count in export panel")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -65,7 +90,7 @@ struct ExportPanelView: View {
 
             ZStack {
                 ScrollView {
-                    Text(previewText)
+                    Text(displayPreviewText)
                         .font(.system(.body))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -167,7 +192,7 @@ struct ExportPanelView: View {
         }
     }
 
-    /// Run the async export
+    /// Run the async export using cache-based TextExporter
     private func runExport() {
         exportTask?.cancel()
 
@@ -175,15 +200,11 @@ struct ExportPanelView: View {
             isLoading = true
             defer { isLoading = false }
 
-            let exporter = TextExporter(pages: pages, settings: settings)
+            let exporter = TextExporter(document: document, settings: settings)
             let result = await exporter.buildCombinedTextAsync()
 
             guard !Task.isCancelled else { return }
             previewText = result
         }
     }
-}
-
-#Preview {
-    ExportPanelView(pages: [])
 }

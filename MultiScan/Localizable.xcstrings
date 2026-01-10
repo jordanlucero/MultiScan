@@ -890,8 +890,15 @@
         }
       }
     },
-    "MultiScan User Guide" : {
-
+    "MultiScan Known Issues" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MultiScan problemas conocidos"
+          }
+        }
+      }
     },
     "MultiScan will optimize images it stores to save storage." : {
       "comment" : "Rework both",

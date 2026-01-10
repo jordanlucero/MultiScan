@@ -133,7 +133,6 @@ struct DocumentCard: View {
 
     private var processingOverlay: some View {
         RoundedRectangle(cornerRadius: 8)
-            .fill(Color.black.opacity(0.75))
             .aspectRatio(8.5/11, contentMode: .fit)
             .overlay(
                 VStack(spacing: 8) {
@@ -141,7 +140,7 @@ struct DocumentCard: View {
                         .controlSize(.regular)
                     Text("\(Int(ocrProgress * 100))%")
                         .font(.body)
-                        .foregroundColor(.white)
+                        .foregroundColor(.primary)
                 }
             )
     }

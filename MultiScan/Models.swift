@@ -84,6 +84,12 @@ final class Document {
     /// Cached storage size in bytes (external storage size isn't easily queryable)
     var cachedStorageBytes: Int64 = 0
 
+    /// Pre-computed cache of all page text data for efficient export.
+    /// Stored as JSON-encoded `TextExportCache` to avoid loading individual page external storage files.
+    /// See `TextExportCacheService` for cache management.
+    @Attribute(.externalStorage)
+    var textExportCache: Data?
+
     init(name: String, totalPages: Int = 0) {
         self.name = name
         self.totalPages = totalPages

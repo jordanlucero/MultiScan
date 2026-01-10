@@ -45,7 +45,7 @@ struct ReviewView: View {
     var body: some View {
         mainContent
             .sheet(isPresented: $showExportPanel) {
-                ExportPanelView(pages: document.pages)
+                ExportPanelView(document: document)
             }
             .sheet(isPresented: $showAddFromPhotos) {
                 addFromPhotosSheet
@@ -360,6 +360,9 @@ struct ReviewView: View {
         do {
             let results = try await ocrService.processImages(images, startingPageNumber: startingPageNumber)
 
+            // Collect new pages for cache update
+            var newPages: [Page] = []
+
             for result in results {
                 let page = Page(
                     pageNumber: result.pageNumber,
@@ -371,10 +374,14 @@ struct ReviewView: View {
                 page.thumbnailData = result.thumbnailData
                 page.document = document
                 document.pages.append(page)
+                newPages.append(page)
             }
 
             document.totalPages += results.count
             document.recalculateStorageSize()
+
+            // Add new page entries to export cache while richText is still in memory
+            TextExportCacheService.addEntries(for: newPages, to: document)
 
             try modelContext.save()
 

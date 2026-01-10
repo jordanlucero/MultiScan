@@ -257,9 +257,18 @@ class NavigationState: ObservableObject {
         guard let page = currentPage,
               let document = selectedDocument,
               let adjacent = document.pages.first(where: { $0.pageNumber == page.pageNumber - 1 }) else { return }
+
+        // Capture original page numbers for cache update
+        let originalPageNumber = page.pageNumber
+        let adjacentPageNumber = adjacent.pageNumber
+
         let temp = page.pageNumber
         page.pageNumber = adjacent.pageNumber
         adjacent.pageNumber = temp
+
+        // Update export cache with swapped page numbers
+        TextExportCacheService.swapPageNumbers(originalPageNumber, adjacentPageNumber, in: document)
+
         refreshPageOrder()
     }
 
@@ -268,9 +277,18 @@ class NavigationState: ObservableObject {
         guard let page = currentPage,
               let document = selectedDocument,
               let adjacent = document.pages.first(where: { $0.pageNumber == page.pageNumber + 1 }) else { return }
+
+        // Capture original page numbers for cache update
+        let originalPageNumber = page.pageNumber
+        let adjacentPageNumber = adjacent.pageNumber
+
         let temp = page.pageNumber
         page.pageNumber = adjacent.pageNumber
         adjacent.pageNumber = temp
+
+        // Update export cache with swapped page numbers
+        TextExportCacheService.swapPageNumbers(originalPageNumber, adjacentPageNumber, in: document)
+
         refreshPageOrder()
     }
 
@@ -280,6 +298,9 @@ class NavigationState: ObservableObject {
               let document = selectedDocument else { return }
 
         let deletedPageNumber = page.pageNumber
+
+        // Remove page entry from export cache (also renumbers subsequent pages)
+        TextExportCacheService.removeEntry(pageNumber: deletedPageNumber, from: document)
 
         // Decrement pageNumber for all pages after the deleted one
         for otherPage in document.pages where otherPage.pageNumber > deletedPageNumber {

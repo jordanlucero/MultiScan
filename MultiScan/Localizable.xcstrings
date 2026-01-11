@@ -911,6 +911,12 @@
         }
       }
     },
+    "Navigate only between filtered pages (Sequential)" : {
+
+    },
+    "Navigate only between filtered pages (Shuffled)" : {
+
+    },
     "New Project" : {
       "localizations" : {
         "es-419" : {
@@ -930,6 +936,12 @@
           }
         }
       }
+    },
+    "No more matching pages ahead" : {
+
+    },
+    "No more matching pages behind" : {
+
     },
     "No Page Selected" : {
       "localizations" : {
@@ -1234,6 +1246,9 @@
         }
       }
     },
+    "Project Navigation" : {
+
+    },
     "Project options" : {
       "localizations" : {
         "es-419" : {
@@ -1244,6 +1259,9 @@
         }
       }
     },
+    "Remove Line Breaks" : {
+
+    },
     "Rename…" : {
       "localizations" : {
         "es-419" : {
@@ -1253,6 +1271,9 @@
           }
         }
       }
+    },
+    "Replace line breaks with spaces" : {
+
     },
     "Review Status" : {
       "localizations" : {
@@ -1546,6 +1567,7 @@
       }
     },
     "Text formatting: Bold, Italic, Underline, Strikethrough" : {
+      "extractionState" : "stale",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -1554,6 +1576,9 @@
           }
         }
       }
+    },
+    "Text formatting: Bold, Italic, Underline, Strikethrough, Remove Line Breaks" : {
+
     },
     "Text Panel" : {
       "localizations" : {
@@ -1664,6 +1689,12 @@
           }
         }
       }
+    },
+    "When a filter is active, the previous and next page buttons will skip pages that don't match the filter." : {
+
+    },
+    "When shuffle is on and a filter is active, the previous and next page buttons will only visit matching pages." : {
+
     },
     "White" : {
       "comment" : "Viewer background option: white color",

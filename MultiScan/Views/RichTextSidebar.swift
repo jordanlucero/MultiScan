@@ -129,6 +129,11 @@ final class EditablePageText: Identifiable {
         }
     }
 
+    /// Remove all line breaks from the text, replacing with spaces
+    func removeLineBreaks() {
+        text = TextManipulationService.removingLineBreaks(from: text)
+    }
+
     /// Check if there's an active text selection
     var hasSelection: Bool {
         true // We can't easily check, so always enable formatting buttons
@@ -203,10 +208,18 @@ struct RichTextSidebar: View {
                         .help("Strikethrough (⌘⇧X)")
 
                         Spacer()
+
+                        Button(action: { editableText.removeLineBreaks() }) {
+                            Image(systemName: "line.3.horizontal")
+                                .frame(width: 24, height: 24)
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Remove Line Breaks")
+                        .help("Replace line breaks with spaces")
                     }
                     .padding(.top, 4)
                     .accessibilityElement(children: .combine)
-                    .accessibilityLabel("Text formatting: Bold, Italic, Underline, Strikethrough")
+                    .accessibilityLabel("Text formatting: Bold, Italic, Underline, Strikethrough, Remove Line Breaks")
                 }
             }
             .padding(.horizontal)

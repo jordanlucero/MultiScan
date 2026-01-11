@@ -203,11 +203,15 @@ struct ThumbnailSidebar: View {
                 .padding(8)
 
             }
-            .onChange(of: filterOptionString) { _, _ in
+            .onChange(of: filterOptionString) { _, newValue in
                 // Announce immediately when status filter changes
                 announceFilterChange()
+                // Sync to NavigationState for filtered navigation
+                navigationState.activeStatusFilter = newValue
             }
             .onChange(of: searchText) { _, newValue in
+                // Sync to NavigationState immediately for filtered navigation
+                navigationState.activeSearchText = newValue
                 // Debounce text filter announcements to avoid announcing on every keystroke
                 textFilterAnnounceTask?.cancel()
                 textFilterAnnounceTask = Task {
@@ -219,6 +223,11 @@ struct ThumbnailSidebar: View {
                         // Task was cancelled, no announcement needed
                     }
                 }
+            }
+            .onAppear {
+                // Initial sync of filter state to NavigationState
+                navigationState.activeStatusFilter = filterOptionString
+                navigationState.activeSearchText = searchText
             }
         }
     }

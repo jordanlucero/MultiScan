@@ -4,7 +4,7 @@ import SwiftData
 
 @MainActor
 class NavigationState: ObservableObject {
-    @Published var isRandomized: Bool = true
+    @Published var isRandomized: Bool = false
     @Published var selectedDocument: Document?
 
     // Sequential mode: index into originalOrder
@@ -16,6 +16,17 @@ class NavigationState: ObservableObject {
     @Published private var historyIndex: Int = -1    // Current position in visitHistory
 
     private var originalOrder: [Int] = []
+
+    // MARK: - Filter State (synced from ThumbnailSidebar)
+
+    /// Current status filter option raw value (synced from ThumbnailSidebar)
+    @Published var activeStatusFilter: String = "all"
+
+    /// Current text search query (synced from ThumbnailSidebar)
+    @Published var activeSearchText: String = ""
+
+    /// Navigation settings for filter-aware behavior
+    let navigationSettings = NavigationSettings()
 
     // Published for view observation - updated whenever navigation changes
     @Published private(set) var currentPageNumber: Int?
@@ -39,6 +50,57 @@ class NavigationState: ObservableObject {
         return document.pages.first { $0.pageNumber == pn }
     }
 
+    // MARK: - Filter-Aware Navigation
+
+    /// Whether any filter is currently active
+    var isFilterActive: Bool {
+        activeStatusFilter != "all" || !activeSearchText.isEmpty
+    }
+
+    /// Page numbers that match the current filter, sorted
+    private var filteredPageNumbers: [Int] {
+        guard let document = selectedDocument else { return [] }
+
+        let sortedPages = document.pages.sorted { $0.pageNumber < $1.pageNumber }
+
+        // Apply status filter
+        let statusFiltered: [Page]
+        switch activeStatusFilter {
+        case "notDone":
+            statusFiltered = sortedPages.filter { !$0.isDone }
+        case "done":
+            statusFiltered = sortedPages.filter { $0.isDone }
+        default: // "all"
+            statusFiltered = sortedPages
+        }
+
+        // Apply text search
+        guard !activeSearchText.isEmpty else {
+            return statusFiltered.map { $0.pageNumber }
+        }
+
+        let query = activeSearchText.lowercased()
+        return statusFiltered.filter { page in
+            // Match page number: "1", "Page 1", "page 1"
+            let pageNum = String(page.pageNumber)
+            if pageNum.contains(query) || "page \(pageNum)".contains(query) {
+                return true
+            }
+
+            // Match filename (case-insensitive)
+            if let filename = page.originalFileName?.lowercased(), filename.contains(query) {
+                return true
+            }
+
+            // Match page content (case-insensitive)
+            if page.plainText.lowercased().contains(query) {
+                return true
+            }
+
+            return false
+        }.map { $0.pageNumber }
+    }
+
     /// Updates currentPageNumber based on current mode and indices
     private func updateCurrentPageNumber() {
         if isRandomized {
@@ -58,10 +120,16 @@ class NavigationState: ObservableObject {
         guard let document = selectedDocument else { return false }
 
         if isRandomized {
-            // Shuffled mode: can go next if there's an undone page OTHER than current
+            // Shuffled mode: check for undone pages, respecting filter if enabled
+            if navigationSettings.shuffledUsesFilteredNavigation && isFilterActive {
+                return findNextUndoneInFilteredShuffledOrder(from: currentPageNumber, in: document) != nil
+            }
             return findNextUndoneInShuffledOrder(from: currentPageNumber, in: document) != nil
         } else {
-            // Sequential mode: can go next if not at the last page
+            // Sequential mode: check if we can advance, respecting filter if enabled
+            if navigationSettings.sequentialUsesFilteredNavigation && isFilterActive {
+                return findNextInFilteredSequentialOrder() != nil
+            }
             return sequentialIndex < originalOrder.count - 1
         }
     }
@@ -70,10 +138,13 @@ class NavigationState: ObservableObject {
         guard selectedDocument != nil else { return false }
 
         if isRandomized {
-            // Shuffled mode: can go back if there's history behind us
+            // Shuffled mode: can go back if there's history behind us (unchanged)
             return historyIndex > 0
         } else {
-            // Sequential mode: can go back if not at the first page
+            // Sequential mode: check if we can go back, respecting filter if enabled
+            if navigationSettings.sequentialUsesFilteredNavigation && isFilterActive {
+                return findPreviousInFilteredSequentialOrder() != nil
+            }
             return sequentialIndex > 0
         }
     }
@@ -110,9 +181,17 @@ class NavigationState: ObservableObject {
         guard selectedDocument != nil else { return }
 
         if isRandomized {
-            nextPageShuffled()
+            if navigationSettings.shuffledUsesFilteredNavigation && isFilterActive {
+                nextPageShuffledFiltered()
+            } else {
+                nextPageShuffled()
+            }
         } else {
-            nextPageSequential()
+            if navigationSettings.sequentialUsesFilteredNavigation && isFilterActive {
+                nextPageSequentialFiltered()
+            } else {
+                nextPageSequential()
+            }
         }
     }
 
@@ -120,9 +199,14 @@ class NavigationState: ObservableObject {
         guard selectedDocument != nil else { return }
 
         if isRandomized {
+            // Shuffled mode: history-based, unchanged
             previousPageShuffled()
         } else {
-            previousPageSequential()
+            if navigationSettings.sequentialUsesFilteredNavigation && isFilterActive {
+                previousPageSequentialFiltered()
+            } else {
+                previousPageSequential()
+            }
         }
     }
 
@@ -183,6 +267,119 @@ class NavigationState: ObservableObject {
         }
 
         return nil // All pages are done
+    }
+
+    // MARK: - Filtered Sequential Navigation
+
+    private func nextPageSequentialFiltered() {
+        guard let nextPN = findNextInFilteredSequentialOrder() else {
+            announceFilterBoundary(direction: .next)
+            return
+        }
+        if let index = originalOrder.firstIndex(of: nextPN) {
+            sequentialIndex = index
+            updateCurrentPageNumber()
+        }
+    }
+
+    private func previousPageSequentialFiltered() {
+        guard let prevPN = findPreviousInFilteredSequentialOrder() else {
+            announceFilterBoundary(direction: .previous)
+            return
+        }
+        if let index = originalOrder.firstIndex(of: prevPN) {
+            sequentialIndex = index
+            updateCurrentPageNumber()
+        }
+    }
+
+    private func findNextInFilteredSequentialOrder() -> Int? {
+        let filtered = filteredPageNumbers
+        guard let currentPN = currentPageNumber,
+              let currentFilteredIndex = filtered.firstIndex(of: currentPN) else {
+            // Current page not in filter, find first matching page after current position
+            if let currentPN = currentPageNumber {
+                return filtered.first { $0 > currentPN }
+            }
+            return filtered.first
+        }
+        let nextIndex = currentFilteredIndex + 1
+        return nextIndex < filtered.count ? filtered[nextIndex] : nil
+    }
+
+    private func findPreviousInFilteredSequentialOrder() -> Int? {
+        let filtered = filteredPageNumbers
+        guard let currentPN = currentPageNumber,
+              let currentFilteredIndex = filtered.firstIndex(of: currentPN) else {
+            // Current page not in filter, find last matching page before current position
+            if let currentPN = currentPageNumber {
+                return filtered.last { $0 < currentPN }
+            }
+            return nil
+        }
+        let prevIndex = currentFilteredIndex - 1
+        return prevIndex >= 0 ? filtered[prevIndex] : nil
+    }
+
+    // MARK: - Filtered Shuffled Navigation
+
+    private func nextPageShuffledFiltered() {
+        guard let document = selectedDocument else { return }
+
+        guard let nextPN = findNextUndoneInFilteredShuffledOrder(from: currentPageNumber, in: document) else {
+            announceFilterBoundary(direction: .next)
+            return
+        }
+
+        // Truncate forward history if we went back
+        if historyIndex < visitHistory.count - 1 {
+            visitHistory = Array(visitHistory.prefix(historyIndex + 1))
+        }
+
+        visitHistory.append(nextPN)
+        historyIndex = visitHistory.count - 1
+        updateCurrentPageNumber()
+    }
+
+    private func findNextUndoneInFilteredShuffledOrder(from pageNumber: Int?, in document: Document) -> Int? {
+        let filtered = Set(filteredPageNumbers)
+        let startIndex: Int
+        if let pn = pageNumber, let idx = shuffledOrder.firstIndex(of: pn) {
+            startIndex = idx
+        } else {
+            startIndex = shuffledOrder.count - 1
+        }
+
+        for offset in 1..<shuffledOrder.count {
+            let checkIndex = (startIndex + offset) % shuffledOrder.count
+            let checkPageNumber = shuffledOrder[checkIndex]
+
+            // Must be in filtered set AND undone
+            guard filtered.contains(checkPageNumber) else { continue }
+
+            if let page = document.pages.first(where: { $0.pageNumber == checkPageNumber }),
+               !page.isDone {
+                return checkPageNumber
+            }
+        }
+        return nil
+    }
+
+    // MARK: - Filter Boundary Announcement
+
+    enum NavigationDirection {
+        case next, previous
+    }
+
+    private func announceFilterBoundary(direction: NavigationDirection) {
+        let message: String
+        switch direction {
+        case .next:
+            message = String(localized: "No more matching pages ahead")
+        case .previous:
+            message = String(localized: "No more matching pages behind")
+        }
+        AccessibilityNotification.Announcement(message).post()
     }
 
     // MARK: - Direct Navigation

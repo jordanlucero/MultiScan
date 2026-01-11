@@ -27,6 +27,7 @@ struct MultiScanApp: App {
     @FocusedValue(\.showFindNavigator) private var showFindNavigatorBinding: Binding<Bool>?
 
     @State private var showDeletePageConfirmation = false
+    @State private var navigationSettings = NavigationSettings()
 
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
@@ -280,26 +281,66 @@ struct MultiScanApp: App {
         }
 
         Settings {
-            Form {
-                Section("Import") {
-                    Toggle("Optimize images on import", isOn: $optimizeImagesOnImport)
-                    Text("MultiScan will optimize images it stores to save storage.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
+            SettingsView(
+                optimizeImagesOnImport: $optimizeImagesOnImport,
+                viewerBackground: $viewerBackground,
+                navigationSettings: navigationSettings
+            )
+        }
+    }
+}
 
-                Section("Viewer") {
-                    Picker("Background", selection: $viewerBackground) {
-                        ForEach(ViewerBackground.allCases, id: \.rawValue) { option in
-                            Text(option.label).tag(option.rawValue)
-                        }
+// MARK: - Settings View
+
+struct SettingsView: View {
+    @Binding var optimizeImagesOnImport: Bool
+    @Binding var viewerBackground: String
+    var navigationSettings: NavigationSettings
+
+    var body: some View {
+        Form {
+            Section("Import") {
+                Toggle("Optimize images on import", isOn: $optimizeImagesOnImport)
+                Text("MultiScan will optimize images it stores to save storage.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Section("Viewer") {
+                Picker("Background", selection: $viewerBackground) {
+                    ForEach(ViewerBackground.allCases, id: \.rawValue) { option in
+                        Text(option.label).tag(option.rawValue)
                     }
                 }
             }
-            .formStyle(.grouped)
-            .padding()
-            .frame(width: 400)
-        }
-    }
 
+            Section("Project Navigation") {
+                Toggle("Navigate only between filtered pages (Sequential)", isOn: Bindable(navigationSettings).sequentialUsesFilteredNavigation)
+                Text("When a filter is active, the previous and next page buttons will skip pages that don't match the filter.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                Toggle("Navigate only between filtered pages (Shuffled)", isOn: Bindable(navigationSettings).shuffledUsesFilteredNavigation)
+                Text("When shuffle is on and a filter is active, the previous and next page buttons will only visit matching pages.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .frame(width: 450)
+//        .padding(.horizontal)
+    }
+}
+
+#Preview("Settings") {
+    @Previewable @State var optimizeImages = false
+    @Previewable @State var viewerBackground = ViewerBackground.default.rawValue
+    @Previewable @State var navigationSettings = NavigationSettings()
+
+    SettingsView(
+        optimizeImagesOnImport: $optimizeImages,
+        viewerBackground: $viewerBackground,
+        navigationSettings: navigationSettings
+    )
+    .frame(width: 450, height: 400)
 }

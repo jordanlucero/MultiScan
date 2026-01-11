@@ -155,6 +155,17 @@ struct RichTextSidebar: View {
     /// Accessibility focus state for VoiceOver navigation
     @AccessibilityFocusState private var isHeaderFocused: Bool
 
+    /// Tracks hover state for the page header share button
+    @State private var isPageHeaderHovered = false
+
+    /// Tracks keyboard focus on the share button
+    @FocusState private var isShareButtonFocused: Bool
+
+    /// Whether the share button should be visible (hovered or focused)
+    private var isShareButtonVisible: Bool {
+        isPageHeaderHovered || isShareButtonFocused
+    }
+
     var currentPage: Page? {
         navigationState.currentPage
     }
@@ -164,15 +175,33 @@ struct RichTextSidebar: View {
             // Header with page info and formatting toolbar
             VStack(alignment: .leading, spacing: 6) {
                 if let page = currentPage {
-                    Text("Page \(page.pageNumber) of \(document.totalPages)")
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
-                        .accessibilityAddTraits(.isHeader)
-                        .accessibilityLabel("Text Editor, Page \(page.pageNumber) of \(document.totalPages)")
-                        .accessibilityFocused($isHeaderFocused)
+                    ShareLink(item: RichText(page.richText),
+                              preview: SharePreview("Page \(page.pageNumber) Text")) {
+                        HStack(spacing: 6) {
+                            Text("Page \(page.pageNumber) of \(document.totalPages)")
+                                .font(.headline)
+                                .foregroundStyle(.secondary)
+
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .opacity(isShareButtonVisible ? 1 : 0)
+                                .animation(.easeInOut(duration: 0.15), value: isShareButtonVisible)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .focusable()
+                    .focused($isShareButtonFocused)
+                    .onHover { hovering in
+                        isPageHeaderHovered = hovering
+                    }
+                    .accessibilityAddTraits(.isHeader)
+                    .accessibilityLabel("Text Editor, Page \(page.pageNumber) of \(document.totalPages). Export Page Text")
+                    .accessibilityFocused($isHeaderFocused)
+                    .help("Export the Current Page's Text")
                 }
 
-                // Formatting toolbar - always visible when editing
+                // Formatting toolbar
                 if let editableText = editableText {
                     HStack(spacing: 12) {
                         Group {

@@ -424,16 +424,6 @@
         }
       }
     },
-    "Document Text" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Texto del documento"
-          }
-        }
-      }
-    },
     "Done" : {
       "localizations" : {
         "es-419" : {
@@ -504,42 +494,64 @@
         }
       }
     },
-    "Export All Pages" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Exportar todas las páginas"
-          }
-        }
-      }
-    },
-    "Export All Pages Text" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Exportar texto de todas las páginas"
-          }
-        }
-      }
-    },
-    "Export All Pages…" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Exportar todas las páginas…"
-          }
-        }
-      }
-    },
     "Export Options" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Opciones de exportación"
+          }
+        }
+      }
+    },
+    "Export Page Text" : {
+      "comment" : "Export Page Text button on “Page x of x” RichTextSidebar header",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exportar texto de la página"
+          }
+        }
+      }
+    },
+    "Export Page Text…" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exportar texto de la página…"
+          }
+        }
+      }
+    },
+    "Export Project Text…" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exportar texto del proyecto…"
+          }
+        }
+      }
+    },
+    "Export the Current Page's Text" : {
+      "comment" : "Export Page Text button on “Page x of x” RichTextSidebar header",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exportar el texto de la página actual"
+          }
+        }
+      }
+    },
+    "Export…" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exportar…"
           }
         }
       }
@@ -564,17 +576,17 @@
         }
       }
     },
-    "Filter" : {
+    "Filter by status" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Filtrar"
+            "value" : "Filtrar por estado"
           }
         }
       }
     },
-    "Filter by status" : {
+    "Filter by Status" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -839,22 +851,32 @@
         }
       }
     },
-    "Mark as Not Reviewed" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Marcar como no revisado"
-          }
-        }
-      }
-    },
     "Mark as Reviewed" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Marcar como revisado"
+          }
+        }
+      }
+    },
+    "Mark Page as Not Reviewed" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marcar página como no revisada"
+          }
+        }
+      }
+    },
+    "Mark Page as Reviewed" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marcar página como revisada"
           }
         }
       }
@@ -912,10 +934,24 @@
       }
     },
     "Navigate only between filtered pages (Sequential)" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Navegar solo entre páginas filtradas (Secuencial)"
+          }
+        }
+      }
     },
     "Navigate only between filtered pages (Shuffled)" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Navegar solo entre páginas filtradas (Aleatorio)"
+          }
+        }
+      }
     },
     "New Project" : {
       "localizations" : {
@@ -938,10 +974,26 @@
       }
     },
     "No more matching pages ahead" : {
-
+      "comment" : "AccessibilityNotification NavigationDirection",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No hay más páginas coincidentes adelante"
+          }
+        }
+      }
     },
     "No more matching pages behind" : {
-
+      "comment" : "AccessibilityNotification NavigationDirection",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No hay más páginas coincidentes atrás"
+          }
+        }
+      }
     },
     "No Page Selected" : {
       "localizations" : {
@@ -1075,6 +1127,17 @@
         }
       }
     },
+    "Page %lld Text" : {
+      "comment" : "Export Page Text via Share Sheet Output Title on “Page x of x” RichTextSidebar header",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Texto de la página %lld"
+          }
+        }
+      }
+    },
     "Page image" : {
       "localizations" : {
         "es-419" : {
@@ -1101,16 +1164,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orden de páginas"
-          }
-        }
-      }
-    },
-    "Page Text" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Texto de la página"
           }
         }
       }
@@ -1216,6 +1269,16 @@
         }
       }
     },
+    "Processing in progress" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Procesando en progreso"
+          }
+        }
+      }
+    },
     "Progress" : {
       "localizations" : {
         "es-419" : {
@@ -1247,7 +1310,14 @@
       }
     },
     "Project Navigation" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Navegación del proyecto"
+          }
+        }
+      }
     },
     "Project options" : {
       "localizations" : {
@@ -1259,8 +1329,25 @@
         }
       }
     },
+    "Project Text" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Texto del proyecto"
+          }
+        }
+      }
+    },
     "Remove Line Breaks" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eliminar saltos de línea"
+          }
+        }
+      }
     },
     "Rename…" : {
       "localizations" : {
@@ -1273,7 +1360,14 @@
       }
     },
     "Replace line breaks with spaces" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reemplazar saltos de línea con espacios"
+          }
+        }
+      }
     },
     "Review Status" : {
       "localizations" : {
@@ -1399,46 +1493,6 @@
         }
       }
     },
-    "Share Current Page Text" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Compartir texto de la página actual"
-          }
-        }
-      }
-    },
-    "Share Page Text" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Compartir texto de la página"
-          }
-        }
-      }
-    },
-    "Share Page Text…" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Compartir texto de la página…"
-          }
-        }
-      }
-    },
-    "Share…" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Compartir…"
-          }
-        }
-      }
-    },
     "Show Statistics" : {
       "localizations" : {
         "es-419" : {
@@ -1550,24 +1604,23 @@
         }
       }
     },
-    "Text Editor, Page %lld of %lld" : {
+    "Text Editor, Page %lld of %lld. Export Page Text" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Text Editor, Page %1$lld of %2$lld"
+            "value" : "Text Editor, Page %1$lld of %2$lld. Export Page Text"
           }
         },
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Editor de texto, página %1$lld de %2$lld"
+            "value" : "Editor de texto, página %1$lld de %2$lld. Exportar texto de la página"
           }
         }
       }
     },
     "Text formatting: Bold, Italic, Underline, Strikethrough" : {
-      "extractionState" : "stale",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -1576,9 +1629,6 @@
           }
         }
       }
-    },
-    "Text formatting: Bold, Italic, Underline, Strikethrough, Remove Line Breaks" : {
-
     },
     "Text Panel" : {
       "localizations" : {
@@ -1691,10 +1741,24 @@
       }
     },
     "When a filter is active, the previous and next page buttons will skip pages that don't match the filter." : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cuando un filtro está activo, los botones de página anterior y siguiente omitirán las páginas que no coincidan con el filtro."
+          }
+        }
+      }
     },
     "When shuffle is on and a filter is active, the previous and next page buttons will only visit matching pages." : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cuando el modo aleatorio está activado y un filtro está activo, los botones de página anterior y siguiente solo visitarán las páginas coincidentes."
+          }
+        }
+      }
     },
     "White" : {
       "comment" : "Viewer background option: white color",

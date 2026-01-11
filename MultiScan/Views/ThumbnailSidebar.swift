@@ -14,14 +14,14 @@ struct ThumbnailSidebar: View {
 
     enum FilterOption: String, CaseIterable {
         case all
-        case notDone
         case done
+        case notDone
 
         var label: LocalizedStringResource {
             switch self {
             case .all: "All"
-            case .notDone: "Not Reviewed"
             case .done: "Reviewed"
+            case .notDone: "Not Reviewed"
             }
         }
     }
@@ -395,6 +395,14 @@ struct ThumbnailView: View {
                     if let filename = page.originalFileName {
                         Text(filename)
                             .foregroundStyle(.secondary)
+                    }
+                }
+
+                // MARK: - Export Section
+                Section {
+                    ShareLink(item: RichText(page.richText),
+                              preview: SharePreview("Page \(page.pageNumber) Text")) {
+                        Label("Export Page Text", systemImage: "square.and.arrow.up")
                     }
                 }
 

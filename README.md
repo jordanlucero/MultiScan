@@ -9,7 +9,7 @@ Built with Claude Code running Claude 4 Sonnet, Claude 4 Opus, Claude 4.1 Opus, 
 
 # Key Limitations
 
-MultiScan is designed for casual reading or workflows where the OCR output can be reviewed. Text might be placed out of order. Fingers, image noise, and specks of dust/dirt might be mistaken for accented or entirely new characters. When you're in low-light, consider using flash or night mode for MultiScan-bound images. Avoid glare.
+MultiScan is designed for casual reading or workflows where the OCR output can be reviewed. Text might be placed out of order. Fingers, image noise, and specks of dust/dirt might be mistaken for new or accented characters. When you're in low-light, consider using flash or night mode for MultiScan-bound images. Avoid glare.
 
 MultiScan doesn't have the capacity to identify illustrations or images on document pages. VisionKit will attempt to transcribe the text within artwork in a way that doesn't make sense. It's useful to include an in-line note to yourself when you export from MultiScan in case you want to add a screenshot or external scan of the artwork in an external word processor.
 

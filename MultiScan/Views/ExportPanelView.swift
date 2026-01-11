@@ -164,8 +164,8 @@ struct ExportPanelView: View {
 
                 Spacer()
 
-                ShareLink(item: RichText(previewText), preview: SharePreview("Document Text")) {
-                    Text("Share…")
+                ShareLink(item: RichText(previewText), preview: SharePreview("Project Text")) {
+                    Text("Export…")
                 }
                 .keyboardShortcut(.defaultAction)
             }

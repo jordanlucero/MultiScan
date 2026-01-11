@@ -201,7 +201,7 @@ struct ReviewView: View {
             }
             .accessibilityLabel("Review Status")
             .accessibilityValue(navigationState.currentPage?.isDone == true ? "Reviewed" : "Not reviewed")
-            .help(navigationState.currentPage?.isDone == true ? "Mark as Not Reviewed" : "Mark as Reviewed")
+            .help(navigationState.currentPage?.isDone == true ? "Mark Page as Not Reviewed" : "Mark Page as Reviewed")
 
             Button(action: { showProgress.toggle() }) {
                 Label("Progress", systemImage: "flag.pattern.checkered")
@@ -217,30 +217,7 @@ struct ReviewView: View {
             //ToolbarSpacer(.fixed)
             Spacer().frame(width: 20)
 
-            // Group 3: Share/Export
-            ShareLink(item: RichText(navigationState.currentPage?.richText ?? AttributedString()),
-                      preview: SharePreview("Page Text")) {
-                Label("Share Page Text", systemImage: "square.and.arrow.up")
-                    .labelStyle(.iconOnly)
-            }
-            .accessibilityLabel("Share Page Text")
-            .help("Share Current Page Text")
-            .disabled(navigationState.currentPage == nil)
-
-            Button(action: {
-                editableText?.saveNow()
-                showExportPanel = true
-            }) {
-                Label("Export All Pages", systemImage: "doc.on.doc")
-                    .labelStyle(.iconOnly)
-            }
-            .accessibilityLabel("Export All Pages")
-            .help("Export All Pages Text")
-
-            //ToolbarSpacer(.fixed)
-            Spacer().frame(width: 20)
-
-            // Group 4: Inspector toggle (edit buttons come from RichTextSidebar)
+            // Group 3: Inspector toggle (edit buttons come from RichTextSidebar)
             Button(action: { showTextPanel.toggle() }) {
                 Label("Show Text Panel", systemImage: "sidebar.right")
                     .labelStyle(.iconOnly)

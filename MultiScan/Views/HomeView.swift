@@ -33,6 +33,18 @@ struct HomeView: View {
     @State private var hasAnnouncedHalfway = false
     @State private var processingPageCount = 0
 
+    // Selection state for focused document
+    @State private var selectedDocumentID: PersistentIdentifier?
+
+    // Export panel state for menu bar command
+    @State private var showingExportPanel = false
+
+    /// The currently selected document (for menu bar commands)
+    private var selectedDocument: Document? {
+        guard let id = selectedDocumentID else { return nil }
+        return documents.first { $0.persistentModelID == id }
+    }
+
     var body: some View {
         ScrollView {
             LazyVGrid(columns: [
@@ -48,6 +60,11 @@ struct HomeView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(isDragOver ? Color.accentColor.opacity(0.1) : Color.clear)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            // Deselect when clicking empty space
+            selectedDocumentID = nil
+        }
         .onDrop(of: [.fileURL], isTargeted: $isDragOver) { providers in
             handleDrop(providers: providers)
             return true
@@ -91,6 +108,13 @@ struct HomeView: View {
                 AccessibilityNotification.Announcement("Processing is 50% done.").post()
             }
         }
+        .focusedSceneValue(\.document, selectedDocument)
+        .focusedSceneValue(\.showExportPanel, $showingExportPanel)
+        .sheet(isPresented: $showingExportPanel) {
+            if let document = selectedDocument {
+                ExportPanelView(document: document)
+            }
+        }
     }
 
     // MARK: - View Components
@@ -106,7 +130,7 @@ struct HomeView: View {
             }
 
         } label: {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 12) {
                 // White page with plus sign or spinner
                 ZStack {
                     RoundedRectangle(cornerRadius: 8)
@@ -146,26 +170,33 @@ struct HomeView: View {
     }
 
     private func documentLink(for document: Document) -> some View {
-        Button {
-            onDocumentSelected(document)
-        } label: {
-            DocumentCard(
-                document: document,
-                isProcessing: processingDocumentIDs.contains(document.persistentModelID),
-                ocrProgress: ocrService.progress,
-                onDelete: {
-                    documentToDelete = document
-                    showingDeleteConfirmation = true
-                },
-                onOptimize: { optimizeImages(for: document) }
-            )
-        }
-        .buttonStyle(.plain)
-        .disabled(processingDocumentIDs.contains(document.persistentModelID))
+        let isProcessing = processingDocumentIDs.contains(document.persistentModelID)
+
+        return DocumentCard(
+            document: document,
+            isProcessing: isProcessing,
+            ocrProgress: ocrService.progress,
+            isSelected: selectedDocumentID == document.persistentModelID,
+            onSelect: {
+                selectedDocumentID = document.persistentModelID
+            },
+            onOpen: {
+                onDocumentSelected(document)
+            },
+            onDelete: {
+                documentToDelete = document
+                showingDeleteConfirmation = true
+            },
+            onOptimize: { optimizeImages(for: document) }
+        )
         .accessibilityElement(children: .combine)
         .accessibilityLabel(documentAccessibilityLabel(for: document))
-        .accessibilityHint("Activate to open project")
+        .accessibilityHint(isProcessing ? "Processing in progress" : "Activate to open project")
         .accessibilityAddTraits(.isButton)
+        .accessibilityAction(.default) {
+            guard !isProcessing else { return }
+            onDocumentSelected(document)
+        }
     }
 
     // MARK: - Accessibility

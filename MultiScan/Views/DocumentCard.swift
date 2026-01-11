@@ -1,10 +1,3 @@
-//
-//  DocumentCard.swift
-//  MultiScan
-//
-//  Created by Claude Code on 12/27/25.
-//
-
 import SwiftUI
 import SwiftData
 
@@ -12,6 +5,9 @@ struct DocumentCard: View {
     @Bindable var document: Document
     let isProcessing: Bool
     let ocrProgress: Double
+    let isSelected: Bool
+    let onSelect: () -> Void
+    let onOpen: () -> Void
     let onDelete: () -> Void
     let onOptimize: () -> Void
 
@@ -29,23 +25,76 @@ struct DocumentCard: View {
     @State private var showingEmojiPopover = false
     @State private var emojiInput: String = ""
     @FocusState private var isEmojiFieldFocused: Bool
+    @FocusState private var isMenuButtonFocused: Bool
 
-    // Hover and focus state for menu button visibility
+    // Hover state for menu button visibility
     @State private var isHovered = false
+
+    // Keyboard focus state
     @FocusState private var isCardFocused: Bool
 
+    // Export panel state
+    @State private var showingExportPanel = false
+    private var menuButtonVisible: Bool {
+          showEncompassingContainer || isMenuButtonFocused
+      }
+
+    /// Whether to show the encompassing container (when selected or hovered)
+    private var showEncompassingContainer: Bool {
+        isSelected || isHovered
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        // Encompassing container
+        VStack(spacing: 12) {
             thumbnailSection
             titleSection
         }
+        .background {
+            if showEncompassingContainer {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(.clear)
+            }
+        }
+//        .animation(.easeInOut(duration: 0.15), value: showEncompassingContainer)
         .frame(maxHeight: .infinity, alignment: .top)
-        .focusable()
-        .focused($isCardFocused)
+        .contentShape(Rectangle())
         .onHover { hovering in
             isHovered = hovering
         }
-        .contextMenu {contextMenuContent}
+        .onTapGesture(count: 2) {
+            guard !isProcessing else { return }
+            onOpen()
+        }
+        .onTapGesture(count: 1) {
+            onSelect()
+            //change to just simple system focus, no need for extra complexity?
+        }
+        .contextMenu { contextMenuContent }
+        .focusable()
+        .focused($isCardFocused)
+        .onChange(of: isCardFocused) { _, isFocused in
+            if isFocused {
+                onSelect()
+            }
+        }
+        .onKeyPress(.return) {
+            guard !isProcessing else { return .ignored }
+            // Let focused child elements handle their own activation
+            guard !isMenuButtonFocused && !isNameFieldFocused && !isEmojiFieldFocused else { return .ignored }
+            onOpen()
+            return .handled
+        }
+        .onKeyPress(.space) {
+            guard !isProcessing else { return .ignored }
+            // Let focused child elements handle their own activation
+            guard !isMenuButtonFocused && !isNameFieldFocused && !isEmojiFieldFocused else { return .ignored }
+            onOpen()
+            return .handled
+        }
+        .sheet(isPresented: $showingExportPanel) {
+            ExportPanelView(document: document)
+        }
     }
 
     // MARK: - Context Menu Content
@@ -54,6 +103,11 @@ struct DocumentCard: View {
     private var contextMenuContent: some View {
         Button("Rename…", systemImage: "pencil") {
             startEditing()
+        }
+        .disabled(isProcessing)
+
+        Button("Export Project Text…", systemImage: "square.and.arrow.up") {
+            showingExportPanel = true
         }
         .disabled(isProcessing)
 
@@ -103,12 +157,6 @@ struct DocumentCard: View {
             }
             .aspectRatio(8.5/11, contentMode: .fit)
             .clipShape(RoundedRectangle(cornerRadius: 8))
-
-            // Ellipsis menu (top-right) - only visible on hover or keyboard focus
-            menuButton
-                .padding(8)
-                .opacity(isHovered || isCardFocused ? 1 : 0)
-                .shadow(color: .black.opacity(0.8), radius: 2)
         }
     }
 
@@ -120,13 +168,11 @@ struct DocumentCard: View {
         } label: {
             Image(systemName: "ellipsis.circle.fill")
                 .font(.title3)
-                .symbolRenderingMode(.monochrome)
-                .foregroundStyle(.white)
-            // not working?????????
                 .frame(width: 28, height: 28)
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
+        .focused($isMenuButtonFocused)
         .accessibilityLabel("Project options")
         .accessibilityHint("Opens menu with rename, optimize, and delete options")
     }
@@ -165,6 +211,11 @@ struct DocumentCard: View {
                 // Metadata below title
                 metadataSection
             }
+            // Project context menu on trailing
+            menuButton
+                .padding(.vertical, 2)
+                .opacity(menuButtonVisible ? 1 : 0)
+                .animation(.easeInOut(duration: 0.15), value: menuButtonVisible)
         }
     }
 
@@ -322,6 +373,7 @@ private struct DocumentCardPreviewHelper: View {
     let documentName: String
     let emoji: String
     let isProcessing: Bool
+    let isSelected: Bool
     let locale: String
 
     var body: some View {
@@ -344,14 +396,17 @@ private struct DocumentCardPreviewHelper: View {
         return DocumentCard(
             document: document,
             isProcessing: isProcessing,
-            ocrProgress: 0.65,
+            ocrProgress: 0.99,
+            isSelected: isSelected,
+            onSelect: {},
+            onOpen: {},
             onDelete: {},
             onOptimize: {}
         )
         .modelContainer(container)
         .environment(\.locale, Locale(identifier: locale))
         .padding()
-        .frame(width: 250)
+        .frame(width: 250, height: 380)
     }
 }
 
@@ -360,6 +415,7 @@ private struct DocumentCardPreviewHelper: View {
         documentName: "Sample Project",
         emoji: "📄",
         isProcessing: false,
+        isSelected: false,
         locale: "en"
     )
 }
@@ -369,6 +425,7 @@ private struct DocumentCardPreviewHelper: View {
         documentName: "Proyecto de ejemplo",
         emoji: "📄",
         isProcessing: false,
+        isSelected: false,
         locale: "es-419"
     )
 }
@@ -378,6 +435,7 @@ private struct DocumentCardPreviewHelper: View {
         documentName: "Processing Document",
         emoji: "⏳",
         isProcessing: true,
+        isSelected: false,
         locale: "en"
     )
 }
@@ -387,6 +445,7 @@ private struct DocumentCardPreviewHelper: View {
         documentName: "Procesando proyecto",
         emoji: "⏳",
         isProcessing: true,
+        isSelected: false,
         locale: "es-419"
     )
 }

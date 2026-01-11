@@ -67,15 +67,34 @@ struct MultiScanApp: App {
             CommandGroup(after: .newItem) {
                 Divider()
 
-                Button("Append Pages from Photos…", systemImage: "photo.on.rectangle") {
+                Button("Append Pages from Photos…", systemImage: "plus") {
                     showAddFromPhotosBinding?.wrappedValue = true
                 }
                 .disabled(showAddFromPhotosBinding == nil)
 
-                Button("Append Pages from Files…", systemImage: "folder") {
+                Button("Append Pages from Files…") {
                     showAddFromFilesBinding?.wrappedValue = true
                 }
                 .disabled(showAddFromFilesBinding == nil)
+                
+                Divider()
+
+                // programtically makes single page export available due to ShareLink possibly not respecting .disabled()
+                if let page = focusedCurrentPage {
+                    ShareLink("Export Page Text…",
+                              item: RichText(page.richText),
+                              preview: SharePreview("Page \(page.pageNumber) Text"))
+                } else {
+                    Button("Export Page Text…", systemImage: "square.and.arrow.up") {}
+                    .disabled(true)
+                }
+
+                Button("Export Project Text…") {
+                    focusedEditableText?.saveNow()
+                    showExportPanelBinding?.wrappedValue = true
+                }
+                .keyboardShortcut("C", modifiers: [.command, .option])
+                .disabled(focusedDocument == nil)
             }
 
             // Edit Menu Commands
@@ -87,23 +106,8 @@ struct MultiScanApp: App {
                 .disabled(showFindNavigatorBinding == nil)
 
                 Divider()
-
-                ShareLink("Share Page Text…",
-                          item: RichText(focusedNavigationState?.currentPage?.richText ?? AttributedString()),
-                          preview: SharePreview("Page Text"))
-                .keyboardShortcut("C", modifiers: [.command, .shift])
-                .disabled(focusedNavigationState?.currentPage == nil)
-
-                Button("Export All Pages…", systemImage: "doc.on.doc") {
-                    focusedEditableText?.saveNow()
-                    showExportPanelBinding?.wrappedValue = true
-                }
-                .keyboardShortcut("C", modifiers: [.command, .option])
-                .disabled(focusedDocument == nil)
-
-                Divider()
                 
-                Button(focusedNavigationState?.currentPage?.isDone == true ? "Mark as Not Reviewed" : "Mark as Reviewed",
+                Button(focusedNavigationState?.currentPage?.isDone == true ? "Mark Page as Not Reviewed" : "Mark Page as Reviewed",
                        systemImage: focusedNavigationState?.currentPage?.isDone == true ? "x.circle" : "checkmark.circle") {
                     focusedNavigationState?.toggleCurrentPageDone()
                 }
@@ -210,39 +214,42 @@ struct MultiScanApp: App {
 
                 Divider()
 
-                Menu("Filter", systemImage: "line.3.horizontal.decrease.circle") {
-                    Button("All Pages", systemImage: "book.pages") {
-                        filterOption = "all"
-                    }
+                Menu("Filter by Status", systemImage: "line.3.horizontal.decrease.circle") {
+                    Toggle("All Pages", isOn: Binding(
+                        get: { filterOption == "all" },
+                        set: { if $0 { filterOption = "all" } }
+                    ))
 
-                    Button("Reviewed Only", systemImage: "checkmark.circle.fill") {
-                        filterOption = "done"
-                    }
+                    Toggle("Reviewed Only", isOn: Binding(
+                        get: { filterOption == "done" },
+                        set: { if $0 { filterOption = "done" } }
+                    ))
 
-                    Button("Not Reviewed Only", systemImage: "ellipsis.circle.fill") {
-                        filterOption = "notDone"
-                    }
+                    Toggle("Not Reviewed Only", isOn: Binding(
+                        get: { filterOption == "notDone" },
+                        set: { if $0 { filterOption = "notDone" } }
+                    ))
                 }
 
                 Divider()
-
-                Button("Previous Page", systemImage: "backward") {
-                    focusedNavigationState?.previousPage()
-                }
-                .keyboardShortcut("[", modifiers: [])
-                .disabled(focusedNavigationState?.hasPrevious != true)
-
-                Button("Next Page", systemImage: "forward") {
-                    focusedNavigationState?.nextPage()
-                }
-                .keyboardShortcut("]", modifiers: [])
-                .disabled(focusedNavigationState?.hasNext != true)
-
+                
                 Button(focusedNavigationState?.isRandomized == true ? "Sequential Order" : "Shuffled Order",
                        systemImage: focusedNavigationState?.isRandomized == true ? "arrow.left.and.line.vertical.and.arrow.right" : "shuffle") {
                     focusedNavigationState?.toggleRandomization()
                 }
                 .disabled(focusedDocument == nil)
+
+                Button("Previous Page") {
+                    focusedNavigationState?.previousPage()
+                }
+                .keyboardShortcut("[", modifiers: [])
+                .disabled(focusedNavigationState?.hasPrevious != true)
+
+                Button("Next Page") {
+                    focusedNavigationState?.nextPage()
+                }
+                .keyboardShortcut("]", modifiers: [])
+                .disabled(focusedNavigationState?.hasNext != true)
 
                 Divider()
 
@@ -252,13 +259,13 @@ struct MultiScanApp: App {
                 .keyboardShortcut("+", modifiers: [.command])
                 .disabled(focusedDocument == nil)
 
-                Button("Zoom Out", systemImage: "") {
+                Button("Zoom Out") {
                     NotificationCenter.default.post(name: .zoomOut, object: nil)
                 }
                 .keyboardShortcut("-", modifiers: [.command])
                 .disabled(focusedDocument == nil)
 
-                Button("Fit to Window", systemImage: "") {
+                Button("Fit to Window") {
                     NotificationCenter.default.post(name: .zoomActualSize, object: nil)
                 }
                 .keyboardShortcut("0", modifiers: [.command])

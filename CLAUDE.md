@@ -98,9 +98,64 @@ final class Page {
 Provides formatting helpers and RTF export:
 - `toggleBold(in:)`, `toggleItalic(in:)` — formatting mutations
 - `isBold(at:)`, `isItalic(at:)` — formatting queries
-- `RichText` struct — Transferable wrapper for ShareLink export to RTF
+- `RichText` struct — Transferable wrapper for ShareLink export
 
-**Note:** RTF export still requires bridging to `NSAttributedString` via CoreText for font trait conversion. This is isolated to the `RichText.toRTFData()` method.
+**Note:** RTF export bridges to `NSAttributedString` via CoreText (no AppKit). Uses Helvetica Neue 13pt as base font for word processor compatibility.
+
+## Share Sheet / Transferable Architecture
+
+The `RichText` struct conforms to `Transferable` with multiple representations for maximum app compatibility.
+
+### Transfer Representations (Priority Order)
+```swift
+static var transferRepresentation: some TransferRepresentation {
+    // 1. File-based RTF for Finder, Save to Files, Notes, etc.
+    FileRepresentation(exportedContentType: .rtf) { ... }
+        .suggestedFileName("Exported Text.rtf")
+
+    // 2. Data-based RTF for clipboard operations (Copy)
+    DataRepresentation(exportedContentType: .rtf) { ... }
+
+    // 3. Plain text fallback - works everywhere
+    ProxyRepresentation { String($0.attributedString.characters) }
+}
+```
+
+### Why Multiple Representations?
+- **FileRepresentation**: Required for apps like Notes, Finder, and "Save to Files" that expect file URLs. Without this, some apps show "empty URL" instead of content.
+- **DataRepresentation**: Powers clipboard Copy operations.
+- **ProxyRepresentation**: Universal fallback for apps that only accept plain text (e.g., Messages).
+
+### RTF Conversion Pipeline
+1. SwiftUI `AttributedString` → Check `inlinePresentationIntent` for bold/italic
+2. Fallback: Check `.font` attribute and resolve via `EnvironmentValues().fontResolutionContext`
+3. Apply `CTFontSymbolicTraits` (.boldTrait, .italicTrait) via CoreText
+4. Convert to `NSAttributedString` with `.underlineStyle` and `.strikethroughStyle`
+5. Export via `NSAttributedString.data(documentAttributes: [.documentType: .rtf])`
+
+### Error Handling
+```swift
+enum RichTextExportError: LocalizedError {
+    case rtfConversionFailed  // NSAttributedString → RTF failed
+    case emptyContent         // Nothing to export
+}
+```
+
+The `toRTFDataOrThrow()` method throws proper errors instead of returning empty data silently.
+
+### ShareLink Usage Locations
+- `ReviewView.swift` — Toolbar button for single page sharing
+- `ExportPanelView.swift` — "Share…" button for full document export
+- `MultiScanApp.swift` — Menu bar command (⌘⇧C)
+
+### App Compatibility
+| App | Behavior |
+|-----|----------|
+| Notes | Receives RTF file, renders with formatting |
+| TextEdit | Full RTF support |
+| Pages | Imports RTF (may simplify formatting) |
+| Messages | Plain text only (uses ProxyRepresentation) |
+| Finder/Save to Files | Creates .rtf file |
 
 ## Rich Text Editing Architecture
 

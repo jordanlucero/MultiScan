@@ -21,6 +21,7 @@ struct MultiScanApp: App {
     @FocusedValue(\.navigationState) private var focusedNavigationState: NavigationState?
     @FocusedValue(\.editableText) private var focusedEditableText: EditablePageText?
     @FocusedValue(\.currentPage) private var focusedCurrentPage: Page?
+    @FocusedBinding(\.isRandomized) private var isRandomized
     @FocusedValue(\.showExportPanel) private var showExportPanelBinding: Binding<Bool>?
     @FocusedValue(\.showAddFromPhotos) private var showAddFromPhotosBinding: Binding<Bool>?
     @FocusedValue(\.showAddFromFiles) private var showAddFromFilesBinding: Binding<Bool>?
@@ -83,7 +84,7 @@ struct MultiScanApp: App {
                 if let page = focusedCurrentPage {
                     ShareLink("Export Page Text…",
                               item: RichText(page.richText),
-                              preview: SharePreview("Page \(page.pageNumber) Text"))
+                              preview: SharePreview(String(localized: "Page \(page.pageNumber) Text")))
                 } else {
                     Button("Export Page Text…", systemImage: "square.and.arrow.up") {}
                     .disabled(true)
@@ -233,7 +234,7 @@ struct MultiScanApp: App {
 
                 Divider()
                 
-                Button(focusedNavigationState?.isRandomized == true ? "Sequential Order" : "Shuffled Order",
+                Button(focusedNavigationState?.isRandomized == true ? "Use Sequential Order" : "Use Shuffled Order",
                        systemImage: focusedNavigationState?.isRandomized == true ? "arrow.left.and.line.vertical.and.arrow.right" : "shuffle") {
                     focusedNavigationState?.toggleRandomization()
                 }
@@ -272,6 +273,13 @@ struct MultiScanApp: App {
                 .disabled(focusedDocument == nil)
             }
 
+            // App Menu Commands - Settings
+            // ⚠️ WORKAROUND: Delete this CommandGroup when native Settings scene works.
+            // The native Settings scene auto-generates the "Settings…" menu item with ⌘,
+            CommandGroup(replacing: .appSettings) {
+                OpenSettingsCommand()
+            }
+
             // Help Menu Commands
             CommandGroup(replacing: .help) {
                 Button("MultiScan Known Issues", systemImage: "") { // bulb icon used by system apps missing from SF symbols?? temporarily just pointing to GitHub releases for Known Issues
@@ -287,7 +295,28 @@ struct MultiScanApp: App {
             }
         }
 
-        Settings {
+        // MARK: - Settings Window (Workaround)
+        //
+        // ⚠️ WORKAROUND: Custom Window scene instead of native Settings scene
+        //
+        // As of 26.3, SwiftUI's built-in `Settings` scene has a bug where
+        // NavigationSplitView renders incorrectly - the toolbar appears in a separate
+        // row below the window title, creating a double-header appearance. The SwiftUI
+        // Preview renders correctly, but the actual Settings window does not.
+        //
+        // This workaround uses a custom `Window` scene that follows Apple's HIG for
+        // settings windows:
+        // - Opens with ⌘, keyboard shortcut (via OpenSettingsCommand)
+        // - Non-resizable window (.windowResizability(.contentSize))
+        // - Minimize and zoom buttons disabled (via NSWindow access in onAppear)
+        // - Remembers last viewed pane (@AppStorage)
+        // - Window title updates to reflect current pane
+        // If fixed, delete this Window scene, OpenSettingsCommand, and the CommandGroup
+        // replacing .appSettings (around line 275).
+        //
+        // Last tested: 26.3 Beta 1
+        //
+        Window("MultiScan Settings", id: "settings") {
             SettingsView(
                 optimizeImagesOnImport: $optimizeImagesOnImport,
                 viewerBackground: $viewerBackground,
@@ -295,17 +324,62 @@ struct MultiScanApp: App {
             )
         }
         .windowResizability(.contentSize)
+        .commandsRemoved()
         .defaultSize(width: 650, height: 400)
+
+        // MARK: - Native Settings Scene (Currently Broken)
+        //
+        //  ORIGINAL IMPLEMENTATION - Uncomment to test if Apple has fixed the bug
+        // If this works correctly in a future SwiftUI implementation:
+        // 1. Delete the custom Window scene above
+        // 2. Delete OpenSettingsCommand struct
+        // 3. Delete the CommandGroup(replacing: .appSettings) in .commands {}
+        // 4. Remove the NSWindow button-disabling code from SettingsView.onAppear
+        //
+        // Settings {
+        //     SettingsView(
+        //         optimizeImagesOnImport: $optimizeImagesOnImport,
+        //         viewerBackground: $viewerBackground,
+        //         navigationSettings: navigationSettings
+        //     )
+        // }
+    }
+}
+
+// MARK: - Settings Command (Workaround)
+//
+// ⚠️ WORKAROUND: Required because we use a custom Window instead of Settings scene.
+// The native Settings scene automatically provides ⌘, shortcut; custom Windows do not.
+// This view is used in CommandGroup(replacing: .appSettings) to provide the shortcut.
+//
+// DELETE THIS when the native Settings scene works correctly.
+//
+struct OpenSettingsCommand: View {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Button("Settings…", systemImage: "gear") {
+            openWindow(id: "settings")
+        }
+        .keyboardShortcut(",", modifiers: .command)
     }
 }
 
 // MARK: - Settings View
 
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case importAndStorage = "Import and Storage"
-    case viewer = "Viewer"
+    case importAndStorage
+    case viewer
 
     var id: String { rawValue }
+
+    /// Localized display name for the pane
+    var displayName: String {
+        switch self {
+        case .importAndStorage: return String(localized: "Import and Storage")
+        case .viewer: return String(localized: "Viewer")
+        }
+    }
 
     var icon: String {
         switch self {
@@ -320,17 +394,28 @@ struct SettingsView: View {
     @Binding var viewerBackground: String
     var navigationSettings: NavigationSettings
 
-    @State private var selectedPane: SettingsPane = .importAndStorage
-    @State private var navigationHistory: [SettingsPane] = [.importAndStorage]
+    // Persist last viewed pane
+    @AppStorage("settingsSelectedPane") private var selectedPaneRawValue: String = SettingsPane.importAndStorage.rawValue
+
+    @State private var navigationHistory: [SettingsPane] = []
     @State private var historyIndex: Int = 0
+    @State private var isNavigatingHistory = false
+
+    private var selectedPane: SettingsPane {
+        get { SettingsPane(rawValue: selectedPaneRawValue) ?? .importAndStorage }
+        set { selectedPaneRawValue = newValue.rawValue }
+    }
 
     private var canGoBack: Bool { historyIndex > 0 }
     private var canGoForward: Bool { historyIndex < navigationHistory.count - 1 }
 
     var body: some View {
         NavigationSplitView {
-            List(SettingsPane.allCases, selection: $selectedPane) { pane in
-                Label(pane.rawValue, systemImage: pane.icon)
+            List(SettingsPane.allCases, selection: Binding(
+                get: { selectedPane },
+                set: { newValue in selectedPaneRawValue = newValue.rawValue }
+            )) { pane in
+                Label(pane.displayName, systemImage: pane.icon)
                     .tag(pane)
             }
             .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 220)
@@ -345,6 +430,7 @@ struct SettingsView: View {
                 )
             }
         }
+        .navigationTitle(selectedPane.displayName)
         .toolbar(removing: .sidebarToggle)
         .toolbar {
             ToolbarItem(placement: .navigation) {
@@ -365,32 +451,51 @@ struct SettingsView: View {
                 }
             }
         }
-        .onChange(of: selectedPane) { oldValue, newValue in
-            // Only add to history if this is a new navigation (not back/forward)
-            if historyIndex == navigationHistory.count - 1 || navigationHistory[historyIndex] != newValue {
-                // Remove any forward history
-                if historyIndex < navigationHistory.count - 1 {
-                    navigationHistory = Array(navigationHistory.prefix(historyIndex + 1))
-                }
-                // Add new pane to history
-                if navigationHistory.last != newValue {
-                    navigationHistory.append(newValue)
-                    historyIndex = navigationHistory.count - 1
-                }
+        .onAppear {
+            // Initialize history with current pane
+            if navigationHistory.isEmpty {
+                navigationHistory = [selectedPane]
+                historyIndex = 0
+            }
+
+            // ⚠️ WORKAROUND: Disable minimize and zoom buttons per HIG for settings windows.
+            // Native Settings scene handles this automatically. Delete this block when
+            // switching back to native Settings scene.
+            if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "settings" }) {
+                window.standardWindowButton(.miniaturizeButton)?.isEnabled = false
+                window.standardWindowButton(.zoomButton)?.isEnabled = false
+            }
+        }
+        .onChange(of: selectedPaneRawValue) { oldValue, newValue in
+            guard !isNavigatingHistory else { return }
+            guard let newPane = SettingsPane(rawValue: newValue) else { return }
+
+            // Remove any forward history
+            if historyIndex < navigationHistory.count - 1 {
+                navigationHistory = Array(navigationHistory.prefix(historyIndex + 1))
+            }
+            // Add new pane to history
+            if navigationHistory.last != newPane {
+                navigationHistory.append(newPane)
+                historyIndex = navigationHistory.count - 1
             }
         }
     }
 
     private func goBack() {
         guard canGoBack else { return }
+        isNavigatingHistory = true
         historyIndex -= 1
-        selectedPane = navigationHistory[historyIndex]
+        selectedPaneRawValue = navigationHistory[historyIndex].rawValue
+        isNavigatingHistory = false
     }
 
     private func goForward() {
         guard canGoForward else { return }
+        isNavigatingHistory = true
         historyIndex += 1
-        selectedPane = navigationHistory[historyIndex]
+        selectedPaneRawValue = navigationHistory[historyIndex].rawValue
+        isNavigatingHistory = false
     }
 }
 
@@ -409,8 +514,6 @@ struct ImportAndStorageSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("Import and Storage")
-        .toolbarTitleDisplayMode(.inline)
     }
 }
 
@@ -443,12 +546,10 @@ struct ViewerSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("Viewer")
-        .toolbarTitleDisplayMode(.inline)
     }
 }
 
-#Preview("Settings") {
+#Preview("Settings Pane (English)") {
     @Previewable @State var optimizeImages = false
     @Previewable @State var viewerBackground = ViewerBackground.default.rawValue
     @Previewable @State var navigationSettings = NavigationSettings()
@@ -458,4 +559,18 @@ struct ViewerSettingsView: View {
         viewerBackground: $viewerBackground,
         navigationSettings: navigationSettings
     )
+    .environment(\.locale, Locale(identifier: "en"))
+}
+
+#Preview("Settings Pane (es-419)") {
+    @Previewable @State var optimizeImages = false
+    @Previewable @State var viewerBackground = ViewerBackground.default.rawValue
+    @Previewable @State var navigationSettings = NavigationSettings()
+
+    SettingsView(
+        optimizeImagesOnImport: $optimizeImages,
+        viewerBackground: $viewerBackground,
+        navigationSettings: navigationSettings
+    )
+    .environment(\.locale, Locale(identifier: "es-419"))
 }

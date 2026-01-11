@@ -37,6 +37,10 @@ struct FocusedShowFindNavigatorKey: FocusedValueKey {
     typealias Value = Binding<Bool>
 }
 
+struct FocusedIsRandomizedKey: FocusedValueKey {
+    typealias Value = Binding<Bool>
+}
+
 extension FocusedValues {
     var document: Document? {
         get { self[FocusedDocumentKey.self] }
@@ -82,4 +86,9 @@ extension FocusedValues {
         get { self[FocusedShowFindNavigatorKey.self] }
         set { self[FocusedShowFindNavigatorKey.self] = newValue }
     }
+    
+    var isRandomized: Binding<Bool>? {
+            get { self[FocusedIsRandomizedKey.self] }
+            set { self[FocusedIsRandomizedKey.self] = newValue }
+        }
 }

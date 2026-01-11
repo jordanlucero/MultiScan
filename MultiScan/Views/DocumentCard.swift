@@ -246,7 +246,7 @@ struct DocumentCard: View {
     }
 
     // MARK: - Emoji Picker Popover (Temporary Solution)
-    // TODO: Replace with system emoji picker when SwiftUI provides native API
+    // Replace with system emoji picker when SwiftUI provides native API
 
     private var emojiPickerPopover: some View {
         VStack(spacing: 12) {

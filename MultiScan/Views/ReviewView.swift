@@ -75,6 +75,7 @@ struct ReviewView: View {
             .onChange(of: showThumbnails) { _, newValue in
                 columnVisibility = newValue ? .all : .detailOnly
             }
+            .focusedSceneValue(\.isRandomized, $navigationState.isRandomized)
             .onChange(of: columnVisibility) { _, newValue in
                 let shouldShow = (newValue != .detailOnly)
                 if showThumbnails != shouldShow {

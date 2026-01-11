@@ -504,17 +504,6 @@
         }
       }
     },
-    "Export Page Text" : {
-      "comment" : "Export Page Text button on “Page x of x” RichTextSidebar header",
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Exportar texto de la página"
-          }
-        }
-      }
-    },
     "Export Page Text…" : {
       "localizations" : {
         "es-419" : {
@@ -749,7 +738,14 @@
       }
     },
     "Import and Storage" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Importación y almacenamiento"
+          }
+        }
+      }
     },
     "Import from Files…" : {
       "localizations" : {
@@ -921,6 +917,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "MultiScan problemas conocidos"
+          }
+        }
+      }
+    },
+    "MultiScan Settings" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Configuración de MultiScan"
           }
         }
       }
@@ -1131,7 +1137,7 @@
       }
     },
     "Page %lld Text" : {
-      "comment" : "Export Page Text via Share Sheet Output Title on “Page x of x” RichTextSidebar header",
+      "comment" : "Preview title for single page export",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -1486,12 +1492,12 @@
         }
       }
     },
-    "Sequential Order" : {
+    "Settings…" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Orden secuencial"
+            "value" : "Configuración…"
           }
         }
       }
@@ -1547,16 +1553,6 @@
         }
       }
     },
-    "Shuffled Order" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Orden aleatorio"
-          }
-        }
-      }
-    },
     "Statistics" : {
       "localizations" : {
         "es-419" : {
@@ -1608,6 +1604,7 @@
       }
     },
     "Text Editor, Page %lld of %lld. Export Page Text" : {
+      "comment" : "Accessibility label on RichTextSidebar header",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1709,6 +1706,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Utilice el menú de acciones para salir del editor"
+          }
+        }
+      }
+    },
+    "Use Sequential Order" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Utilizar orden secuencial"
+          }
+        }
+      }
+    },
+    "Use Shuffled Order" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Utilizar orden aleatorio"
           }
         }
       }

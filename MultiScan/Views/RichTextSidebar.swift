@@ -177,6 +177,7 @@ struct RichTextSidebar: View {
                 if let page = currentPage {
                     ShareLink(item: RichText(page.richText),
                               preview: SharePreview("Page \(page.pageNumber) Text")) {
+                    // localized string not used here due to contextualization from view correctly returning localized string on its own
                         HStack(spacing: 6) {
                             Text("Page \(page.pageNumber) of \(document.totalPages)")
                                 .font(.headline)
@@ -349,4 +350,44 @@ struct RichTextSidebar: View {
         guard let page = currentPage else { return }
         editableText = EditablePageText(page: page)
     }
+}
+
+// MARK: - Previews
+
+#Preview("RichTextSidebar (English)") {
+    @Previewable @State var document = Document(name: "Sample Document", totalPages: 1)
+    @Previewable @State var navigationState = NavigationState()
+
+    RichTextSidebar(document: document, navigationState: navigationState)
+        .frame(width: 300, height: 500)
+        .environment(\.locale, Locale(identifier: "en"))
+        .onAppear {
+            let page = Page(
+                pageNumber: 1,
+                text: "Here's to the crazy ones. The misfits. The rebels. The troublemakers. The round pegs in the square holes. The ones who see things differently.",
+                imageData: nil,
+                originalFileName: "page1.jpg"
+            )
+            document.pages = [page]
+            navigationState.setupNavigation(for: document)
+        }
+}
+
+#Preview("RichTextSidebar (es-419)") {
+    @Previewable @State var document = Document(name: "Documento de Ejemplo", totalPages: 1)
+    @Previewable @State var navigationState = NavigationState()
+
+    RichTextSidebar(document: document, navigationState: navigationState)
+        .frame(width: 300, height: 500)
+        .environment(\.locale, Locale(identifier: "es-419"))
+        .onAppear {
+            let page = Page(
+                pageNumber: 1,
+                text: "Este es un texto de ejemplo para vista previa.",
+                imageData: nil,
+                originalFileName: "pagina1.jpg"
+            )
+            document.pages = [page]
+            navigationState.setupNavigation(for: document)
+        }
 }

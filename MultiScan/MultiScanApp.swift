@@ -294,15 +294,110 @@ struct MultiScanApp: App {
                 navigationSettings: navigationSettings
             )
         }
+        .windowResizability(.contentSize)
+        .defaultSize(width: 650, height: 400)
     }
 }
 
 // MARK: - Settings View
 
+enum SettingsPane: String, CaseIterable, Identifiable {
+    case importAndStorage = "Import and Storage"
+    case viewer = "Viewer"
+
+    var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .importAndStorage: return "square.and.arrow.down"
+        case .viewer: return "eye"
+        }
+    }
+}
+
 struct SettingsView: View {
     @Binding var optimizeImagesOnImport: Bool
     @Binding var viewerBackground: String
     var navigationSettings: NavigationSettings
+
+    @State private var selectedPane: SettingsPane = .importAndStorage
+    @State private var navigationHistory: [SettingsPane] = [.importAndStorage]
+    @State private var historyIndex: Int = 0
+
+    private var canGoBack: Bool { historyIndex > 0 }
+    private var canGoForward: Bool { historyIndex < navigationHistory.count - 1 }
+
+    var body: some View {
+        NavigationSplitView {
+            List(SettingsPane.allCases, selection: $selectedPane) { pane in
+                Label(pane.rawValue, systemImage: pane.icon)
+                    .tag(pane)
+            }
+            .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 220)
+        } detail: {
+            switch selectedPane {
+            case .importAndStorage:
+                ImportAndStorageSettingsView(optimizeImagesOnImport: $optimizeImagesOnImport)
+            case .viewer:
+                ViewerSettingsView(
+                    viewerBackground: $viewerBackground,
+                    navigationSettings: navigationSettings
+                )
+            }
+        }
+        .toolbar(removing: .sidebarToggle)
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                HStack(spacing: 0) {
+                    Button {
+                        goBack()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                    }
+                    .disabled(!canGoBack)
+
+                    Button {
+                        goForward()
+                    } label: {
+                        Image(systemName: "chevron.right")
+                    }
+                    .disabled(!canGoForward)
+                }
+            }
+        }
+        .onChange(of: selectedPane) { oldValue, newValue in
+            // Only add to history if this is a new navigation (not back/forward)
+            if historyIndex == navigationHistory.count - 1 || navigationHistory[historyIndex] != newValue {
+                // Remove any forward history
+                if historyIndex < navigationHistory.count - 1 {
+                    navigationHistory = Array(navigationHistory.prefix(historyIndex + 1))
+                }
+                // Add new pane to history
+                if navigationHistory.last != newValue {
+                    navigationHistory.append(newValue)
+                    historyIndex = navigationHistory.count - 1
+                }
+            }
+        }
+    }
+
+    private func goBack() {
+        guard canGoBack else { return }
+        historyIndex -= 1
+        selectedPane = navigationHistory[historyIndex]
+    }
+
+    private func goForward() {
+        guard canGoForward else { return }
+        historyIndex += 1
+        selectedPane = navigationHistory[historyIndex]
+    }
+}
+
+// MARK: - Import and Storage Settings
+
+struct ImportAndStorageSettingsView: View {
+    @Binding var optimizeImagesOnImport: Bool
 
     var body: some View {
         Form {
@@ -312,7 +407,21 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
+        }
+        .formStyle(.grouped)
+        .navigationTitle("Import and Storage")
+        .toolbarTitleDisplayMode(.inline)
+    }
+}
 
+// MARK: - Viewer Settings
+
+struct ViewerSettingsView: View {
+    @Binding var viewerBackground: String
+    var navigationSettings: NavigationSettings
+
+    var body: some View {
+        Form {
             Section("Viewer") {
                 Picker("Background", selection: $viewerBackground) {
                     ForEach(ViewerBackground.allCases, id: \.rawValue) { option in
@@ -334,8 +443,8 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 450)
-//        .padding(.horizontal)
+        .navigationTitle("Viewer")
+        .toolbarTitleDisplayMode(.inline)
     }
 }
 
@@ -349,5 +458,4 @@ struct SettingsView: View {
         viewerBackground: $viewerBackground,
         navigationSettings: navigationSettings
     )
-    .frame(width: 450, height: 400)
 }

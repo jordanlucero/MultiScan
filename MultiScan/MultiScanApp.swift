@@ -322,6 +322,7 @@ struct MultiScanApp: App {
                 viewerBackground: $viewerBackground,
                 navigationSettings: navigationSettings
             )
+            .frame(minWidth: 500, minHeight: 300)
         }
         .windowResizability(.contentSize)
         .commandsRemoved()

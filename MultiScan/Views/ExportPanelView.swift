@@ -11,6 +11,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct ExportPanelView: View {
     /// Document to export (enables cache-based export for performance)
@@ -207,4 +208,69 @@ struct ExportPanelView: View {
             previewText = result
         }
     }
+}
+
+// MARK: - Previews
+
+private struct ExportPanelPreviewHelper: View {
+    let documentName: String
+    let locale: String
+    let pageTextPrefix: String
+    let boldText: String
+    let italicText: String
+    let regularText: String
+
+    var body: some View {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try! ModelContainer(for: Document.self, Page.self, configurations: config)
+
+        let document = Document(name: documentName, totalPages: 3)
+
+        (1...3).forEach { i in
+            var richText = AttributedString("\(pageTextPrefix) \(i). It contains multiple sentences to demonstrate the export functionality. ")
+
+            var bold = AttributedString(boldText)
+            bold.inlinePresentationIntent = .stronglyEmphasized
+            richText.append(bold)
+
+            var italic = AttributedString(italicText)
+            italic.inlinePresentationIntent = .emphasized
+            richText.append(italic)
+
+            richText.append(AttributedString(regularText))
+
+            let page = Page(pageNumber: i, text: "", imageData: nil)
+            page.richText = richText
+            page.originalFileName = locale == "en" ? "page-\(i).jpg" : "pagina-\(i).jpg"
+            document.pages.append(page)
+        }
+
+        container.mainContext.insert(document)
+
+        return ExportPanelView(document: document)
+            .modelContainer(container)
+            .environment(\.locale, Locale(identifier: locale))
+    }
+}
+
+#Preview("English") {
+    ExportPanelPreviewHelper(
+        documentName: "Sample Export Document",
+        locale: "en",
+        pageTextPrefix: "This is sample text for page",
+        boldText: "This text is bold. ",
+        italicText: "This text is italic. ",
+        regularText: "And this is regular text again."
+    )
+}
+
+#Preview("es-419") {
+    ExportPanelPreviewHelper(
+        documentName: "Documento de Exportación de Ejemplo",
+        locale: "es-419",
+        pageTextPrefix: "Este es el texto de ejemplo para la página",
+        boldText: "Este texto es negrita. ",
+        italicText: "Este texto es cursiva. ",
+        regularText: "Y este es texto regular de nuevo."
+    )
 }

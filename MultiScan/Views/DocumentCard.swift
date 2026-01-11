@@ -80,18 +80,25 @@ struct DocumentCard: View {
         ZStack(alignment: .topTrailing) {
             // Main thumbnail with 8.5:11 aspect ratio (US Letter)
             ZStack {
-                // Background visible only without thumbnail and during processing
+                // Background
                 RoundedRectangle(cornerRadius: 8)
                     .fill(Color.gray.opacity(0.1))
 
-                // Thumbnail image or empty fallback placeholder
-                if let lastPage = document.lastModifiedPage,
-                   let thumbData = lastPage.thumbnailData,
-                   let thumbnail = PlatformImage.from(data: thumbData) {
+                // Show processing indicator or thumbnail
+                if isProcessing {
+                    VStack(spacing: 8) {
+                        ProgressView()
+                            .controlSize(.regular)
+                        Text("\(Int(ocrProgress * 100))%")
+                            .font(.body)
+                            .foregroundColor(.primary)
+                    }
+                } else if let lastPage = document.lastModifiedPage,
+                          let thumbData = lastPage.thumbnailData,
+                          let thumbnail = PlatformImage.from(data: thumbData) {
                     thumbnail
                         .resizable()
                         .aspectRatio(contentMode: .fit)
-                } else {
                 }
             }
             .aspectRatio(8.5/11, contentMode: .fit)
@@ -102,11 +109,6 @@ struct DocumentCard: View {
                 .padding(8)
                 .opacity(isHovered || isCardFocused ? 1 : 0)
                 .shadow(color: .black.opacity(0.8), radius: 2)
-
-            // Processing overlay
-            if isProcessing {
-                processingOverlay
-            }
         }
     }
 
@@ -127,22 +129,6 @@ struct DocumentCard: View {
         .menuIndicator(.hidden)
         .accessibilityLabel("Project options")
         .accessibilityHint("Opens menu with rename, optimize, and delete options")
-    }
-
-    // MARK: - Processing Overlay
-
-    private var processingOverlay: some View {
-        RoundedRectangle(cornerRadius: 8)
-            .aspectRatio(8.5/11, contentMode: .fit)
-            .overlay(
-                VStack(spacing: 8) {
-                    ProgressView()
-                        .controlSize(.regular)
-                    Text("\(Int(ocrProgress * 100))%")
-                        .font(.body)
-                        .foregroundColor(.primary)
-                }
-            )
     }
 
     // MARK: - Title Section (with emoji to the left)
@@ -328,4 +314,79 @@ extension Character {
         guard let scalar = unicodeScalars.first else { return false }
         return scalar.properties.isEmoji && (scalar.value > 0x238C || unicodeScalars.count > 1)
     }
+}
+
+// MARK: - Previews
+
+private struct DocumentCardPreviewHelper: View {
+    let documentName: String
+    let emoji: String
+    let isProcessing: Bool
+    let locale: String
+
+    var body: some View {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try! ModelContainer(for: Document.self, Page.self, configurations: config)
+
+        let document = Document(name: documentName, totalPages: isProcessing ? 0 : 5)
+        document.emoji = emoji
+        if !isProcessing {
+            document.cachedStorageBytes = 1_234_567
+            (1...5).forEach { i in
+                let page = Page(pageNumber: i, text: "Sample text for page \(i)", imageData: nil)
+                page.isDone = i <= 2
+                document.pages.append(page)
+            }
+        }
+
+        container.mainContext.insert(document)
+
+        return DocumentCard(
+            document: document,
+            isProcessing: isProcessing,
+            ocrProgress: 0.65,
+            onDelete: {},
+            onOptimize: {}
+        )
+        .modelContainer(container)
+        .environment(\.locale, Locale(identifier: locale))
+        .padding()
+        .frame(width: 250)
+    }
+}
+
+#Preview("English") {
+    DocumentCardPreviewHelper(
+        documentName: "Sample Project",
+        emoji: "📄",
+        isProcessing: false,
+        locale: "en"
+    )
+}
+
+#Preview("es-419") {
+    DocumentCardPreviewHelper(
+        documentName: "Proyecto de ejemplo",
+        emoji: "📄",
+        isProcessing: false,
+        locale: "es-419"
+    )
+}
+
+#Preview("Processing - English") {
+    DocumentCardPreviewHelper(
+        documentName: "Processing Document",
+        emoji: "⏳",
+        isProcessing: true,
+        locale: "en"
+    )
+}
+
+#Preview("Processing - es-419") {
+    DocumentCardPreviewHelper(
+        documentName: "Procesando proyecto",
+        emoji: "⏳",
+        isProcessing: true,
+        locale: "es-419"
+    )
 }

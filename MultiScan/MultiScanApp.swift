@@ -419,7 +419,7 @@ struct SettingsView: View {
                 Label(pane.displayName, systemImage: pane.icon)
                     .tag(pane)
             }
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 220)
+            .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 350)
         } detail: {
             switch selectedPane {
             case .importAndStorage:

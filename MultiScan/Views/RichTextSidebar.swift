@@ -175,37 +175,41 @@ struct RichTextSidebar: View {
                 // Formatting toolbar - always visible when editing
                 if let editableText = editableText {
                     HStack(spacing: 12) {
-                        Button(action: { editableText.applyBold() }) {
-                            Image(systemName: "bold")
-                                .frame(width: 24, height: 24)
-                        }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel("Bold")
-                        .help("Bold (⌘B)")
+                        Group {
+                            Button(action: { editableText.applyBold() }) {
+                                Image(systemName: "bold")
+                                    .frame(width: 24, height: 24)
+                            }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel("Bold")
+                            .help("Bold (⌘B)")
 
-                        Button(action: { editableText.applyItalic() }) {
-                            Image(systemName: "italic")
-                                .frame(width: 24, height: 24)
-                        }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel("Italic")
-                        .help("Italic (⌘I)")
+                            Button(action: { editableText.applyItalic() }) {
+                                Image(systemName: "italic")
+                                    .frame(width: 24, height: 24)
+                            }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel("Italic")
+                            .help("Italic (⌘I)")
 
-                        Button(action: { editableText.applyUnderline() }) {
-                            Image(systemName: "underline")
-                                .frame(width: 24, height: 24)
-                        }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel("Underline")
-                        .help("Underline (⌘U)")
+                            Button(action: { editableText.applyUnderline() }) {
+                                Image(systemName: "underline")
+                                    .frame(width: 24, height: 24)
+                            }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel("Underline")
+                            .help("Underline (⌘U)")
 
-                        Button(action: { editableText.applyStrikethrough() }) {
-                            Image(systemName: "strikethrough")
-                                .frame(width: 24, height: 24)
+                            Button(action: { editableText.applyStrikethrough() }) {
+                                Image(systemName: "strikethrough")
+                                    .frame(width: 24, height: 24)
+                            }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel("Strikethrough")
+                            .help("Strikethrough (⌘⇧X)")
                         }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel("Strikethrough")
-                        .help("Strikethrough (⌘⇧X)")
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("Text formatting: Bold, Italic, Underline, Strikethrough")
 
                         Spacer()
 
@@ -218,8 +222,6 @@ struct RichTextSidebar: View {
                         .help("Replace line breaks with spaces")
                     }
                     .padding(.top, 4)
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel("Text formatting: Bold, Italic, Underline, Strikethrough, Remove Line Breaks")
                 }
             }
             .padding(.horizontal)

@@ -164,6 +164,8 @@ struct ExportPanelView: View {
 
                 Spacer()
 
+                // TODO: Dismiss panel after successful share. SwiftUI's ShareLink has no
+                // completion callback — would need NSSharingServicePicker with delegate.
                 ShareLink(item: RichText(previewText), preview: SharePreview("Project Text")) {
                     Text("Export…")
                 }

@@ -241,12 +241,12 @@
         }
       }
     },
-    "Are you sure you want to delete the MultiScan project for \"%@\"? This cannot be undone." : {
+    "Are you sure you want to delete this project? This cannot be undone." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "¿Está seguro de que desea eliminar el proyecto MultiScan para “%@”? Esta acción no se puede deshacer."
+            "value" : "¿Está seguro de que desea eliminar el proyecto? Esta acción no se puede deshacer."
           }
         }
       }
@@ -384,12 +384,12 @@
         }
       }
     },
-    "Delete Document" : {
+    "Delete \"%@\"?" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Eliminar documento"
+            "value" : "¿Eliminar “%@”?"
           }
         }
       }

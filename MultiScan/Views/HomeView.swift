@@ -59,8 +59,6 @@ struct HomeView: View {
             .padding()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(isDragOver ? Color.accentColor.opacity(0.1) : Color.clear)
-        .contentShape(Rectangle())
         .onTapGesture {
             // Deselect when clicking empty space
             selectedDocumentID = nil
@@ -87,7 +85,7 @@ struct HomeView: View {
             Text(error.localizedDescription)
         }
         .confirmationDialog(
-            "Delete Document",
+            "Delete \"\(documentToDelete?.name ?? "Project")\"?",
             isPresented: $showingDeleteConfirmation,
             presenting: documentToDelete
         ) { document in
@@ -96,7 +94,7 @@ struct HomeView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: { document in
-            Text("Are you sure you want to delete the MultiScan project for \"\(document.name)\"? This cannot be undone.")
+            Text("Are you sure you want to delete this project? This cannot be undone.")
         }
         .onChange(of: selectedPhotos) { _, items in
             Task { await processSelectedPhotos(items) }

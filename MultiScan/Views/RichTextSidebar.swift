@@ -172,7 +172,7 @@ struct RichTextSidebar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header with page info and formatting toolbar
+            // Header with page info and formatting "toolbar"
             VStack(alignment: .leading, spacing: 6) {
                 if let page = currentPage {
                     ShareLink(item: RichText(page.richText),
@@ -202,7 +202,7 @@ struct RichTextSidebar: View {
                     .help("Export the Current Page's Text")
                 }
 
-                // Formatting toolbar
+                // Formatting "toolbar"
                 if let editableText = editableText {
                     HStack(spacing: 12) {
                         Group {

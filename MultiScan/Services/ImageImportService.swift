@@ -1,9 +1,5 @@
-//
-//  ImageImportService.swift
-//  MultiScan
-//
-//  Created by Claude Code on 1/3/26.
-//
+// ImageImportService may be useful for exaptation from MultiScan.
+// Based on the version from MultiScan v1.x releases
 
 import Foundation
 import PhotosUI

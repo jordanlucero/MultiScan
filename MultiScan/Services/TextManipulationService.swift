@@ -1,3 +1,6 @@
+// TextManipulationService may be useful for exaptation from MultiScan.
+// Based on the version from MultiScan v1.x releases
+
 import Foundation
 
 /// Service for programmatic text transformations on AttributedString

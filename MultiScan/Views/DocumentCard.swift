@@ -250,7 +250,7 @@ struct DocumentCard: View {
 
     private var emojiPickerPopover: some View {
         VStack(spacing: 12) {
-            Text("Enter an emoji")
+            Text("Add an emoji")
                 .font(.headline)
 
             TextField("Emoji", text: $emojiInput)

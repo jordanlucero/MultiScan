@@ -1,6 +1,6 @@
 //
-//  PDFImportService.swift
-//  MultiScan
+// PDFImportService may be useful for exaptation from MultiScan.
+// Based on the version from MultiScan v1.x releases
 //
 //  Service for importing PDF documents by rendering pages to images
 //

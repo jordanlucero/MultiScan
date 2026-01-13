@@ -8,12 +8,10 @@
 //  This exporter supports two modes:
 //
 //  1. **Cache-based (preferred)**: Uses `TextExportCacheService` to load pre-computed
-//     page data from a single cached file. This avoids N external storage file loads
-//     and is dramatically faster for large documents.
+//     page data from a single cached file.
 //
 //  2. **Direct page access (fallback)**: Loads each page's richText from SwiftData
-//     external storage. This triggers N disk reads and can freeze the UI for large
-//     documents. Only used when cache is unavailable or invalid.
+//     external storage. This triggers N disk reads. Only used when cache is unavailable or invalid.
 //
 //  ## Usage
 //  Prefer initializing with a Document to enable cache-based export:
@@ -190,7 +188,7 @@ struct TextExporter {
             }
         }
 
-        separator += "\n\n"
+        separator += "\n"
         return AttributedString(separator)
     }
 
@@ -290,7 +288,7 @@ struct TextExporter {
             return AttributedString()
         }
 
-        var separator = isFirstPage ? "" : "\n\n"
+        var separator = isFirstPage ? "" : "\n"
 
         switch separatorStyle {
         case .lineBreak:
@@ -306,7 +304,7 @@ struct TextExporter {
             }
         }
 
-        separator += "\n\n"
+        separator += "\n"
         return AttributedString(separator)
     }
 
@@ -367,7 +365,7 @@ struct TextExporter {
             return AttributedString()
         }
 
-        var separator = isFirstPage ? AttributedString() : AttributedString("\n\n")
+        var separator = isFirstPage ? AttributedString() : AttributedString("\n")
 
         // Build separator based on style
         switch settings.separatorStyle {
@@ -386,7 +384,7 @@ struct TextExporter {
             }
         }
 
-        separator.append(AttributedString("\n\n"))
+        separator.append(AttributedString("\n"))
         return separator
     }
 
@@ -469,7 +467,7 @@ struct TextExporter {
             }
         }
 
-        separator.append(AttributedString("\n\n"))
+        separator.append(AttributedString("\n"))
         return separator
     }
 }

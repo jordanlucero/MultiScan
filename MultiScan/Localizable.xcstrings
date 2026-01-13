@@ -169,6 +169,16 @@
         }
       }
     },
+    "Add an emoji" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Introduzca un emoji"
+          }
+        }
+      }
+    },
     "Add visual separation" : {
       "localizations" : {
         "es-419" : {
@@ -440,16 +450,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Emoji"
-          }
-        }
-      }
-    },
-    "Enter an emoji" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Introduzca un emoji"
           }
         }
       }

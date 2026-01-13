@@ -514,6 +514,16 @@
         }
       }
     },
+    "Export project text" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exportar texto del proyecto"
+          }
+        }
+      }
+    },
     "Export Project Text…" : {
       "localizations" : {
         "es-419" : {

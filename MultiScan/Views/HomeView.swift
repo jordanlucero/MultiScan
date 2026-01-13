@@ -113,6 +113,22 @@ struct HomeView: View {
                 ExportPanelView(document: document)
             }
         }
+        // to fix inconsistent window corner radius
+        .toolbar {
+            ToolbarItemGroup {
+                Button("Export Project Text…", systemImage: "square.and.arrow.up") {
+                    showingExportPanel = true
+                }
+                .disabled(selectedDocument == nil || isSelectedDocumentProcessing)
+                .help("Export project text")
+            }
+        }
+    }
+
+    /// Whether the currently selected document is still being processed
+    private var isSelectedDocumentProcessing: Bool {
+        guard let id = selectedDocumentID else { return false }
+        return processingDocumentIDs.contains(id)
     }
 
     // MARK: - View Components

@@ -540,11 +540,10 @@ struct MultiScanApp: App {
                 viewerBackground: $viewerBackground,
                 navigationSettings: navigationSettings
             )
-            .frame(minWidth: 500, minHeight: 300)
+            .frame(width: 650, height: 400)
         }
         .windowResizability(.contentSize)
         .commandsRemoved()
-        .defaultSize(width: 650, height: 400)
 
         // MARK: - Native Settings Scene (Currently Broken)
         //
@@ -637,7 +636,8 @@ struct SettingsView: View {
                 Label(pane.displayName, systemImage: pane.icon)
                     .tag(pane)
             }
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 350)
+            .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 300)
+//            .toolbar(removing: .sidebarToggle) // works, but users might accidentally collapse the sidebar when resizing and have no easy way of showing it again
         } detail: {
             switch selectedPane {
             case .importAndStorage:
@@ -650,7 +650,6 @@ struct SettingsView: View {
             }
         }
         .navigationTitle(selectedPane.displayName)
-        .toolbar(removing: .sidebarToggle)
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 HStack(spacing: 0) {
@@ -660,7 +659,7 @@ struct SettingsView: View {
                         Image(systemName: "chevron.left")
                     }
                     .disabled(!canGoBack)
-
+                    
                     Button {
                         goForward()
                     } label: {
@@ -676,7 +675,7 @@ struct SettingsView: View {
                 navigationHistory = [selectedPane]
                 historyIndex = 0
             }
-
+            
             // ⚠️ WORKAROUND: Disable minimize and zoom buttons per HIG for settings windows.
             // Native Settings scene handles this automatically. Delete this block when
             // switching back to native Settings scene.
@@ -688,7 +687,7 @@ struct SettingsView: View {
         .onChange(of: selectedPaneRawValue) { oldValue, newValue in
             guard !isNavigatingHistory else { return }
             guard let newPane = SettingsPane(rawValue: newValue) else { return }
-
+            
             // Remove any forward history
             if historyIndex < navigationHistory.count - 1 {
                 navigationHistory = Array(navigationHistory.prefix(historyIndex + 1))

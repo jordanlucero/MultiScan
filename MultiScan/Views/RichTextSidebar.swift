@@ -325,12 +325,14 @@ struct RichTextSidebar: View {
             // Save any pending changes when view disappears
             editableText?.saveNow()
         }
+        #if os(macOS)
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
             // Emergency save on app quit - catches the case where user quits mid-debounce
             editableText?.saveNow()
             // Force immediate disk write before termination
             try? modelContext.save()
         }
+        #endif
         .onChange(of: currentPage) { _, newPage in
             // Save current page before switching
             editableText?.saveNow()

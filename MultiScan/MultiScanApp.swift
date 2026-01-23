@@ -491,28 +491,23 @@ struct MultiScanApp: App {
                 .disabled(focusedDocument == nil)
             }
 
+            #if os(macOS)
             // App Menu Commands - Settings
             // ⚠️ WORKAROUND: Delete this CommandGroup when native Settings scene works.
             // The native Settings scene auto-generates the "Settings…" menu item with ⌘,
             CommandGroup(replacing: .appSettings) {
                 OpenSettingsCommand()
             }
-
+            #endif
+            
             // Help Menu Commands
             CommandGroup(replacing: .help) {
-                Button("MultiScan Known Issues", systemImage: "") { // bulb icon used by system apps missing from SF symbols?? temporarily just pointing to GitHub releases for Known Issues
-                    if let url = URL(string: "https://github.com/jordanlucero/MultiScan/releases") {
-                        NSWorkspace.shared.open(url)
-                    }
-                }
-                Button("Open MultiScan Repository on GitHub", systemImage: "safari") {
-                    if let url = URL(string: "https://github.com/jordanlucero/MultiScan") {
-                        NSWorkspace.shared.open(url)
-                    }
-                }
+                Link("MultiScan Known Issues", destination: URL(string: "https://github.com/jordanlucero/MultiScan/releases")!) // tips icon used by system apps missing from SF symbols. removed SF symbols from both links and temporarily just pointing to GitHub releases for Known Issues
+                Link("Open MultiScan Repository on GitHub", destination: URL(string: "https://github.com/jordanlucero/MultiScan")!)
             }
         }
 
+        #if os(macOS)
         // MARK: - Settings Window (Workaround)
         //
         // ⚠️ WORKAROUND: Custom Window scene instead of native Settings scene
@@ -544,25 +539,27 @@ struct MultiScanApp: App {
         }
         .windowResizability(.contentSize)
         .commandsRemoved()
-
-        // MARK: - Native Settings Scene (Currently Broken)
-        //
-        //  ORIGINAL IMPLEMENTATION - Uncomment to test if Apple has fixed the bug
-        // If this works correctly in a future SwiftUI implementation:
-        // 1. Delete the custom Window scene above
-        // 2. Delete OpenSettingsCommand struct
-        // 3. Delete the CommandGroup(replacing: .appSettings) in .commands {}
-        // 4. Remove the NSWindow button-disabling code from SettingsView.onAppear
-        //
-        // Settings {
-        //     SettingsView(
-        //         optimizeImagesOnImport: $optimizeImagesOnImport,
-        //         viewerBackground: $viewerBackground,
-        //         navigationSettings: navigationSettings
-        //     )
-        // }
+        #endif
     }
 }
+
+#if os(macOS)
+// MARK: - Native Settings Scene (Currently Broken)
+//
+//  ORIGINAL IMPLEMENTATION - Uncomment to test if Apple has fixed the bug
+// If this works correctly in a future SwiftUI implementation:
+// 1. Delete the custom Window scene above
+// 2. Delete OpenSettingsCommand struct
+// 3. Delete the CommandGroup(replacing: .appSettings) in .commands {}
+// 4. Remove the NSWindow button-disabling code from SettingsView.onAppear
+//
+// Settings {
+//     SettingsView(
+//         optimizeImagesOnImport: $optimizeImagesOnImport,
+//         viewerBackground: $viewerBackground,
+//         navigationSettings: navigationSettings
+//     )
+// }
 
 // MARK: - Settings Command (Workaround)
 //
@@ -571,7 +568,7 @@ struct MultiScanApp: App {
 // This view is used in CommandGroup(replacing: .appSettings) to provide the shortcut.
 //
 // DELETE THIS when the native Settings scene works correctly.
-//
+
 struct OpenSettingsCommand: View {
     @Environment(\.openWindow) private var openWindow
 
@@ -792,3 +789,4 @@ struct ViewerSettingsView: View {
     )
     .environment(\.locale, Locale(identifier: "es-419"))
 }
+#endif

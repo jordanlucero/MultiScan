@@ -170,7 +170,6 @@ struct ImageViewer: View {
         }
         .padding()
         .glassEffect()
-        .padding()
         .opacity(controlsVisible ? 1.0 : 0.0)
         .animation(.easeInOut(duration: 0.25), value: controlsVisible)
         .accessibilityHidden(false) // Keep accessible to VoiceOver regardless of opacity

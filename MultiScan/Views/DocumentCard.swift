@@ -194,7 +194,9 @@ struct DocumentCard: View {
                             .font(.headline)
                             .focused($isNameFieldFocused)
                             .onSubmit { commitRename() }
+                        #if os(macOS)
                             .onExitCommand { cancelRename() }
+                        #endif
                     } else {
                         Text(document.name)
                             .font(.headline)

@@ -97,7 +97,11 @@ struct ExportPanelView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding()
                 }
+                #if os(macOS)
                 .background(Color(nsColor: .textBackgroundColor))
+                #else
+                .background(Color(.secondarySystemBackground))
+                #endif
 
                 if isLoading && previewText.characters.isEmpty {
                     VStack(spacing: 12) {
@@ -107,7 +111,11 @@ struct ExportPanelView: View {
                             .foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    #if os(macOS)
                     .background(Color(nsColor: .textBackgroundColor))
+                    #else
+                    .background(Color(.secondarySystemBackground))
+                    #endif
                 }
             }
         }
@@ -134,7 +142,11 @@ struct ExportPanelView: View {
                         Text(style.label).tag(style)
                     }
                 }
+                #if os(macOS)
                 .pickerStyle(.radioGroup)
+                #else
+                //idk
+                #endif
                 .labelsHidden()
             }
             .disabled(!settings.createVisualSeparation)
@@ -164,8 +176,7 @@ struct ExportPanelView: View {
 
                 Spacer()
 
-                // TODO: Dismiss panel after successful share. SwiftUI's ShareLink has no
-                // completion callback — would need NSSharingServicePicker with delegate.
+                // TODO: Dismiss panel after successful share. SwiftUI's ShareLink has no completion callback (?) — would need NSSharingServicePicker with delegate.
                 ShareLink(item: RichText(previewText), preview: SharePreview("Project Text")) {
                     Text("Export…")
                 }

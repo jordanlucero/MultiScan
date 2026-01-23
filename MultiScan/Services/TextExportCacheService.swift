@@ -149,7 +149,7 @@ enum TextExportCacheService {
     /// - Parameter document: The document to rebuild the cache for
     static func rebuildCache(for document: Document) {
         // This intentionally loads all pages - it's a recovery operation
-        buildInitialCache(for: document, from: document.pages)
+        buildInitialCache(for: document, from: document.unwrappedPages)
     }
 
     // MARK: - Single Page Updates
@@ -338,7 +338,7 @@ enum TextExportCacheService {
     /// - Returns: True if a valid, current-version cache exists
     static func hasValidCache(for document: Document) -> Bool {
         guard let cache = loadCache(from: document) else { return false }
-        return cache.pages.count == document.pages.count
+        return cache.pages.count == document.unwrappedPages.count
     }
 
     // MARK: - Private Helpers

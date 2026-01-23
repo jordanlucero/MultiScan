@@ -47,7 +47,7 @@ class NavigationState: ObservableObject {
     var currentPage: Page? {
         guard let document = selectedDocument,
               let pn = currentPageNumber else { return nil }
-        return document.pages.first { $0.pageNumber == pn }
+        return document.unwrappedPages.first { $0.pageNumber == pn }
     }
 
     // MARK: - Filter-Aware Navigation
@@ -61,7 +61,7 @@ class NavigationState: ObservableObject {
     private var filteredPageNumbers: [Int] {
         guard let document = selectedDocument else { return [] }
 
-        let sortedPages = document.pages.sorted { $0.pageNumber < $1.pageNumber }
+        let sortedPages = document.unwrappedPages.sorted { $0.pageNumber < $1.pageNumber }
 
         // Apply status filter
         let statusFiltered: [Page]
@@ -153,7 +153,7 @@ class NavigationState: ObservableObject {
 
     func setupNavigation(for document: Document) {
         selectedDocument = document
-        originalOrder = document.pages.map { $0.pageNumber }.sorted()
+        originalOrder = document.unwrappedPages.map { $0.pageNumber }.sorted()
         shuffledOrder = originalOrder.shuffled()
 
         // Reset sequential index to first page
@@ -260,7 +260,7 @@ class NavigationState: ObservableObject {
             let checkIndex = (startIndex + offset) % shuffledOrder.count
             let checkPageNumber = shuffledOrder[checkIndex]
 
-            if let page = document.pages.first(where: { $0.pageNumber == checkPageNumber }),
+            if let page = document.unwrappedPages.first(where: { $0.pageNumber == checkPageNumber }),
                !page.isDone {
                 return checkPageNumber
             }
@@ -357,7 +357,7 @@ class NavigationState: ObservableObject {
             // Must be in filtered set AND undone
             guard filtered.contains(checkPageNumber) else { continue }
 
-            if let page = document.pages.first(where: { $0.pageNumber == checkPageNumber }),
+            if let page = document.unwrappedPages.first(where: { $0.pageNumber == checkPageNumber }),
                !page.isDone {
                 return checkPageNumber
             }
@@ -440,20 +440,20 @@ class NavigationState: ObservableObject {
     /// Whether the current page can be moved up
     var canMoveCurrentPageUp: Bool {
         guard let page = currentPage, let document = selectedDocument else { return false }
-        return document.pages.contains { $0.pageNumber == page.pageNumber - 1 }
+        return document.unwrappedPages.contains { $0.pageNumber == page.pageNumber - 1 }
     }
 
     /// Whether the current page can be moved down
     var canMoveCurrentPageDown: Bool {
         guard let page = currentPage, let document = selectedDocument else { return false }
-        return document.pages.contains { $0.pageNumber == page.pageNumber + 1 }
+        return document.unwrappedPages.contains { $0.pageNumber == page.pageNumber + 1 }
     }
 
     /// Move current page up by swapping with adjacent page
     func moveCurrentPageUp() {
         guard let page = currentPage,
               let document = selectedDocument,
-              let adjacent = document.pages.first(where: { $0.pageNumber == page.pageNumber - 1 }) else { return }
+              let adjacent = document.unwrappedPages.first(where: { $0.pageNumber == page.pageNumber - 1 }) else { return }
 
         // Capture original page numbers for cache update
         let originalPageNumber = page.pageNumber
@@ -473,7 +473,7 @@ class NavigationState: ObservableObject {
     func moveCurrentPageDown() {
         guard let page = currentPage,
               let document = selectedDocument,
-              let adjacent = document.pages.first(where: { $0.pageNumber == page.pageNumber + 1 }) else { return }
+              let adjacent = document.unwrappedPages.first(where: { $0.pageNumber == page.pageNumber + 1 }) else { return }
 
         // Capture original page numbers for cache update
         let originalPageNumber = page.pageNumber
@@ -500,12 +500,12 @@ class NavigationState: ObservableObject {
         TextExportCacheService.removeEntry(pageNumber: deletedPageNumber, from: document)
 
         // Decrement pageNumber for all pages after the deleted one
-        for otherPage in document.pages where otherPage.pageNumber > deletedPageNumber {
+        for otherPage in document.unwrappedPages where otherPage.pageNumber > deletedPageNumber {
             otherPage.pageNumber -= 1
         }
 
         // Remove from document's pages array
-        document.pages.removeAll { $0.persistentModelID == page.persistentModelID }
+        document.pages?.removeAll { $0.persistentModelID == page.persistentModelID }
         document.totalPages -= 1
         document.recalculateStorageSize()
 
@@ -525,11 +525,11 @@ class NavigationState: ObservableObject {
     }
 
     var donePageCount: Int {
-        selectedDocument?.pages.filter { $0.isDone }.count ?? 0
+        selectedDocument?.unwrappedPages.filter { $0.isDone }.count ?? 0
     }
 
     var totalPageCount: Int {
-        selectedDocument?.pages.count ?? 0
+        selectedDocument?.unwrappedPages.count ?? 0
     }
 
     var progress: Double {
@@ -547,7 +547,7 @@ class NavigationState: ObservableObject {
             return
         }
 
-        let sortedPages = document.pages.sorted { $0.pageNumber < $1.pageNumber }
+        let sortedPages = document.unwrappedPages.sorted { $0.pageNumber < $1.pageNumber }
 
         // Build plain text version (for TTS, search, accessibility)
         fullDocumentPlainText = sortedPages.map { $0.plainText }.joined(separator: "\n\n")
@@ -567,7 +567,7 @@ class NavigationState: ObservableObject {
     /// Call this after swapping page numbers to ensure navigation stays consistent
     func refreshPageOrder() {
         guard let document = selectedDocument else { return }
-        originalOrder = document.pages.map { $0.pageNumber }.sorted()
+        originalOrder = document.unwrappedPages.map { $0.pageNumber }.sorted()
         shuffledOrder = originalOrder.shuffled()
         rebuildTextCache()
         pageOrderVersion += 1

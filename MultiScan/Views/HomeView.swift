@@ -39,6 +39,11 @@ struct HomeView: View {
     // Export panel state for menu bar command
     @State private var showingExportPanel = false
 
+    // Automatically shows debug settings sheet (iOS only)
+    #if DEBUG && os(iOS)
+    @State private var showingDebugSettings = true
+    #endif
+
     /// The currently selected document (for menu bar commands)
     private var selectedDocument: Document? {
         guard let id = selectedDocumentID else { return nil }
@@ -123,6 +128,22 @@ struct HomeView: View {
                 .help("Export project text")
             }
         }
+        #if DEBUG && os(iOS)
+        .sheet(isPresented: $showingDebugSettings) {
+            NavigationStack {
+                ImportAndStorageSettingsView(optimizeImagesOnImport: $optimizeImagesOnImport)
+                    .navigationTitle("Settings")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") {
+                                showingDebugSettings = false
+                            }
+                        }
+                    }
+            }
+        }
+        #endif
     }
 
     /// Whether the currently selected document is still being processed
@@ -243,7 +264,7 @@ struct HomeView: View {
         isOptimizing = true
 
         // Gather image data from pages on main actor
-        let pageData: [(page: Page, imageData: Data)] = document.pages.compactMap { page in
+        let pageData: [(page: Page, imageData: Data)] = document.unwrappedPages.compactMap { page in
             guard let imageData = page.imageData else { return nil }
             return (page, imageData)
         }
@@ -443,7 +464,7 @@ struct HomeView: View {
             )
             page.thumbnailData = result.thumbnailData
             page.document = document
-            document.pages.append(page)
+            document.pages?.append(page)
         }
 
         // Calculate storage size after all pages are added
@@ -451,7 +472,7 @@ struct HomeView: View {
 
         // Build text export cache while page richText is still in memory
         // This avoids external storage loads when exporting later
-        TextExportCacheService.buildInitialCache(for: document, from: document.pages)
+        TextExportCacheService.buildInitialCache(for: document, from: document.unwrappedPages)
 
         do {
             try modelContext.save()
@@ -484,12 +505,12 @@ struct HomeView: View {
 
 #Preview("English") {
     HomeView(onDocumentSelected: { _ in })
-        .modelContainer(for: [Document.self, Page.self], inMemory: true)
+        .modelContainer(previewContainer())
         .environment(\.locale, Locale(identifier: "en"))
 }
 
 #Preview("es-419") {
     HomeView(onDocumentSelected: { _ in })
-        .modelContainer(for: [Document.self, Page.self], inMemory: true)
+        .modelContainer(previewContainer())
         .environment(\.locale, Locale(identifier: "es-419"))
 }

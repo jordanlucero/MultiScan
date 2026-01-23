@@ -1,9 +1,4 @@
-//
-//  RichTextSupport.swift
-//  MultiScan
-//
-//  Rich text utilities and AttributedString extensions for macOS 26+
-//
+//  Rich text utilities and AttributedString extensions for macOS 26+ aligned releases
 
 import Foundation
 import SwiftUI

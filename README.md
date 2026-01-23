@@ -5,7 +5,7 @@ Built with fully-native Swift, SwiftUI, SwiftData, and VisionKit frameworks. Swi
 
 ![MultiScan running on an iMac with macOS Tahoe.](https://github.com/user-attachments/assets/92505022-c688-4126-98cc-3533444fda16)
 
-Built with Claude Code running Claude Sonnet (4, 4.5) and Claude Opus (4, 4.1, 4.5). MultiScan does not have network access and is appropriately sandboxed.
+Built with Claude Code running Claude Sonnet (4, 4.5) and Claude Opus (4, 4.1, 4.5). MultiScan is appropriately sandboxed and uses proper iCloud services for CloudKit syncing.
 
 # Key Limitations
 

@@ -26,7 +26,7 @@ struct ExportPanelView: View {
     @State private var debounceTask: Task<Void, Never>?
 
     /// Convenience accessor for page count display
-    private var pageCount: Int { document.pages.count }
+    private var pageCount: Int { document.unwrappedPages.count }
 
     /// Maximum characters to display in preview (SwiftUI Text chokes on huge strings)
     private static let previewCharacterLimit = 50_000
@@ -234,8 +234,7 @@ private struct ExportPanelPreviewHelper: View {
     let regularText: String
 
     var body: some View {
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try! ModelContainer(for: Document.self, Page.self, configurations: config)
+        let container = previewContainer()
 
         let document = Document(name: documentName, totalPages: 3)
 
@@ -255,7 +254,7 @@ private struct ExportPanelPreviewHelper: View {
             let page = Page(pageNumber: i, text: "", imageData: nil)
             page.richText = richText
             page.originalFileName = locale == "en" ? "page-\(i).jpg" : "pagina-\(i).jpg"
-            document.pages.append(page)
+            document.pages?.append(page)
         }
 
         container.mainContext.insert(document)

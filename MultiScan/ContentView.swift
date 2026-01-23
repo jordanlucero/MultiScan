@@ -34,12 +34,12 @@ struct ContentView: View {
 
 #Preview("English") {
     ContentView()
-        .modelContainer(for: [Document.self, Page.self], inMemory: true)
+        .modelContainer(previewContainer())
         .environment(\.locale, Locale(identifier: "en"))
 }
 
 #Preview("es-419") {
     ContentView()
-        .modelContainer(for: [Document.self, Page.self], inMemory: true)
+        .modelContainer(previewContainer())
         .environment(\.locale, Locale(identifier: "es-419"))
 }

@@ -362,6 +362,15 @@
         }
       }
     },
+    "Close and reopen MultiScan to disable iCloud sync. Your projects will remain on this device but will no longer sync with other devices." : {
+
+    },
+    "Container Active" : {
+
+    },
+    "Container ID" : {
+
+    },
     "Dark Gray" : {
       "comment" : "Viewer background option: dark gray color",
       "localizations" : {
@@ -372,6 +381,9 @@
           }
         }
       }
+    },
+    "Debug: CloudKit Status" : {
+
     },
     "Default" : {
       "comment" : "Viewer background option: system default",
@@ -404,6 +416,9 @@
         }
       }
     },
+    "Delete All Data" : {
+
+    },
     "Delete Page %lld?" : {
       "localizations" : {
         "es-419" : {
@@ -434,6 +449,15 @@
         }
       }
     },
+    "Device ID" : {
+
+    },
+    "Disable & Close" : {
+
+    },
+    "Disable & Quit" : {
+
+    },
     "Done" : {
       "localizations" : {
         "es-419" : {
@@ -453,6 +477,12 @@
           }
         }
       }
+    },
+    "Enable & Close" : {
+
+    },
+    "Enable & Quit" : {
+
     },
     "Enter emoji" : {
       "localizations" : {
@@ -655,6 +685,9 @@
         }
       }
     },
+    "Force Sync Now" : {
+
+    },
     "Format" : {
       "localizations" : {
         "es-419" : {
@@ -726,6 +759,15 @@
           }
         }
       }
+    },
+    "iCloud" : {
+      "shouldTranslate" : false
+    },
+    "iCloud Account" : {
+
+    },
+    "iCloud.co.jservices.MultiScan" : {
+
     },
     "Image" : {
       "localizations" : {
@@ -829,6 +871,9 @@
         }
       }
     },
+    "Last Sync Attempt" : {
+
+    },
     "Light Gray" : {
       "comment" : "Viewer background option: light gray color",
       "localizations" : {
@@ -856,6 +901,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Cargando imagen…"
+          }
+        }
+      }
+    },
+    "Loading..." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Cargando…"
           }
         }
       }
@@ -992,6 +1047,12 @@
         }
       }
     },
+    "No" : {
+
+    },
+    "No (restart required)" : {
+
+    },
     "No more matching pages ahead" : {
       "comment" : "AccessibilityNotification NavigationDirection",
       "localizations" : {
@@ -1063,6 +1124,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "OK"
+          }
+        }
+      }
+    },
+    "Open App Store" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre App Store"
           }
         }
       }
@@ -1358,6 +1429,12 @@
         }
       }
     },
+    "Quit and reopen MultiScan to disable iCloud sync. Your projects will remain on this device but will no longer sync with other devices." : {
+
+    },
+    "Refresh Status" : {
+
+    },
     "Remove Line Breaks" : {
       "localizations" : {
         "es-419" : {
@@ -1387,6 +1464,18 @@
           }
         }
       }
+    },
+    "Report Issue" : {
+
+    },
+    "Reset All Data" : {
+
+    },
+    "Reset All Data?" : {
+
+    },
+    "Restart Required" : {
+
     },
     "Review Status" : {
       "localizations" : {
@@ -1502,6 +1591,19 @@
         }
       }
     },
+    "Setting Enabled" : {
+
+    },
+    "Settings" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Configuración"
+          }
+        }
+      }
+    },
     "Settings…" : {
       "localizations" : {
         "es-419" : {
@@ -1613,6 +1715,18 @@
         }
       }
     },
+    "Sync projects with iCloud" : {
+
+    },
+    "Sync your MultiScan projects in iCloud to work with them across your devices. Image data in larger projects may use significant iCloud storage." : {
+
+    },
+    "Sync your MultiScan projects in iCloud to work with them across your devices. Larger projects may use significant iCloud storage." : {
+
+    },
+    "Test CloudKit Access" : {
+
+    },
     "Text Editor, Page %lld of %lld. Export Page Text" : {
       "comment" : "Accessibility label on RichTextSidebar header",
       "localizations" : {
@@ -1670,6 +1784,9 @@
         }
       }
     },
+    "This will permanently delete all your projects and pages. This cannot be undone." : {
+
+    },
     "This will permanently delete the page from your project. This cannot be undone." : {
       "localizations" : {
         "es-419" : {
@@ -1679,6 +1796,9 @@
           }
         }
       }
+    },
+    "Try Again" : {
+
     },
     "Underline" : {
       "localizations" : {
@@ -1800,6 +1920,15 @@
           }
         }
       }
+    },
+    "Yes" : {
+
+    },
+    "Your projects will begin syncing to and from iCloud after you close and reopen MultiScan." : {
+
+    },
+    "Your projects will begin syncing to and from iCloud after you quit and reopen MultiScan." : {
+
     },
     "Zoom %lld percent" : {
       "comment" : "Change zoom value, can describe a zoom in or out",

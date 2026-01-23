@@ -12,9 +12,13 @@ import SwiftUI
 
 @Model
 final class Page {
-    var pageNumber: Int
+    // MARK: - CloudKit Compatibility
+    // All properties must have default values for CloudKit sync.
+    // Relationships must be optional.
+
+    var pageNumber: Int = 0
     var document: Document?
-    var createdAt: Date
+    var createdAt: Date = Date()
     var isDone: Bool = false
     var thumbnailData: Data?
     var boundingBoxesData: Data? // Encoded array of CGRect from VisionKit
@@ -36,11 +40,30 @@ final class Page {
     @Attribute(.externalStorage)
     var imageData: Data?
 
-    /// Rich text content stored natively by SwiftData
+    /// Rich text content stored as JSON-encoded Data for CloudKit compatibility.
+    /// Use the `richText` computed property for convenient access.
     @Attribute(.externalStorage)
-    var richText: AttributedString = AttributedString() {
-        didSet {
-            lastModified = Date()
+    var richTextData: Data?
+
+    /// Rich text accessor that encodes/decodes from `richTextData`.
+    /// CloudKit doesn't support AttributedString directly, so we store as Data.
+    var richText: AttributedString {
+        get {
+            guard let data = richTextData else { return AttributedString() }
+            do {
+                return try JSONDecoder().decode(AttributedString.self, from: data)
+            } catch {
+                print("⚠️ Failed to decode richText: \(error)")
+                return AttributedString()
+            }
+        }
+        set {
+            do {
+                richTextData = try JSONEncoder().encode(newValue)
+                lastModified = Date()
+            } catch {
+                print("⚠️ Failed to encode richText: \(error)")
+            }
         }
     }
 
@@ -58,7 +81,8 @@ final class Page {
         self.thumbnailData = nil
         self.boundingBoxesData = boundingBoxesData
         self.lastModified = Date()
-        self.richText = AttributedString(text)
+        // Encode AttributedString directly to avoid computed property access during init
+        self.richTextData = try? JSONEncoder().encode(AttributedString(text))
     }
 
     /// Decode stored bounding boxes
@@ -73,10 +97,14 @@ final class Page {
 
 @Model
 final class Document {
-    var name: String
-    var totalPages: Int
-    var createdAt: Date
-    @Relationship(deleteRule: .cascade) var pages: [Page]
+    // MARK: - CloudKit Compatibility
+    // All properties must have default values for CloudKit sync.
+    // Relationships must be optional.
+
+    var name: String = ""
+    var totalPages: Int = 0
+    var createdAt: Date = Date()
+    @Relationship(deleteRule: .cascade) var pages: [Page]? = []
 
     /// Optional project emoji for visual customization
     var emoji: String?
@@ -99,11 +127,18 @@ final class Document {
         self.cachedStorageBytes = 0
     }
 
+    // MARK: - Convenience Accessors
+
+    /// Non-optional pages array for convenient access. Returns empty array if nil.
+    var unwrappedPages: [Page] {
+        pages ?? []
+    }
+
     // MARK: - Computed Properties
 
     /// Returns the most recently modified page (for thumbnail preview)
     var lastModifiedPage: Page? {
-        pages.max(by: { $0.lastModified < $1.lastModified })
+        unwrappedPages.max(by: { $0.lastModified < $1.lastModified })
     }
 
     /// Returns the date of the most recent page modification
@@ -114,7 +149,7 @@ final class Document {
     /// Completion percentage as integer (0-100)
     var completionPercentage: Int {
         guard totalPages > 0 else { return 0 }
-        return Int(Double(pages.filter { $0.isDone }.count) / Double(totalPages) * 100)
+        return Int(Double(unwrappedPages.filter { $0.isDone }.count) / Double(totalPages) * 100)
     }
 
     /// Formatted storage size string (e.g., "45.2 MB")
@@ -125,12 +160,15 @@ final class Document {
     /// Recalculates and updates the cached storage size
     func recalculateStorageSize() {
         var totalBytes: Int64 = 0
-        for page in pages {
+        for page in unwrappedPages {
             if let imageData = page.imageData {
                 totalBytes += Int64(imageData.count)
             }
             if let thumbnailData = page.thumbnailData {
                 totalBytes += Int64(thumbnailData.count)
+            }
+            if let richTextData = page.richTextData {
+                totalBytes += Int64(richTextData.count)
             }
         }
         cachedStorageBytes = totalBytes
@@ -145,3 +183,4 @@ extension Page {
         "Page \(pageNumber)"
     }
 }
+

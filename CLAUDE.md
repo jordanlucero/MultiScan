@@ -24,8 +24,8 @@ MultiScan is a macOS SwiftUI application that uses SwiftData for persistence. Cu
 4. **Models.swift**: SwiftData models (`Document`, `Page`)
 
 ### Data Models
-- **Document**: Container for pages with metadata (name, emoji, storage size)
-- **Page**: Individual page with image, rich text, thumbnails, and display settings
+- **Document**: Container for pages with metadata (name, emoji, storage size). Uses optional `pages` relationship with `unwrappedPages` accessor for CloudKit compatibility.
+- **Page**: Individual page with image, rich text, thumbnails, and display settings. All properties have default values for CloudKit sync.
 
 ### Data Flow
 - SwiftData `@Model` classes for persistence
@@ -58,14 +58,201 @@ xcodebuild -scheme MultiScan clean
 - **Minimum Deployment**: macOS 26.0
 - **SwiftData Container**: Automatically manages SQLite database for Item model
 - **Navigation**: Split view pattern suitable for document-based or list-detail interfaces
+- **CloudKit Sync**: Enabled via `.private("iCloud.co.jservices.MultiScan")` container
+
+## CloudKit Sync Architecture
+
+The app uses SwiftData with CloudKit for automatic iCloud sync across devices.
+
+### ModelContainer Configuration (`MultiScanApp.swift`)
+```swift
+let modelConfiguration = ModelConfiguration(
+    schema: schema,
+    isStoredInMemoryOnly: false,
+    cloudKitDatabase: .private("iCloud.co.jservices.MultiScan")
+)
+```
+
+### CloudKit Requirements
+All SwiftData properties must have default values, and all relationships must be optional:
+
+**Page model:**
+```swift
+var pageNumber: Int = 0
+var createdAt: Date = Date()
+var document: Document?  // Relationship must be optional
+```
+
+**Document model:**
+```swift
+var name: String = ""
+var totalPages: Int = 0
+var createdAt: Date = Date()
+@Relationship(deleteRule: .cascade) var pages: [Page]? = []  // Optional with default
+```
+
+### Accessing the Optional Relationship
+Use `unwrappedPages` computed property for convenient read access:
+```swift
+// On Document model
+var unwrappedPages: [Page] {
+    pages ?? []
+}
+
+// Usage in views/services
+document.unwrappedPages.filter { $0.isDone }  // Read operations
+document.pages?.append(page)                   // Write operations (optional chaining)
+```
+
+### Entitlements (`MultiScan.entitlements`)
+- `com.apple.developer.icloud-container-identifiers`: `iCloud.co.jservices.MultiScan`
+- `com.apple.developer.icloud-services`: `CloudKit`
+- `aps-environment`: `development` (for sync notifications)
+
+### Development Schema Initialization
+CloudKit requires the data schema to be pushed to iCloud's development environment before sync works. This is handled automatically in DEBUG builds via `NSPersistentCloudKitContainer.initializeCloudKitSchema()`.
+
+**First run setup:**
+1. Build and run in DEBUG mode while signed into iCloud
+2. The schema is pushed to CloudKit's development environment
+3. Verify in CloudKit Dashboard (developer.apple.com/icloud) that `CD_Document` and `CD_Page` record types exist
+
+**Production deployment:**
+1. In CloudKit Dashboard, promote schema from Development to Production
+2. This only needs to be done once before App Store release
+3. Schema changes require re-promotion
+
+The initialization code is wrapped in `#if DEBUG` so it only runs during development.
+
+### Schema Migration Strategies
+
+When making changes to SwiftData models after shipping to the App Store:
+
+| Change Type | Safe? | Effect on Old App Versions |
+|-------------|-------|---------------------------|
+| Add property with default | ✅ Yes | Old versions ignore the new field |
+| Add new @Model class | ✅ Yes | Old versions ignore new record type |
+| Rename property | ⚠️ No | Old versions lose data in that field |
+| Delete property | ⚠️ No | Old versions may crash or lose data |
+| Change property type | ⚠️ No | Sync failures, potential data loss |
+
+**Common strategies for handling version mismatches:**
+
+1. **Additive-Only** (recommended): Only add new properties with defaults. Old apps just ignore fields they don't understand. (Apple Notes, Reminders use this)
+
+2. **Version Gate**: Store a `schemaVersion: Int` in CloudKit. On launch, if cloud version > app version, show "Please update to continue syncing". (Notability does this)
+
+3. **Graceful Degradation**: New features use new fields, core features use old fields. Old apps work but miss new features.
+
+4. **Accept Breakage**: Make breaking changes, old versions stop working. Acceptable for personal tools or when you control all devices.
+
+### iCloud Sync User Setting
+
+Users can toggle iCloud sync in **Settings > Import and Storage**.
+
+**Default: OFF** (users must opt-in)
+
+Reasoning:
+- Some users have limited iCloud storage
+- Large projects (1000+ pages with images) can use significant space
+- Users who want sync can enable it
+
+**Implementation:**
+- Setting stored in UserDefaults (`SchemaVersioning.iCloudSyncEnabledKey`)
+- Checked at container creation time
+- **Requires app restart to change** - SwiftData's `cloudKitDatabase` is configured once
+- Toggle shows confirmation alert and quits app when changed
+
+**What happens when toggled:**
+- **ON → OFF**: Projects stay on device, stop syncing with other devices
+- **OFF → ON**: Existing local projects begin syncing to iCloud
+
+**If user isn't signed into iCloud:**
+- Enabling sync has no visible effect - data stays local until they sign in
+- No error or crash - SwiftData handles this gracefully
+
+## Schema Versioning System
+
+The app tracks schema versions to gracefully handle data incompatibilities and prevent crashes.
+
+### Architecture
+
+**Version Tracking (dual storage for resilience):**
+- `UserDefaults`: Checked BEFORE container loads. Survives database corruption.
+- `SchemaMetadata` model: Checked AFTER load. Detects CloudKit sync from newer app versions.
+
+**Key Files:**
+- `Services/SchemaVersioning.swift`: Version constants, `SchemaMetadata` model
+- `Services/SchemaValidationService.swift`: Pre/post-load validation, integrity checks, self-healing
+- `Views/SchemaRecoveryView.swift`: Recovery UI for failures/incompatibilities
+
+### Container Load Flow (`MultiScanApp.swift`)
+
+```
+1. Pre-load check (UserDefaults)
+   ├─ newerThanApp? → Show "Update Required" UI
+   └─ compatible → Continue
+
+2. Create ModelContainer
+   ├─ Success → Continue
+   └─ Failure → Show Recovery UI (don't crash!)
+
+3. Post-load validation (.task {})
+   ├─ Check SchemaMetadata for CloudKit sync from newer version
+   ├─ Run integrity validation (totalPages, pageNumbers, orphans)
+   └─ Self-heal minor issues automatically
+```
+
+### Integrity Validation & Self-Healing
+
+Minor issues are auto-fixed without user intervention:
+
+| Issue | Detection | Auto-Fix |
+|-------|-----------|----------|
+| `totalPages` mismatch | `document.totalPages != pages.count` | Recalculate from actual count |
+| Page number gaps | Pages not numbered 1,2,3... | Renumber sequentially |
+| Orphan pages | `page.document == nil` | Delete orphan pages |
+
+Critical issues require user action:
+- Data from newer schema version → "Update Required" prompt
+
+### Version History
+
+| Version | App Version | Changes |
+|---------|-------------|---------|
+| 1 | 1.5.1+ | Initial tracked version. Document, Page, SchemaMetadata models. |
+
+### When to Bump Schema Version
+
+**No bump needed (safe changes):**
+- Adding new property with default value
+- Adding new `@Model` class
+
+**Bump required (breaking changes):**
+- Removing a property
+- Renaming a property
+- Changing a property type
+
+After bumping:
+1. Increment `SchemaVersioning.currentVersion`
+2. Update version history table above
+3. Add handling in `SchemaValidationService` if migration logic needed
+
+### Recovery UI
+
+When container loading fails or data is incompatible, `SchemaRecoveryView` offers:
+- **Try Again**: Retry loading (for transient issues)
+- **Reset All Data**: Delete database and start fresh (with confirmation)
+- **Report Issue**: Link to GitHub issues
 
 ## Adding New Features
 
 When extending functionality:
 1. New data models should be `@Model` classes in separate files
-2. Use `@Query` for reactive data fetching in views
-3. Access `modelContext` from environment for CRUD operations
-4. Follow SwiftUI view composition patterns
+2. **CloudKit requirement**: All properties must have default values, all relationships must be optional
+3. Use `@Query` for reactive data fetching in views
+4. Access `modelContext` from environment for CRUD operations
+5. Follow SwiftUI view composition patterns
 
 ## Rich Text Storage Architecture
 

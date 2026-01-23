@@ -45,7 +45,7 @@ struct ThumbnailSidebar: View {
 
     /// Total number of pages in the document
     private var totalPageCount: Int {
-        document.pages.count
+        document.unwrappedPages.count
     }
 
     /// Number of pages currently visible after filtering
@@ -88,7 +88,7 @@ struct ThumbnailSidebar: View {
     var filteredPages: [Page] {
         // Reference pageOrderVersion to trigger re-computation when page order changes
         _ = navigationState.pageOrderVersion
-        let sortedPages = document.pages.sorted(by: { $0.pageNumber < $1.pageNumber })
+        let sortedPages = document.unwrappedPages.sorted(by: { $0.pageNumber < $1.pageNumber })
 
         // Apply filter option first
         let filtered: [Page]
@@ -253,17 +253,17 @@ struct ThumbnailView: View {
 
     /// Whether this page can be moved up (has an adjacent page with pageNumber - 1)
     private var canMoveUp: Bool {
-        document.pages.contains { $0.pageNumber == page.pageNumber - 1 }
+        document.unwrappedPages.contains { $0.pageNumber == page.pageNumber - 1 }
     }
 
     /// Whether this page can be moved down (has an adjacent page with pageNumber + 1)
     private var canMoveDown: Bool {
-        document.pages.contains { $0.pageNumber == page.pageNumber + 1 }
+        document.unwrappedPages.contains { $0.pageNumber == page.pageNumber + 1 }
     }
 
     /// Move this page up by swapping pageNumbers with adjacent page
     private func movePageUp() {
-        guard let adjacent = document.pages.first(where: { $0.pageNumber == page.pageNumber - 1 }) else { return }
+        guard let adjacent = document.unwrappedPages.first(where: { $0.pageNumber == page.pageNumber - 1 }) else { return }
 
         // Capture original page numbers for cache update
         let originalPageNumber = page.pageNumber
@@ -281,7 +281,7 @@ struct ThumbnailView: View {
 
     /// Move this page down by swapping pageNumbers with adjacent page
     private func movePageDown() {
-        guard let adjacent = document.pages.first(where: { $0.pageNumber == page.pageNumber + 1 }) else { return }
+        guard let adjacent = document.unwrappedPages.first(where: { $0.pageNumber == page.pageNumber + 1 }) else { return }
 
         // Capture original page numbers for cache update
         let originalPageNumber = page.pageNumber
@@ -305,12 +305,12 @@ struct ThumbnailView: View {
         TextExportCacheService.removeEntry(pageNumber: deletedPageNumber, from: document)
 
         // Decrement pageNumber for all pages after the deleted one
-        for otherPage in document.pages where otherPage.pageNumber > deletedPageNumber {
+        for otherPage in document.unwrappedPages where otherPage.pageNumber > deletedPageNumber {
             otherPage.pageNumber -= 1
         }
 
         // Remove from document's pages array
-        document.pages.removeAll { $0.persistentModelID == page.persistentModelID }
+        document.pages?.removeAll { $0.persistentModelID == page.persistentModelID }
         document.totalPages -= 1
         document.recalculateStorageSize()
 
@@ -491,12 +491,9 @@ struct ThumbnailView: View {
 }
 
 #Preview("English") {
-    @Previewable @State var container = try! ModelContainer(
-        for: Document.self, Page.self,
-        configurations: ModelConfiguration(isStoredInMemoryOnly: true)
-    )
     @Previewable @State var selectedPageNumber: Int? = 1
 
+    let container = previewContainer()
     let document = Document(name: "Sample Document", totalPages: 3)
     let page1 = Page(pageNumber: 1, text: "Here's to the crazy ones.", imageData: nil, originalFileName: "page1.jpg")
     let page2 = Page(pageNumber: 2, text: "The misfits. The rebels. The troublemakers. The round pegs in the square holes.", imageData: nil, originalFileName: "page2.jpg")
@@ -518,12 +515,9 @@ struct ThumbnailView: View {
 }
 
 #Preview("es-419") {
-    @Previewable @State var container = try! ModelContainer(
-        for: Document.self, Page.self,
-        configurations: ModelConfiguration(isStoredInMemoryOnly: true)
-    )
     @Previewable @State var selectedPageNumber: Int? = 1
 
+    let container = previewContainer()
     let document = Document(name: "Documento de Ejemplo", totalPages: 3)
     let page1 = Page(pageNumber: 1, text: "Texto de ejemplo para la página 1", imageData: nil, originalFileName: "pagina1.jpg")
     let page2 = Page(pageNumber: 2, text: "Texto de ejemplo para la página 2", imageData: nil, originalFileName: "pagina2.jpg")

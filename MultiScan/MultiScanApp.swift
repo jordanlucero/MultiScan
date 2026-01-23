@@ -7,6 +7,8 @@
 
 import SwiftUI
 import SwiftData
+import CloudKit
+import CoreData
 
 // MARK: - Notification Names
 
@@ -248,36 +250,276 @@ struct MultiScanApp: App {
     @State private var showDeletePageConfirmation = false
     @State private var navigationSettings = NavigationSettings()
 
+    // MARK: - Container State Management
+
+    /// Tracks the container loading state for showing appropriate UI.
+    /// Initial state is determined by checking for pre-existing errors.
+    @State private var containerLoadState: ContainerLoadState = {
+        // Check for container creation errors first
+        if let error = MultiScanApp.containerCreationError {
+            return .failed(.failed(error: error.localizedDescription))
+        }
+        // Check for pre-load version issues
+        if case .newerThanApp(let version) = MultiScanApp.preLoadCheckResult {
+            return .failed(.incompatible(version: version))
+        }
+        return .ready
+    }()
+
+    /// State for container loading and error handling.
+    enum ContainerLoadState {
+        case ready
+        case failed(RecoveryState)
+    }
+
+    // MARK: - SwiftData + CloudKit Container
+    //
+    // This property creates the SwiftData ModelContainer with CloudKit sync enabled.
+    //
+    // ## How CloudKit Sync Works
+    //
+    // 1. SwiftData is built on top of Core Data
+    // 2. Core Data has CloudKit integration via NSPersistentCloudKitContainer
+    // 3. SwiftData uses this under the hood when you specify `cloudKitDatabase:`
+    // 4. Your SwiftData models become "record types" in CloudKit (like database tables)
+    //    - Document.self → CD_Document record type
+    //    - Page.self → CD_Page record type
+    //
+    // ## Development vs Production Environments
+    //
+    // CloudKit has TWO separate environments within your container:
+    //
+    //   iCloud.co.jservices.MultiScan
+    //   ├── Development Environment  ← Debug/Xcode builds sync here
+    //   │   └── (test data, can be reset freely)
+    //   └── Production Environment   ← App Store builds sync here
+    //       └── (real user data, be careful!)
+    //
+    // These environments are completely isolated. Your debug testing never
+    // touches production data, and vice versa.
+    //
+    // ## Schema Initialization (the #if DEBUG block below)
+    //
+    // Before CloudKit can sync data, it needs to know your data structure (the "schema").
+    // The schema defines what record types exist and what fields they have.
+    //
+    // SwiftData doesn't expose a direct way to push the schema to CloudKit, so we
+    // temporarily use Core Data's API (NSPersistentCloudKitContainer.initializeCloudKitSchema)
+    // to do this during development. This is Apple's recommended approach as of macOS 26-aligned releases.
+    //
+    //
+    // ## Schema Changes & Version Compatibility
+    //
+    // After shipping to the App Store (or GitHub), be careful with model changes:
+    //
+    //   ✅ SAFE changes (additive):
+    //      - Adding new properties WITH default values
+    //      - Adding new @Model classes
+    //
+    //   ⚠️  BREAKING changes (avoid after shipping):
+    //      - Renaming properties or models
+    //      - Deleting properties or models
+    //      - Changing property types
+    //
+    // Breaking changes will cause sync failures for users on older app versions.
+    // Options for handling this:
+    //   1. Only make additive changes (recommended)
+    //   2. Add a schemaVersion field and show "please update" for old clients
+    //   3. Accept that old versions break (fine for personal/specialist tools)
+    //
+    /// Error captured during container creation (if any).
+    /// Using a static var because the container is created during init.
+    private static var containerCreationError: ContainerLoadError?
+
+    /// Result of pre-load version check.
+    private static var preLoadCheckResult: PreLoadCheckResult = .compatible
+
     var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            Document.self,
-            Page.self,
-        ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+        // ────────────────────────────────────────────────────────────────────
+        // MARK: Pre-Load Version Check
+        // ────────────────────────────────────────────────────────────────────
+        //
+        // Check for incompatible data BEFORE attempting to load the container.
+        // This uses UserDefaults, which survives database corruption.
+        //
+        let preLoadResult = SchemaValidationService.checkPreLoadCompatibility()
+        MultiScanApp.preLoadCheckResult = preLoadResult
+
+        // If data is from a newer app version, we should warn the user
+        // but still attempt to load (they might want to see their data in read-only mode)
+        if case .newerThanApp(let version) = preLoadResult {
+            print("⚠️ Schema Warning: Data was written by schema version \(version), " +
+                  "but this app only supports version \(SchemaVersioning.currentVersion)")
+        }
+
+        // ────────────────────────────────────────────────────────────────────
+        // MARK: iCloud Sync Configuration
+        // ────────────────────────────────────────────────────────────────────
+        //
+        // Check user preference for iCloud sync.
+        // Default is OFF - users must opt-in via Settings > Import and Storage.
+        //
+        // If enabled: Uses CloudKit private database for cross-device sync
+        // If disabled: Data stays local to this device only
+        //
+        // Note: If user isn't signed into iCloud, enabling sync has no effect -
+        // data just stays local until they sign in.
+        //
+        let iCloudSyncEnabled = SchemaVersioning.isICloudSyncEnabled
+
+        if iCloudSyncEnabled {
+            print("☁️ iCloud sync ENABLED")
+        } else {
+            print("☁️ iCloud sync DISABLED")
+        }
+
+        // Create ModelConfiguration - this determines the store URL
+        let modelConfiguration = ModelConfiguration(
+            isStoredInMemoryOnly: false,
+            cloudKitDatabase: iCloudSyncEnabled
+                ? .private("iCloud.co.jservices.MultiScan")
+                : .none
+        )
 
         do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
+            // Create the SwiftData container
+            // SwiftData handles CloudKit schema creation automatically when data is saved
+            let container = try ModelContainer(
+                for: Document.self, Page.self, SchemaMetadata.self,
+                configurations: modelConfiguration
+            )
+
+            // Record successful load for future version checks
+            SchemaValidationService.markHasLaunched()
+            SchemaValidationService.recordSuccessfulLoad()
+
+            return container
         } catch {
-            fatalError("Could not create ModelContainer: \(error)")
+            // ────────────────────────────────────────────────────────────────────
+            // MARK: Container Creation Failed
+            // ────────────────────────────────────────────────────────────────────
+            //
+            // Instead of crashing, we capture the error and show a recovery UI.
+            // The user can then choose to:
+            // - Try again (maybe a transient issue)
+            // - Reset all data (delete and recreate the database)
+            // - Report the issue
+            //
+            // We still need to return SOMETHING for the container, so we create
+            // an in-memory container as a fallback. The app will show recovery UI
+            // instead of the normal content.
+            //
+            MultiScanApp.containerCreationError = .containerCreationFailed(error.localizedDescription)
+            print("ModelContainer creation failed: \(error)")
+
+            // Create a minimal in-memory container as fallback
+            // (the app will show recovery UI, not actual content)
+            let fallbackConfig = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+            do {
+                return try ModelContainer(
+                    for: Document.self, Page.self, SchemaMetadata.self,
+                    configurations: fallbackConfig
+                )
+            } catch {
+                // If even the fallback fails, we have no choice but to crash
+                fatalError("Could not create a fallback ModelContainer: \(error)")
+            }
         }
     }()
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .confirmationDialog(
-                    "Delete Page \(focusedNavigationState?.currentPageNumber ?? 0)?",
-                    isPresented: $showDeletePageConfirmation,
-                    titleVisibility: .visible
-                ) {
-                    Button("Delete", role: .destructive) {
-                        let context = sharedModelContainer.mainContext
-                        focusedNavigationState?.deleteCurrentPage(modelContext: context)
-                    }
-                    Button("Cancel", role: .cancel) {}
-                } message: {
-                    Text("This will permanently delete the page from your project. This cannot be undone.")
+            // ────────────────────────────────────────────────────────────────────
+            // MARK: Container State Handling
+            // ────────────────────────────────────────────────────────────────────
+            //
+            // Show different UI based on container load state:
+            // - ready: Normal app content
+            // - failed: Recovery UI with options to retry or reset
+            //
+            Group {
+                switch containerLoadState {
+                case .ready:
+                    // Normal app content
+                    ContentView()
+                        .confirmationDialog(
+                            "Delete Page \(focusedNavigationState?.currentPageNumber ?? 0)?",
+                            isPresented: $showDeletePageConfirmation,
+                            titleVisibility: .visible
+                        ) {
+                            Button("Delete", role: .destructive) {
+                                let context = sharedModelContainer.mainContext
+                                focusedNavigationState?.deleteCurrentPage(modelContext: context)
+                            }
+                            Button("Cancel", role: .cancel) {}
+                        } message: {
+                            Text("This will permanently delete the page from your project. This cannot be undone.")
+                        }
+
+                case .failed(let recoveryState):
+                    // Recovery UI for errors
+                    SchemaRecoveryView(
+                        state: recoveryState,
+                        onRetry: {
+                            // Reset state and attempt reload (requires app restart for now)
+                            // A full solution would re-create the container, but that's complex
+                            // For now, just suggest the user restart the app
+                        },
+                        onReset: {
+                            // Delete the database and restart
+                            let url = sharedModelContainer.configurations.first?.url
+                            if let url = url {
+                                _ = SchemaValidationService.resetDatabase(containerURL: url)
+                            }
+                            // Clear version tracking
+                            UserDefaults.standard.removeObject(forKey: SchemaVersioning.userDefaultsKey)
+                            // The user will need to restart the app
+                        }
+                    )
                 }
+            }
+            .task {
+                // ────────────────────────────────────────────────────────────────────
+                // MARK: Post-Load Validation & Self-Healing
+                // ────────────────────────────────────────────────────────────────────
+                //
+                // This runs after the view appears. If we're already in a failed state
+                // (from pre-load checks), skip validation.
+                //
+
+                // Skip if already in error state
+                if case .failed = containerLoadState {
+                    return
+                }
+
+                // Run post-load validation
+                // This checks SchemaMetadata in the database (important for CloudKit sync
+                // scenarios where another device might have written newer data)
+                let result = await SchemaValidationService.validatePostLoad(
+                    context: sharedModelContainer.mainContext
+                )
+
+                // Check for critical issues (e.g., data from newer schema via CloudKit)
+                if result.hasCriticalIssues {
+                    for issue in result.issues {
+                        if case .newerSchemaVersion(let stored, _) = issue {
+                            containerLoadState = .failed(.incompatible(version: stored))
+                            return
+                        }
+                    }
+                }
+
+                // Self-heal minor issues (totalPages mismatch, page numbering, etc.)
+                if result.hasMinorIssues {
+                    let unfixable = SchemaValidationService.attemptSelfHeal(
+                        issues: result.issues,
+                        context: sharedModelContainer.mainContext
+                    )
+                    if !unfixable.isEmpty {
+                        print("Some integrity issues could not be auto-fixed: \(unfixable.map { $0.description })")
+                    }
+                }
+            }
         }
         .modelContainer(sharedModelContainer)
         .commands {
@@ -719,6 +961,19 @@ struct SettingsView: View {
 struct ImportAndStorageSettingsView: View {
     @Binding var optimizeImagesOnImport: Bool
 
+    // iCloud sync setting - uses UserDefaults directly because changing it requires restart
+    @State private var iCloudSyncEnabled = SchemaVersioning.isICloudSyncEnabled
+    @State private var showRestartAlert = false
+    @State private var pendingSyncValue: Bool? = nil
+
+    // Debug state
+    #if DEBUG
+    @Environment(\.modelContext) private var modelContext
+    @State private var iCloudAccountStatus: String = "Checking..."
+    @State private var lastSyncAttempt: Date? = nil
+    @State private var syncStatusMessage: String = ""
+    #endif
+
     var body: some View {
         Form {
             Section("Import") {
@@ -727,9 +982,179 @@ struct ImportAndStorageSettingsView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
+
+            Section("iCloud") {
+                Toggle("Sync projects with iCloud", isOn: $iCloudSyncEnabled)
+                    .onChange(of: iCloudSyncEnabled) { oldValue, newValue in
+                        // Don't process if alert is already showing (means we're reverting the toggle)
+                        guard oldValue != newValue, !showRestartAlert else { return }
+                        pendingSyncValue = newValue
+                        showRestartAlert = true
+                        // Revert the toggle until user confirms
+                        iCloudSyncEnabled = oldValue
+                    }
+
+                Text("Sync your MultiScan projects in iCloud to work with them across your devices. Image data in larger projects may use significant iCloud storage.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            #if DEBUG
+            Section("Debug: CloudKit Status") {
+                LabeledContent("Setting Enabled") {
+                    Text(iCloudSyncEnabled ? "Yes" : "No")
+                        .foregroundColor(iCloudSyncEnabled ? .green : .secondary)
+                }
+
+                LabeledContent("Container Active") {
+                    // Check if container was created with CloudKit
+                    Text(SchemaVersioning.isICloudSyncEnabled ? "Yes" : "No (restart required)")
+                        .foregroundColor(SchemaVersioning.isICloudSyncEnabled ? .green : .orange)
+                }
+
+                LabeledContent("iCloud Account") {
+                    Text(iCloudAccountStatus)
+                        .foregroundColor(iCloudAccountStatus == "Available" ? .green : .orange)
+                }
+
+                LabeledContent("Container ID") {
+                    Text("iCloud.co.jservices.MultiScan")
+                        .font(.caption)
+                        .textSelection(.enabled)
+                }
+
+                LabeledContent("Device ID") {
+                    Text(SchemaMetadata.currentDeviceID.prefix(8) + "...")
+                        .font(.caption.monospaced())
+                        .textSelection(.enabled)
+                }
+
+                if let lastSync = lastSyncAttempt {
+                    LabeledContent("Last Sync Attempt") {
+                        Text(lastSync, style: .relative)
+                    }
+                }
+
+                if !syncStatusMessage.isEmpty {
+                    Text(syncStatusMessage)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                Button("Force Sync Now") {
+                    forceSyncNow()
+                }
+                .disabled(!SchemaVersioning.isICloudSyncEnabled)
+
+                Button("Refresh Status") {
+                    Task { await checkICloudStatus() }
+                }
+            }
+            .onAppear {
+                Task { await checkICloudStatus() }
+            }
+            #endif
         }
         .formStyle(.grouped)
+        .alert("Restart Required", isPresented: $showRestartAlert) {
+            Button("Cancel", role: .cancel) {
+                pendingSyncValue = nil
+            }
+            Button(pendingSyncValue == true ? "Enable & Quit" : "Disable & Quit") {
+                if let newValue = pendingSyncValue {
+                    // Save the new setting
+                    UserDefaults.standard.set(newValue, forKey: SchemaVersioning.iCloudSyncEnabledKey)
+                    // Quit the app so user can relaunch with new setting
+                    NSApplication.shared.terminate(nil)
+                }
+            }
+        } message: {
+            if pendingSyncValue == true {
+                Text("Your projects will begin syncing to and from iCloud after you quit and reopen MultiScan.")
+            } else {
+                Text("Quit and reopen MultiScan to disable iCloud sync. Your projects will remain on this device but will no longer sync with other devices.")
+            }
+        }
     }
+
+    #if DEBUG
+    private func checkICloudStatus() async {
+        do {
+            let container = CKContainer(identifier: "iCloud.co.jservices.MultiScan")
+            let status = try await container.accountStatus()
+            await MainActor.run {
+                switch status {
+                case .available:
+                    iCloudAccountStatus = "Available"
+                case .noAccount:
+                    iCloudAccountStatus = "No Account"
+                case .restricted:
+                    iCloudAccountStatus = "Restricted"
+                case .couldNotDetermine:
+                    iCloudAccountStatus = "Could Not Determine"
+                case .temporarilyUnavailable:
+                    iCloudAccountStatus = "Temporarily Unavailable"
+                @unknown default:
+                    iCloudAccountStatus = "Unknown"
+                }
+            }
+        } catch {
+            await MainActor.run {
+                iCloudAccountStatus = "Error: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func forceSyncNow() {
+        lastSyncAttempt = Date()
+        syncStatusMessage = "Saving context to trigger sync..."
+
+        do {
+            try modelContext.save()
+            syncStatusMessage = "Context saved. CloudKit should sync automatically."
+        } catch {
+            syncStatusMessage = "Save failed: \(error.localizedDescription)"
+        }
+    }
+
+    /// Tests direct CloudKit access by saving a test record to the private database.
+    /// This bypasses SwiftData/Core Data to verify the container is accessible.
+    private func testCloudKitAccess() async {
+        syncStatusMessage = "Testing CloudKit access..."
+
+        let container = CKContainer(identifier: "iCloud.co.jservices.MultiScan")
+        let privateDB = container.privateCloudDatabase
+
+        // Create a simple test record
+        let testRecord = CKRecord(recordType: "TestRecord")
+        testRecord["testValue"] = "Test from MultiScan at \(Date())" as CKRecordValue
+
+        do {
+            let savedRecord = try await privateDB.save(testRecord)
+            await MainActor.run {
+                syncStatusMessage = "✅ CloudKit access OK! Saved record: \(savedRecord.recordID.recordName)"
+            }
+
+            // Clean up - delete the test record
+            try? await privateDB.deleteRecord(withID: savedRecord.recordID)
+
+        } catch let error as CKError {
+            await MainActor.run {
+                syncStatusMessage = "❌ CloudKit error: \(error.code.rawValue) - \(error.localizedDescription)"
+                print("☁️ CloudKit Test Error: \(error)")
+                if let partialErrors = error.userInfo[CKPartialErrorsByItemIDKey] as? [AnyHashable: Error] {
+                    for (key, partialError) in partialErrors {
+                        print("☁️   Partial error for \(key): \(partialError)")
+                    }
+                }
+            }
+        } catch {
+            await MainActor.run {
+                syncStatusMessage = "❌ Error: \(error.localizedDescription)"
+            }
+        }
+    }
+    #endif
 }
 
 // MARK: - Viewer Settings
@@ -788,5 +1213,208 @@ struct ViewerSettingsView: View {
         navigationSettings: navigationSettings
     )
     .environment(\.locale, Locale(identifier: "es-419"))
+}
+#else
+// iOS/iPadOS version of ImportAndStorageSettingsView
+struct ImportAndStorageSettingsView: View {
+    @Binding var optimizeImagesOnImport: Bool
+
+    // iCloud sync setting - uses UserDefaults directly because changing it requires restart
+    @State private var iCloudSyncEnabled = SchemaVersioning.isICloudSyncEnabled
+    @State private var showRestartAlert = false
+    @State private var pendingSyncValue: Bool? = nil
+
+    // Debug state
+    #if DEBUG
+    @Environment(\.modelContext) private var modelContext
+    @State private var iCloudAccountStatus: String = "Checking..."
+    @State private var lastSyncAttempt: Date? = nil
+    @State private var syncStatusMessage: String = ""
+    #endif
+
+    var body: some View {
+        Form {
+            Section("Import") {
+                Toggle("Optimize images on import", isOn: $optimizeImagesOnImport)
+                Text("MultiScan will optimize images it stores to save storage.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Section("iCloud") {
+                Toggle("Sync projects with iCloud", isOn: $iCloudSyncEnabled)
+                    .onChange(of: iCloudSyncEnabled) { oldValue, newValue in
+                        // Don't process if alert is already showing (means we're reverting the toggle)
+                        guard oldValue != newValue, !showRestartAlert else { return }
+                        pendingSyncValue = newValue
+                        showRestartAlert = true
+                        // Revert the toggle until user confirms
+                        iCloudSyncEnabled = oldValue
+                    }
+
+                Text("Sync your MultiScan projects in iCloud to work with them across your devices. Larger projects may use significant iCloud storage.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            #if DEBUG
+            Section("Debug: CloudKit Status") {
+                LabeledContent("Setting Enabled") {
+                    Text(iCloudSyncEnabled ? "Yes" : "No")
+                        .foregroundColor(iCloudSyncEnabled ? .green : .secondary)
+                }
+
+                LabeledContent("Container Active") {
+                    // Check if container was created with CloudKit
+                    Text(SchemaVersioning.isICloudSyncEnabled ? "Yes" : "No (restart required)")
+                        .foregroundColor(SchemaVersioning.isICloudSyncEnabled ? .green : .orange)
+                }
+
+                LabeledContent("iCloud Account") {
+                    Text(iCloudAccountStatus)
+                        .foregroundColor(iCloudAccountStatus == "Available" ? .green : .orange)
+                }
+
+                LabeledContent("Container ID") {
+                    Text("iCloud.co.jservices.MultiScan")
+                        .font(.caption)
+                        .textSelection(.enabled)
+                }
+
+                LabeledContent("Device ID") {
+                    Text(SchemaMetadata.currentDeviceID.prefix(8) + "...")
+                        .font(.caption.monospaced())
+                        .textSelection(.enabled)
+                }
+
+                if let lastSync = lastSyncAttempt {
+                    LabeledContent("Last Sync Attempt") {
+                        Text(lastSync, style: .relative)
+                    }
+                }
+
+                if !syncStatusMessage.isEmpty {
+                    Text(syncStatusMessage)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                Button("Force Sync Now") {
+                    forceSyncNow()
+                }
+                .disabled(!SchemaVersioning.isICloudSyncEnabled)
+
+                Button("Test CloudKit Access") {
+                    Task { await testCloudKitAccess() }
+                }
+
+                Button("Refresh Status") {
+                    Task { await checkICloudStatus() }
+                }
+            }
+            .onAppear {
+                Task { await checkICloudStatus() }
+            }
+            #endif
+        }
+        .formStyle(.grouped)
+        .alert("Restart Required", isPresented: $showRestartAlert) {
+            Button("Cancel", role: .cancel) {
+                pendingSyncValue = nil
+            }
+            Button(pendingSyncValue == true ? "Enable & Close" : "Disable & Close") {
+                if let newValue = pendingSyncValue {
+                    // Save the new setting
+                    UserDefaults.standard.set(newValue, forKey: SchemaVersioning.iCloudSyncEnabledKey)
+                    // On iOS, we can't programmatically quit - just inform the user
+                }
+            }
+        } message: {
+            if pendingSyncValue == true {
+                Text("Your projects will begin syncing to and from iCloud after you close and reopen MultiScan.")
+            } else {
+                Text("Close and reopen MultiScan to disable iCloud sync. Your projects will remain on this device but will no longer sync with other devices.")
+            }
+        }
+    }
+
+    #if DEBUG
+    private func checkICloudStatus() async {
+        do {
+            let container = CKContainer(identifier: "iCloud.co.jservices.MultiScan")
+            let status = try await container.accountStatus()
+            await MainActor.run {
+                switch status {
+                case .available:
+                    iCloudAccountStatus = "Available"
+                case .noAccount:
+                    iCloudAccountStatus = "No Account"
+                case .restricted:
+                    iCloudAccountStatus = "Restricted"
+                case .couldNotDetermine:
+                    iCloudAccountStatus = "Could Not Determine"
+                case .temporarilyUnavailable:
+                    iCloudAccountStatus = "Temporarily Unavailable"
+                @unknown default:
+                    iCloudAccountStatus = "Unknown"
+                }
+            }
+        } catch {
+            await MainActor.run {
+                iCloudAccountStatus = "Error: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func forceSyncNow() {
+        lastSyncAttempt = Date()
+        syncStatusMessage = "Saving context to trigger sync..."
+
+        do {
+            try modelContext.save()
+            syncStatusMessage = "Context saved. CloudKit should sync automatically."
+        } catch {
+            syncStatusMessage = "Save failed: \(error.localizedDescription)"
+        }
+    }
+
+    /// Tests direct CloudKit access by saving a test record to the private database.
+    /// This bypasses SwiftData/Core Data to verify the container is accessible.
+    private func testCloudKitAccess() async {
+        syncStatusMessage = "Testing CloudKit access..."
+
+        let container = CKContainer(identifier: "iCloud.co.jservices.MultiScan")
+        let privateDB = container.privateCloudDatabase
+
+        // Create a simple test record
+        let testRecord = CKRecord(recordType: "TestRecord")
+        testRecord["testValue"] = "Test from MultiScan at \(Date())" as CKRecordValue
+
+        do {
+            let savedRecord = try await privateDB.save(testRecord)
+            await MainActor.run {
+                syncStatusMessage = "✅ CloudKit access OK! Saved record: \(savedRecord.recordID.recordName)"
+            }
+
+            // Clean up - delete the test record
+            try? await privateDB.deleteRecord(withID: savedRecord.recordID)
+
+        } catch let error as CKError {
+            await MainActor.run {
+                syncStatusMessage = "❌ CloudKit error: \(error.code.rawValue) - \(error.localizedDescription)"
+                print("☁️ CloudKit Test Error: \(error)")
+                if let partialErrors = error.userInfo[CKPartialErrorsByItemIDKey] as? [AnyHashable: Error] {
+                    for (key, partialError) in partialErrors {
+                        print("☁️   Partial error for \(key): \(partialError)")
+                    }
+                }
+            }
+        } catch {
+            await MainActor.run {
+                syncStatusMessage = "❌ Error: \(error.localizedDescription)"
+            }
+        }
+    }
+    #endif
 }
 #endif

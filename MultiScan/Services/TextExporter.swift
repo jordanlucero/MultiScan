@@ -50,7 +50,7 @@ struct TextExporter {
     /// storage files, dramatically improving performance for large documents.
     init(document: Document, settings: ExportSettings) {
         self.document = document
-        self.pages = document.pages
+        self.pages = document.unwrappedPages
         self.settings = settings
     }
 
@@ -78,7 +78,7 @@ struct TextExporter {
         // Try cache-based export first (preferred - single file load)
         if let document = document,
            let cache = TextExportCacheService.loadCache(from: document),
-           cache.pages.count == document.pages.count {
+           cache.pages.count == document.unwrappedPages.count {
             return await buildFromCacheAsync(cache: cache)
         }
 

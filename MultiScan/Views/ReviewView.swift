@@ -34,12 +34,12 @@ struct ReviewView: View {
 
     /// Sorted pages for rotor navigation
     private var sortedPages: [Page] {
-        document.pages.sorted(by: { $0.pageNumber < $1.pageNumber })
+        document.unwrappedPages.sorted(by: { $0.pageNumber < $1.pageNumber })
     }
 
     /// Unreviewed pages for rotor navigation
     private var unreviewedPages: [Page] {
-        document.pages.filter { !$0.isDone }.sorted(by: { $0.pageNumber < $1.pageNumber })
+        document.unwrappedPages.filter { !$0.isDone }.sorted(by: { $0.pageNumber < $1.pageNumber })
     }
 
     var body: some View {
@@ -351,7 +351,7 @@ struct ReviewView: View {
                 )
                 page.thumbnailData = result.thumbnailData
                 page.document = document
-                document.pages.append(page)
+                document.pages?.append(page)
                 newPages.append(page)
             }
 

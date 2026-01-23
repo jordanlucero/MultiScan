@@ -1,9 +1,4 @@
-//
-//  PlatformImage.swift
-//  MultiScan
-//
 //  Cross-platform image loading utilities
-//
 
 import SwiftUI
 import CoreGraphics

@@ -343,7 +343,7 @@ struct DocumentCard: View {
                 .foregroundColor(.secondary)
 
             // Completion status
-            Text("\(document.pages.filter { $0.isDone }.count) of \(document.totalPages) pages reviewed (\(document.completionPercentage)%)")
+            Text("\(document.unwrappedPages.filter { $0.isDone }.count) of \(document.totalPages) pages reviewed (\(document.completionPercentage)%)")
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
@@ -379,8 +379,7 @@ private struct DocumentCardPreviewHelper: View {
     let locale: String
 
     var body: some View {
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try! ModelContainer(for: Document.self, Page.self, configurations: config)
+        let container = previewContainer()
 
         let document = Document(name: documentName, totalPages: isProcessing ? 0 : 5)
         document.emoji = emoji
@@ -389,7 +388,7 @@ private struct DocumentCardPreviewHelper: View {
             (1...5).forEach { i in
                 let page = Page(pageNumber: i, text: "Sample text for page \(i)", imageData: nil)
                 page.isDone = i <= 2
-                document.pages.append(page)
+                document.pages?.append(page)
             }
         }
 

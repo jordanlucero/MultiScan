@@ -162,7 +162,7 @@ enum RecoveryState {
 
     var description: String {
         switch self {
-        case .incompatible(let version):
+        case .incompatible:
             return "Your projects were last modified by a newer version of MultiScan. Please update the app to access your projects."
         case .failed:
             return "MultiScan was unable to load your projects due to an unexpected error."

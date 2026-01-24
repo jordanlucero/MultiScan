@@ -356,12 +356,8 @@ struct ThumbnailView: View {
                     } else {
                         // Placeholder for pages without thumbnails
                         VStack {
-                            Image(systemName: "photo")
+                            Image("custom.document.badge.questionmark")
                                 .font(.largeTitle)
-                                .foregroundColor(.secondary)
-                            Text("Error generating preview")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
                         }
                     }
 

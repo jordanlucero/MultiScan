@@ -55,7 +55,6 @@ struct ExportPanelView: View {
             optionsPane
                 .frame(width: 280)
         }
-        .frame(minWidth: 700, minHeight: 500)
         .onAppear { schedulePreviewUpdate(immediate: true) }
         .onChange(of: settings.createVisualSeparation) { schedulePreviewUpdate() }
         .onChange(of: settings.separatorStyle) { schedulePreviewUpdate() }
@@ -79,7 +78,6 @@ struct ExportPanelView: View {
                 if isLoading {
                     ProgressView()
                         .scaleEffect(0.6)
-                        .frame(width: 16, height: 16)
                 }
                 Text(pageCount == 1 ? "1 page" : "\(pageCount) pages", comment: "Page count in export panel")
                     .font(.subheadline)

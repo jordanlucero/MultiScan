@@ -787,7 +787,6 @@ struct MultiScanApp: App {
 #if os(macOS)
 // MARK: - Native Settings Scene (Currently Broken)
 //
-//  ORIGINAL IMPLEMENTATION - Uncomment to test if Apple has fixed the bug
 // If this works correctly in a future SwiftUI implementation:
 // 1. Delete the custom Window scene above
 // 2. Delete OpenSettingsCommand struct

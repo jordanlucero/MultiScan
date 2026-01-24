@@ -28,8 +28,7 @@ struct SchemaRecoveryView: View {
             // Action buttons
             actionSection
         }
-        .padding(48)
-        .frame(maxWidth: 500)
+        .padding(24)
         .confirmationDialog(
             "Reset All Data?",
             isPresented: $showResetConfirmation,
@@ -55,7 +54,7 @@ struct SchemaRecoveryView: View {
 
             Text(state.title)
                 .font(.title)
-                .fontWeight(.semibold)
+                .fontWeight(.bold)
         }
     }
 
@@ -91,7 +90,6 @@ struct SchemaRecoveryView: View {
                 // For incompatible data, "Check for Updates" is primary
                 Link(destination: URL(string: "itms-apps://")!) {
                     Label("Open App Store", systemImage: "arrow.down.circle")
-                        .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
 
@@ -101,7 +99,6 @@ struct SchemaRecoveryView: View {
                     onRetry()
                 } label: {
                     Label("Try Again", systemImage: "arrow.clockwise")
-                        .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
             }
@@ -163,7 +160,7 @@ enum RecoveryState {
     var description: String {
         switch self {
         case .incompatible:
-            return "Your projects were last modified by a newer version of MultiScan. Please update the app to access your projects."
+            return "Your projects were last modified by a newer version of MultiScan. Please update the app on this device to access your projects."
         case .failed:
             return "MultiScan was unable to load your projects due to an unexpected error."
         }
@@ -190,7 +187,6 @@ struct ContainerLoadingView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -206,7 +202,7 @@ struct ContainerLoadingView: View {
 
 #Preview("Load Failed") {
     SchemaRecoveryView(
-        state: .failed(error: "NSCocoaErrorDomain Code=134110 \"The model configuration is invalid.\""),
+        state: .failed(error: "NSError Code=123456 \"Example error.\""),
         onRetry: {},
         onReset: {}
     )

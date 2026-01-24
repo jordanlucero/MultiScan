@@ -9,7 +9,6 @@ struct ProgressPopover: View {
             VStack(spacing: 8) {
                 ProgressView(value: navigationState.progress)
                     .progressViewStyle(.linear)
-                    .frame(height: 8)
                 
                 HStack {
                     Text("\(navigationState.donePageCount) of \(navigationState.totalPageCount) pages completed", comment: "Progress indicator showing completed pages")
@@ -25,7 +24,7 @@ struct ProgressPopover: View {
             }
         }
         .padding()
-        .frame(width: 280)
+        .frame(idealWidth: 280)
     }
 }
 

@@ -240,7 +240,6 @@ struct ReviewView: View {
             if isAddingPages {
                 ProgressView("Processing \(Int(ocrService.progress * 100))%")
                     .progressViewStyle(.linear)
-                    .frame(width: 200)
             } else {
                 PhotosPicker(
                     selection: $selectedPhotos,
@@ -263,7 +262,6 @@ struct ReviewView: View {
             .disabled(isAddingPages)
         }
         .padding(40)
-        .frame(minWidth: 300)
     }
 
     // MARK: - File Import Handling

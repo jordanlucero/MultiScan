@@ -546,16 +546,6 @@
         }
       }
     },
-    "Error generating preview" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Error al generar vista previa"
-          }
-        }
-      }
-    },
     "Exit text editor" : {
       "localizations" : {
         "es-419" : {

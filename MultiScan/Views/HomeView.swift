@@ -63,7 +63,6 @@ struct HomeView: View {
             }
             .padding()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onTapGesture {
             // Deselect when clicking empty space
             selectedDocumentID = nil

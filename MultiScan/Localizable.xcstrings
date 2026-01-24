@@ -376,6 +376,17 @@
       "comment" : "Debug only",
       "shouldTranslate" : false
     },
+    "Copy the Current Page's Text" : {
+      "comment" : "Copy Page Text button on “Page x of x” RichTextSidebar header",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copiar el texto de la página actual."
+          }
+        }
+      }
+    },
     "Dark Gray" : {
       "comment" : "Viewer background option: dark gray color",
       "localizations" : {
@@ -383,6 +394,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Gris oscuro"
+          }
+        }
+      }
+    },
+    "Data schema version: %lld, App supports: %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Data schema version: %1$lld, App supports: %2$lld"
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Versión del esquema de datos: %1$lld, la aplicación admite: %2$lld"
           }
         }
       }
@@ -592,17 +619,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Exportar texto del proyecto…"
-          }
-        }
-      }
-    },
-    "Export the Current Page's Text" : {
-      "comment" : "Export Page Text button on “Page x of x” RichTextSidebar header",
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Exportar el texto de la página actual"
           }
         }
       }
@@ -922,7 +938,7 @@
         }
       }
     },
-    "Loading..." : {
+    "Loading…" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -1009,6 +1025,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Configuración de MultiScan"
+          }
+        }
+      }
+    },
+    "MultiScan was unable to load your projects due to an unexpected error." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MultiScan no pudo cargar sus proyectos debido a un error inesperado."
           }
         }
       }
@@ -1817,19 +1843,19 @@
       "comment" : "Debug only",
       "shouldTranslate" : false
     },
-    "Text Editor, Page %lld of %lld. Export Page Text" : {
+    "Text Editor, Page %lld of %lld. Select to copy the page text." : {
       "comment" : "Accessibility label on RichTextSidebar header",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Text Editor, Page %1$lld of %2$lld. Export Page Text"
+            "value" : "Text Editor, Page %1$lld of %2$lld. Select to copy the page text."
           }
         },
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Editor de texto, página %1$lld de %2$lld. Exportar texto de la página"
+            "value" : "Editor de texto, página %1$lld de %2$lld. Seleccione para copiar el texto de la página."
           }
         }
       }
@@ -1904,6 +1930,16 @@
         }
       }
     },
+    "Unable to Load Data" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudieron cargar los datos"
+          }
+        }
+      }
+    },
     "Underline" : {
       "localizations" : {
         "es-419" : {
@@ -1930,6 +1966,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sin revisar"
+          }
+        }
+      }
+    },
+    "Update Required" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Actualización necesaria"
           }
         }
       }
@@ -2031,6 +2077,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sí"
+          }
+        }
+      }
+    },
+    "Your projects were last modified by a newer version of MultiScan. Please update the app on this device to access your projects." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sus proyectos fueron modificados por última vez por una versión más reciente de MultiScan. Actualice la aplicación en este dispositivo para acceder a sus proyectos."
           }
         }
       }

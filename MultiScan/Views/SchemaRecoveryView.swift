@@ -30,7 +30,7 @@ struct SchemaRecoveryView: View {
         }
         .padding(24)
         .confirmationDialog(
-            "Reset All Data?",
+            Text("Reset All Data?"),
             isPresented: $showResetConfirmation,
             titleVisibility: .visible
         ) {
@@ -89,7 +89,11 @@ struct SchemaRecoveryView: View {
             case .incompatible:
                 // For incompatible data, "Check for Updates" is primary
                 Link(destination: URL(string: "itms-apps://")!) {
-                    Label("Open App Store", systemImage: "arrow.down.circle")
+                    Label {
+                        Text("Open App Store")
+                    } icon: {
+                        Image(systemName: "arrow.down.circle")
+                    }
                 }
                 .buttonStyle(.borderedProminent)
 
@@ -98,7 +102,11 @@ struct SchemaRecoveryView: View {
                 Button {
                     onRetry()
                 } label: {
-                    Label("Try Again", systemImage: "arrow.clockwise")
+                    Label {
+                        Text("Try Again")
+                    } icon: {
+                        Image(systemName: "arrow.clockwise")
+                    }
                 }
                 .buttonStyle(.borderedProminent)
             }
@@ -108,11 +116,19 @@ struct SchemaRecoveryView: View {
                 Button(role: .destructive) {
                     showResetConfirmation = true
                 } label: {
-                    Label("Reset All Data", systemImage: "trash")
+                    Label {
+                        Text("Reset All Data")
+                    } icon: {
+                        Image(systemName: "trash")
+                    }
                 }
 
                 Link(destination: URL(string: "https://github.com/jordanlucero/MultiScan/issues")!) {
-                    Label("Report Issue", systemImage: "exclamationmark.bubble")
+                    Label {
+                        Text("Report Issue")
+                    } icon: {
+                        Image(systemName: "exclamationmark.bubble")
+                    }
                 }
             }
             .buttonStyle(.bordered)
@@ -148,7 +164,7 @@ enum RecoveryState {
         }
     }
 
-    var title: String {
+    var title: LocalizedStringResource {
         switch self {
         case .incompatible:
             return "Update Required"
@@ -157,7 +173,7 @@ enum RecoveryState {
         }
     }
 
-    var description: String {
+    var description: LocalizedStringResource {
         switch self {
         case .incompatible:
             return "Your projects were last modified by a newer version of MultiScan. Please update the app on this device to access your projects."
@@ -169,7 +185,7 @@ enum RecoveryState {
     var technicalDetail: String? {
         switch self {
         case .incompatible(let version):
-            return "Data schema version: \(version), App supports: \(SchemaVersioning.currentVersion)"
+            return String(localized: "Data schema version: \(version), App supports: \(SchemaVersioning.currentVersion)")
         case .failed(let error):
             return error
         }
@@ -183,7 +199,7 @@ struct ContainerLoadingView: View {
     var body: some View {
         VStack(spacing: 16) {
             ProgressView()
-            Text("Loading...")
+            Text("Loading…")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }

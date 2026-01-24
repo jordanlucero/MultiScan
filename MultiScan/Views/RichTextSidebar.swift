@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// View model for managing editable rich text with debounced auto-save
 @MainActor
@@ -175,15 +176,30 @@ struct RichTextSidebar: View {
             // Header with page info and formatting "toolbar"
             VStack(alignment: .leading, spacing: 6) {
                 if let page = currentPage {
-                    ShareLink(item: RichText(page.richText),
-                              preview: SharePreview("Page \(page.pageNumber) Text")) {
-                    // localized string not used here due to contextualization from view correctly returning localized string on its own
+                    Button {
+                        #if os(macOS)
+                        let pasteboard = NSPasteboard.general
+                        pasteboard.clearContents()
+                        // Copy both RTF (for rich text apps) and plain text (as fallback)
+                        if let rtfData = try? RichText(page.richText).toRTFDataOrThrow() {
+                            pasteboard.setData(rtfData, forType: .rtf)
+                        }
+                        pasteboard.setString(page.plainText, forType: .string)
+                        #else
+                        let pasteboard = UIPasteboard.general
+                        // Copy both RTF (for rich text apps) and plain text (as fallback)
+                        if let rtfData = try? RichText(page.richText).toRTFDataOrThrow() {
+                            pasteboard.setData(rtfData, forPasteboardType: UTType.rtf.identifier)
+                        }
+                        pasteboard.string = page.plainText
+                        #endif
+                    } label: {
                         HStack(spacing: 6) {
                             Text("Page \(page.pageNumber) of \(document.totalPages)")
                                 .font(.headline)
                                 .foregroundStyle(.secondary)
 
-                            Image(systemName: "square.and.arrow.up")
+                            Image(systemName: "doc.on.doc")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                                 .opacity(isShareButtonVisible ? 1 : 0)
@@ -197,9 +213,9 @@ struct RichTextSidebar: View {
                         isPageHeaderHovered = hovering
                     }
                     .accessibilityAddTraits(.isHeader)
-                    .accessibilityLabel("Text Editor, Page \(page.pageNumber) of \(document.totalPages). Export Page Text")
+                    .accessibilityLabel("Text Editor, Page \(page.pageNumber) of \(document.totalPages). Select to copy the page text.")
                     .accessibilityFocused($isHeaderFocused)
-                    .help("Export the Current Page's Text")
+                    .help("Copy the Current Page's Text")
                 }
 
                 // Formatting "toolbar"

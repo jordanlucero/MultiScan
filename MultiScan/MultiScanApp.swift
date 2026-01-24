@@ -753,23 +753,15 @@ struct MultiScanApp: App {
         //
         // ⚠️ WORKAROUND: Custom Window scene instead of native Settings scene
         //
-        // As of 26.3, SwiftUI's built-in `Settings` scene has a bug where
-        // NavigationSplitView renders incorrectly - the toolbar appears in a separate
-        // row below the window title, creating a double-header appearance. The SwiftUI
-        // Preview renders correctly, but the actual Settings window does not.
+        // Last tested in 26.3 Beta 2. SwiftUI's built-in `Settings` scene is broken with NavigationSplitView.
         //
-        // This workaround uses a custom `Window` scene that follows Apple's HIG for
-        // settings windows:
+        // This workaround uses a custom `Window` scene that follows Apple's HIG for settings windows.
         // - Opens with ⌘, keyboard shortcut (via OpenSettingsCommand)
         // - Non-resizable window (.windowResizability(.contentSize))
         // - Minimize and zoom buttons disabled (via NSWindow access in onAppear)
-        // - Remembers last viewed pane (@AppStorage)
         // - Window title updates to reflect current pane
-        // If fixed, delete this Window scene, OpenSettingsCommand, and the CommandGroup
-        // replacing .appSettings (around line 275).
-        //
-        // Last tested: 26.3 Beta 1
-        //
+        // If fixed, delete this Window scene, OpenSettingsCommand, and the CommandGroup replacing .appSettings
+
         Window("MultiScan Settings", id: "settings") {
             SettingsView(
                 optimizeImagesOnImport: $optimizeImagesOnImport,
@@ -804,10 +796,7 @@ struct MultiScanApp: App {
 // MARK: - Settings Command (Workaround)
 //
 // ⚠️ WORKAROUND: Required because we use a custom Window instead of Settings scene.
-// The native Settings scene automatically provides ⌘, shortcut; custom Windows do not.
 // This view is used in CommandGroup(replacing: .appSettings) to provide the shortcut.
-//
-// DELETE THIS when the native Settings scene works correctly.
 
 struct OpenSettingsCommand: View {
     @Environment(\.openWindow) private var openWindow
@@ -849,34 +838,24 @@ struct SettingsView: View {
     @Binding var viewerBackground: String
     var navigationSettings: NavigationSettings
 
-    // Persist last viewed pane
     @AppStorage("settingsSelectedPane") private var selectedPaneRawValue: String = SettingsPane.importAndStorage.rawValue
 
-    @State private var navigationHistory: [SettingsPane] = []
-    @State private var historyIndex: Int = 0
-    @State private var isNavigatingHistory = false
-
-    private var selectedPane: SettingsPane {
-        get { SettingsPane(rawValue: selectedPaneRawValue) ?? .importAndStorage }
-        set { selectedPaneRawValue = newValue.rawValue }
+    private var selectedPane: Binding<SettingsPane> {
+        Binding(
+            get: { SettingsPane(rawValue: selectedPaneRawValue) ?? .importAndStorage },
+            set: { selectedPaneRawValue = $0.rawValue }
+        )
     }
-
-    private var canGoBack: Bool { historyIndex > 0 }
-    private var canGoForward: Bool { historyIndex < navigationHistory.count - 1 }
 
     var body: some View {
         NavigationSplitView {
-            List(SettingsPane.allCases, selection: Binding(
-                get: { selectedPane },
-                set: { newValue in selectedPaneRawValue = newValue.rawValue }
-            )) { pane in
+            List(SettingsPane.allCases, selection: selectedPane) { pane in
                 Label(pane.displayName, systemImage: pane.icon)
                     .tag(pane)
             }
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 300)
-//            .toolbar(removing: .sidebarToggle) // works, but users might accidentally collapse the sidebar when resizing and have no easy way of showing it again
+            .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 220)
         } detail: {
-            switch selectedPane {
+            switch selectedPane.wrappedValue {
             case .importAndStorage:
                 ImportAndStorageSettingsView(optimizeImagesOnImport: $optimizeImagesOnImport)
             case .viewer:
@@ -886,33 +865,8 @@ struct SettingsView: View {
                 )
             }
         }
-        .navigationTitle(selectedPane.displayName)
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                HStack(spacing: 0) {
-                    Button {
-                        goBack()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                    }
-                    .disabled(!canGoBack)
-                    
-                    Button {
-                        goForward()
-                    } label: {
-                        Image(systemName: "chevron.right")
-                    }
-                    .disabled(!canGoForward)
-                }
-            }
-        }
+        .navigationTitle(selectedPane.wrappedValue.displayName)
         .onAppear {
-            // Initialize history with current pane
-            if navigationHistory.isEmpty {
-                navigationHistory = [selectedPane]
-                historyIndex = 0
-            }
-            
             // ⚠️ WORKAROUND: Disable minimize and zoom buttons per HIG for settings windows.
             // Native Settings scene handles this automatically. Delete this block when
             // switching back to native Settings scene.
@@ -921,36 +875,6 @@ struct SettingsView: View {
                 window.standardWindowButton(.zoomButton)?.isEnabled = false
             }
         }
-        .onChange(of: selectedPaneRawValue) { oldValue, newValue in
-            guard !isNavigatingHistory else { return }
-            guard let newPane = SettingsPane(rawValue: newValue) else { return }
-            
-            // Remove any forward history
-            if historyIndex < navigationHistory.count - 1 {
-                navigationHistory = Array(navigationHistory.prefix(historyIndex + 1))
-            }
-            // Add new pane to history
-            if navigationHistory.last != newPane {
-                navigationHistory.append(newPane)
-                historyIndex = navigationHistory.count - 1
-            }
-        }
-    }
-
-    private func goBack() {
-        guard canGoBack else { return }
-        isNavigatingHistory = true
-        historyIndex -= 1
-        selectedPaneRawValue = navigationHistory[historyIndex].rawValue
-        isNavigatingHistory = false
-    }
-
-    private func goForward() {
-        guard canGoForward else { return }
-        isNavigatingHistory = true
-        historyIndex += 1
-        selectedPaneRawValue = navigationHistory[historyIndex].rawValue
-        isNavigatingHistory = false
     }
 }
 

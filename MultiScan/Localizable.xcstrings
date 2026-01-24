@@ -667,32 +667,12 @@
         }
       }
     },
-    "Filter by text" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Filtrar por texto"
-          }
-        }
-      }
-    },
     "Filter pages" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Filtrar páginas"
-          }
-        }
-      }
-    },
-    "Filter text" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Filtrar texto"
           }
         }
       }
@@ -1634,6 +1614,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Busque por número de página, nombre de archivo o contenido"
+          }
+        }
+      }
+    },
+    "Search project" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buscar en el proyecto"
           }
         }
       }

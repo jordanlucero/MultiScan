@@ -180,9 +180,9 @@ struct ThumbnailSidebar: View {
                         : "All \(totalPageCount) pages")
                     .help(isFilterActive ? "Filtering: \(String(localized: filterOption.label))" : "Filter pages")
 
-                    TextField("Filter text", text: $searchText)
+                    TextField("Search project", text: $searchText)
                         .textFieldStyle(.plain)
-                        .accessibilityLabel("Filter by text")
+                        .accessibilityLabel("Search project")
                         .accessibilityHint("Search by page number, filename, or content")
 
                     if !searchText.isEmpty {

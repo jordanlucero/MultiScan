@@ -713,6 +713,12 @@ struct MultiScanApp: App {
                 .disabled(focusedNavigationState?.hasNext != true)
 
                 Divider()
+                
+                Button("Fit to Window") {
+                    NotificationCenter.default.post(name: .zoomActualSize, object: nil)
+                }
+                .keyboardShortcut("0", modifiers: [.command])
+                .disabled(focusedDocument == nil)
 
                 Button("Zoom In", systemImage: "plus.magnifyingglass") {
                     NotificationCenter.default.post(name: .zoomIn, object: nil)
@@ -725,18 +731,11 @@ struct MultiScanApp: App {
                 }
                 .keyboardShortcut("-", modifiers: [.command])
                 .disabled(focusedDocument == nil)
-
-                Button("Fit to Window") {
-                    NotificationCenter.default.post(name: .zoomActualSize, object: nil)
-                }
-                .keyboardShortcut("0", modifiers: [.command])
-                .disabled(focusedDocument == nil)
             }
 
             #if os(macOS)
             // App Menu Commands - Settings
             // ⚠️ WORKAROUND: Delete this CommandGroup when native Settings scene works.
-            // The native Settings scene auto-generates the "Settings…" menu item with ⌘,
             CommandGroup(replacing: .appSettings) {
                 OpenSettingsCommand()
             }

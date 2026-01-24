@@ -363,13 +363,18 @@
       }
     },
     "Close and reopen MultiScan to disable iCloud sync. Your projects will remain on this device but will no longer sync with other devices." : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cierre y vuelva a abrir MultiScan para desactivar la sincronización con iCloud. Sus proyectos permanecerán en este dispositivo, pero ya no se sincronizarán con otros."
+          }
+        }
+      }
     },
     "Container Active" : {
-
-    },
-    "Container ID" : {
-
+      "comment" : "Debug only",
+      "shouldTranslate" : false
     },
     "Dark Gray" : {
       "comment" : "Viewer background option: dark gray color",
@@ -383,7 +388,8 @@
       }
     },
     "Debug: CloudKit Status" : {
-
+      "comment" : "Debug only",
+      "shouldTranslate" : false
     },
     "Default" : {
       "comment" : "Viewer background option: system default",
@@ -417,7 +423,14 @@
       }
     },
     "Delete All Data" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eliminar todos los datos"
+          }
+        }
+      }
     },
     "Delete Page %lld?" : {
       "localizations" : {
@@ -450,13 +463,28 @@
       }
     },
     "Device ID" : {
-
+      "comment" : "Debug only",
+      "shouldTranslate" : false
     },
-    "Disable & Close" : {
-
+    "Disable" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desactivar"
+          }
+        }
+      }
     },
-    "Disable & Quit" : {
-
+    "Disable and Quit" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desactivar y salir"
+          }
+        }
+      }
     },
     "Done" : {
       "localizations" : {
@@ -478,11 +506,25 @@
         }
       }
     },
-    "Enable & Close" : {
-
+    "Enable" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activar"
+          }
+        }
+      }
     },
-    "Enable & Quit" : {
-
+    "Enable and Quit" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activar y salir"
+          }
+        }
+      }
     },
     "Enter emoji" : {
       "localizations" : {
@@ -686,7 +728,8 @@
       }
     },
     "Force Sync Now" : {
-
+      "comment" : "Debug only",
+      "shouldTranslate" : false
     },
     "Format" : {
       "localizations" : {
@@ -761,13 +804,16 @@
       }
     },
     "iCloud" : {
+      "comment" : "Debug only",
       "shouldTranslate" : false
     },
-    "iCloud Account" : {
-
+    "iCloud Services" : {
+      "comment" : "Debug only",
+      "shouldTranslate" : false
     },
     "iCloud.co.jservices.MultiScan" : {
-
+      "comment" : "Debug only",
+      "shouldTranslate" : false
     },
     "Image" : {
       "localizations" : {
@@ -872,7 +918,8 @@
       }
     },
     "Last Sync Attempt" : {
-
+      "comment" : "Debug only",
+      "shouldTranslate" : false
     },
     "Light Gray" : {
       "comment" : "Viewer background option: light gray color",
@@ -909,7 +956,7 @@
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
-            "state" : "needs_review",
+            "state" : "translated",
             "value" : "Cargando…"
           }
         }
@@ -1048,10 +1095,24 @@
       }
     },
     "No" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No"
+          }
+        }
+      }
     },
     "No (restart required)" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No (se requiere reiniciar)"
+          }
+        }
+      }
     },
     "No more matching pages ahead" : {
       "comment" : "AccessibilityNotification NavigationDirection",
@@ -1430,10 +1491,18 @@
       }
     },
     "Quit and reopen MultiScan to disable iCloud sync. Your projects will remain on this device but will no longer sync with other devices." : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salga y vuelva a abrir MultiScan para desactivar la sincronización con iCloud. Sus proyectos permanecerán en este dispositivo, pero ya no se sincronizarán con otros."
+          }
+        }
+      }
     },
     "Refresh Status" : {
-
+      "comment" : "Debug only",
+      "shouldTranslate" : false
     },
     "Remove Line Breaks" : {
       "localizations" : {
@@ -1466,16 +1535,44 @@
       }
     },
     "Report Issue" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Informar de un problema"
+          }
+        }
+      }
     },
     "Reset All Data" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restablecer todos los datos"
+          }
+        }
+      }
     },
     "Reset All Data?" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Restablecer todos los datos?"
+          }
+        }
+      }
     },
     "Restart Required" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reinicio necesario"
+          }
+        }
+      }
     },
     "Review Status" : {
       "localizations" : {
@@ -1592,7 +1689,8 @@
       }
     },
     "Setting Enabled" : {
-
+      "comment" : "Debug only",
+      "shouldTranslate" : false
     },
     "Settings" : {
       "localizations" : {
@@ -1716,16 +1814,28 @@
       }
     },
     "Sync projects with iCloud" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sincronizar proyectos con iCloud"
+          }
+        }
+      }
     },
     "Sync your MultiScan projects in iCloud to work with them across your devices. Image data in larger projects may use significant iCloud storage." : {
-
-    },
-    "Sync your MultiScan projects in iCloud to work with them across your devices. Larger projects may use significant iCloud storage." : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sincronice sus proyectos de MultiScan en iCloud para trabajar con ellos en todos sus dispositivos. Los datos de imagen de los proyectos grandes pueden usar un espacio considerable en iCloud."
+          }
+        }
+      }
     },
     "Test CloudKit Access" : {
-
+      "comment" : "Debug only",
+      "shouldTranslate" : false
     },
     "Text Editor, Page %lld of %lld. Export Page Text" : {
       "comment" : "Accessibility label on RichTextSidebar header",
@@ -1785,7 +1895,14 @@
       }
     },
     "This will permanently delete all your projects and pages. This cannot be undone." : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esto eliminará permanentemente todos sus proyectos y páginas. Esta acción no se puede deshacer."
+          }
+        }
+      }
     },
     "This will permanently delete the page from your project. This cannot be undone." : {
       "localizations" : {
@@ -1798,7 +1915,14 @@
       }
     },
     "Try Again" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Intentar de nuevo"
+          }
+        }
+      }
     },
     "Underline" : {
       "localizations" : {
@@ -1922,13 +2046,34 @@
       }
     },
     "Yes" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sí"
+          }
+        }
+      }
     },
     "Your projects will begin syncing to and from iCloud after you close and reopen MultiScan." : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sus proyectos comenzarán a sincronizarse con iCloud después de que cierre y vuelva a abrir MultiScan."
+          }
+        }
+      }
     },
     "Your projects will begin syncing to and from iCloud after you quit and reopen MultiScan." : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sus proyectos comenzarán a sincronizarse con iCloud después de que salga y vuelva a abrir MultiScan."
+          }
+        }
+      }
     },
     "Zoom %lld percent" : {
       "comment" : "Change zoom value, can describe a zoom in or out",

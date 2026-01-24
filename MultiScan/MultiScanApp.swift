@@ -1012,15 +1012,9 @@ struct ImportAndStorageSettingsView: View {
                         .foregroundColor(SchemaVersioning.isICloudSyncEnabled ? .green : .orange)
                 }
 
-                LabeledContent("iCloud Account") {
+                LabeledContent("iCloud Services") {
                     Text(iCloudAccountStatus)
                         .foregroundColor(iCloudAccountStatus == "Available" ? .green : .orange)
-                }
-
-                LabeledContent("Container ID") {
-                    Text("iCloud.co.jservices.MultiScan")
-                        .font(.caption)
-                        .textSelection(.enabled)
                 }
 
                 LabeledContent("Device ID") {
@@ -1046,6 +1040,10 @@ struct ImportAndStorageSettingsView: View {
                 }
                 .disabled(!SchemaVersioning.isICloudSyncEnabled)
 
+                Button("Test CloudKit Access") {
+                    Task { await testCloudKitAccess() }
+                }
+
                 Button("Refresh Status") {
                     Task { await checkICloudStatus() }
                 }
@@ -1060,12 +1058,10 @@ struct ImportAndStorageSettingsView: View {
             Button("Cancel", role: .cancel) {
                 pendingSyncValue = nil
             }
-            Button(pendingSyncValue == true ? "Enable & Quit" : "Disable & Quit") {
+            Button(pendingSyncValue == true ? "Enable and Quit" : "Disable and Quit") {
                 if let newValue = pendingSyncValue {
                     // Save the new setting
                     UserDefaults.standard.set(newValue, forKey: SchemaVersioning.iCloudSyncEnabledKey)
-                    // Quit the app so user can relaunch with new setting
-                    NSApplication.shared.terminate(nil)
                 }
             }
         } message: {
@@ -1132,25 +1128,25 @@ struct ImportAndStorageSettingsView: View {
         do {
             let savedRecord = try await privateDB.save(testRecord)
             await MainActor.run {
-                syncStatusMessage = "✅ CloudKit access OK! Saved record: \(savedRecord.recordID.recordName)"
+                syncStatusMessage = "CloudKit access OK! Saved record: \(savedRecord.recordID.recordName)"
             }
 
             // Clean up - delete the test record
-            try? await privateDB.deleteRecord(withID: savedRecord.recordID)
+            _ = try? await privateDB.deleteRecord(withID: savedRecord.recordID)
 
         } catch let error as CKError {
             await MainActor.run {
-                syncStatusMessage = "❌ CloudKit error: \(error.code.rawValue) - \(error.localizedDescription)"
-                print("☁️ CloudKit Test Error: \(error)")
+                syncStatusMessage = "CloudKit error: \(error.code.rawValue) - \(error.localizedDescription)"
+                print("CloudKit Test Error: \(error)")
                 if let partialErrors = error.userInfo[CKPartialErrorsByItemIDKey] as? [AnyHashable: Error] {
                     for (key, partialError) in partialErrors {
-                        print("☁️   Partial error for \(key): \(partialError)")
+                        print("Partial error for \(key): \(partialError)")
                     }
                 }
             }
         } catch {
             await MainActor.run {
-                syncStatusMessage = "❌ Error: \(error.localizedDescription)"
+                syncStatusMessage = "Error: \(error.localizedDescription)"
             }
         }
     }
@@ -1252,7 +1248,7 @@ struct ImportAndStorageSettingsView: View {
                         iCloudSyncEnabled = oldValue
                     }
 
-                Text("Sync your MultiScan projects in iCloud to work with them across your devices. Larger projects may use significant iCloud storage.")
+                Text("Sync your MultiScan projects in iCloud to work with them across your devices. Image data in larger projects may use significant iCloud storage.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -1270,15 +1266,9 @@ struct ImportAndStorageSettingsView: View {
                         .foregroundColor(SchemaVersioning.isICloudSyncEnabled ? .green : .orange)
                 }
 
-                LabeledContent("iCloud Account") {
+                LabeledContent("iCloud Services") {
                     Text(iCloudAccountStatus)
                         .foregroundColor(iCloudAccountStatus == "Available" ? .green : .orange)
-                }
-
-                LabeledContent("Container ID") {
-                    Text("iCloud.co.jservices.MultiScan")
-                        .font(.caption)
-                        .textSelection(.enabled)
                 }
 
                 LabeledContent("Device ID") {
@@ -1322,7 +1312,7 @@ struct ImportAndStorageSettingsView: View {
             Button("Cancel", role: .cancel) {
                 pendingSyncValue = nil
             }
-            Button(pendingSyncValue == true ? "Enable & Close" : "Disable & Close") {
+            Button(pendingSyncValue == true ? "Enable" : "Disable") {
                 if let newValue = pendingSyncValue {
                     // Save the new setting
                     UserDefaults.standard.set(newValue, forKey: SchemaVersioning.iCloudSyncEnabledKey)
@@ -1393,28 +1383,29 @@ struct ImportAndStorageSettingsView: View {
         do {
             let savedRecord = try await privateDB.save(testRecord)
             await MainActor.run {
-                syncStatusMessage = "✅ CloudKit access OK! Saved record: \(savedRecord.recordID.recordName)"
+                syncStatusMessage = "CloudKit access OK! Saved record: \(savedRecord.recordID.recordName)"
             }
 
             // Clean up - delete the test record
-            try? await privateDB.deleteRecord(withID: savedRecord.recordID)
+            _ = try? await privateDB.deleteRecord(withID: savedRecord.recordID)
 
         } catch let error as CKError {
             await MainActor.run {
-                syncStatusMessage = "❌ CloudKit error: \(error.code.rawValue) - \(error.localizedDescription)"
-                print("☁️ CloudKit Test Error: \(error)")
+                syncStatusMessage = "CloudKit error: \(error.code.rawValue) - \(error.localizedDescription)"
+                print("CloudKit Test Error: \(error)")
                 if let partialErrors = error.userInfo[CKPartialErrorsByItemIDKey] as? [AnyHashable: Error] {
                     for (key, partialError) in partialErrors {
-                        print("☁️   Partial error for \(key): \(partialError)")
+                        print("Partial error for \(key): \(partialError)")
                     }
                 }
             }
         } catch {
             await MainActor.run {
-                syncStatusMessage = "❌ Error: \(error.localizedDescription)"
+                syncStatusMessage = "Error: \(error.localizedDescription)"
             }
         }
     }
     #endif
 }
 #endif
+

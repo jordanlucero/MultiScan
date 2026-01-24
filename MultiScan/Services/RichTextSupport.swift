@@ -71,11 +71,6 @@ struct RichText: Transferable {
         return data
     }
 
-    /// Converts the AttributedString to RTF data, returning nil on failure (legacy method)
-    func toRTFData() -> Data? {
-        try? toRTFDataOrThrow()
-    }
-
     /// Converts SwiftUI AttributedString to NSAttributedString with proper font conversion using CoreText
     private func convertToNSAttributedString(_ source: AttributedString) -> NSAttributedString {
         let result = NSMutableAttributedString()

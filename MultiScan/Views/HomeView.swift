@@ -131,13 +131,16 @@ struct HomeView: View {
         .sheet(isPresented: $showingDebugSettings) {
             NavigationStack {
                 ImportAndStorageSettingsView(optimizeImagesOnImport: $optimizeImagesOnImport)
-                    .navigationTitle("Settings")
+                    .navigationTitle("Debug Settings")
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .confirmationAction) {
-                            Button("Done") {
+                            Button {
                                 showingDebugSettings = false
+                            } label: {
+                                Image(systemName: "checkmark")
                             }
+                            .buttonStyle(.glassProminent)
                         }
                     }
             }

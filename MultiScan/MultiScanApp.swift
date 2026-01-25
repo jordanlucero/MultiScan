@@ -582,7 +582,7 @@ struct MultiScanApp: App {
                 .keyboardShortcut(.upArrow, modifiers: [.command, .option])
                 .disabled(focusedNavigationState?.canMoveCurrentPageUp != true)
 
-                Button("Move Page Down", systemImage: "arrow.down") {
+                Button("Move Page Down") {
                     focusedNavigationState?.moveCurrentPageDown()
                 }
                 .keyboardShortcut(.downArrow, modifiers: [.command, .option])
@@ -634,7 +634,7 @@ struct MultiScanApp: App {
                 .keyboardShortcut("R", modifiers: [.command])
                 .disabled(focusedCurrentPage == nil)
 
-                Button("Rotate Counterclockwise", systemImage: "rotate.left") {
+                Button("Rotate Counterclockwise") {
                     if let page = focusedCurrentPage {
                         page.rotation = (page.rotation + 270) % 360
                     }
@@ -666,15 +666,15 @@ struct MultiScanApp: App {
                 Toggle("Show Thumbnails", systemImage: "sidebar.squares.leading", isOn: $showThumbnails)
                     .keyboardShortcut("S", modifiers: [.command])
 
-                Toggle("Show Text Panel", systemImage: "sidebar.trailing", isOn: $showTextPanel)
+                Toggle("Show Text Panel", isOn: $showTextPanel)
                     .keyboardShortcut("P", modifiers: [.command, .option])
 
-                Toggle("Show Statistics", systemImage: "chart.bar.xaxis", isOn: $showStatisticsPane)
+                Toggle("Show Statistics", isOn: $showStatisticsPane)
                     .keyboardShortcut("T", modifiers: [.command, .shift])
 
                 Divider()
 
-                Menu("Filter by Status", systemImage: "line.3.horizontal.decrease.circle") {
+                Menu("Filter By Status", systemImage: "line.3.horizontal.decrease.circle") {
                     Toggle("All Pages", isOn: Binding(
                         get: { filterOption == "all" },
                         set: { if $0 { filterOption = "all" } }
@@ -713,13 +713,13 @@ struct MultiScanApp: App {
 
                 Divider()
                 
-                Button("Fit to Window") {
+                Button("Fit to Window", systemImage: "magnifyingglass") {
                     NotificationCenter.default.post(name: .zoomActualSize, object: nil)
                 }
                 .keyboardShortcut("0", modifiers: [.command])
                 .disabled(focusedDocument == nil)
 
-                Button("Zoom In", systemImage: "plus.magnifyingglass") {
+                Button("Zoom In") {
                     NotificationCenter.default.post(name: .zoomIn, object: nil)
                 }
                 .keyboardShortcut("+", modifiers: [.command])

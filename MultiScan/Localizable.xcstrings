@@ -414,6 +414,10 @@
         }
       }
     },
+    "Debug Settings" : {
+      "comment" : "Debug only",
+      "shouldTranslate" : false
+    },
     "Debug: CloudKit Status" : {
       "comment" : "Debug only",
       "shouldTranslate" : false
@@ -663,7 +667,7 @@
         }
       }
     },
-    "Filter by Status" : {
+    "Filter By Status" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -1697,16 +1701,6 @@
     "Setting Enabled" : {
       "comment" : "Debug only",
       "shouldTranslate" : false
-    },
-    "Settings" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Configuración"
-          }
-        }
-      }
     },
     "Settings…" : {
       "localizations" : {

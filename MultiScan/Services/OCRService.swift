@@ -92,7 +92,7 @@ final class OCRService: ObservableObject, @unchecked Sendable {
     }
 
     private func generateThumbnail(from imageSource: CGImageSource) -> Data? {
-        let maxDimension: CGFloat = 200
+        let maxDimension: CGFloat = 400
         let options: [NSString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceThumbnailMaxPixelSize: maxDimension,

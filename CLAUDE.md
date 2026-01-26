@@ -709,4 +709,4 @@ The `processFileURLs()` method handles mixed imports:
 ### Image Compression Notes
 - **Imported images**: Use HEIC only if "Optimize images on import" is enabled
 - **PDF pages**: Always rendered to HEIC (since we're creating new images, not preserving originals)
-- **Thumbnails**: Always HEIC at 200px max dimension, 0.7 quality
+- **Thumbnails**: Always HEIC at 400px max dimension, 0.7 quality

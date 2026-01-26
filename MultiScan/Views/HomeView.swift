@@ -117,7 +117,7 @@ struct HomeView: View {
                 ExportPanelView(document: document)
             }
         }
-        // to fix inconsistent window corner radius
+        // to fix inconsistent window corner radius :(
         .toolbar {
             ToolbarItemGroup {
                 Button("Export Project Text…", systemImage: "square.and.arrow.up") {

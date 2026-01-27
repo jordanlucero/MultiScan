@@ -54,6 +54,10 @@ struct ImageViewer: View {
     @State private var isHovering: Bool = false
     @FocusState private var focusedButton: ZoomButton?
 
+    // Task management for cleanup on view dismissal
+    @State private var imageLoadingTask: Task<Void, Never>?
+    @State private var isViewActive: Bool = true
+
     enum ZoomButton {
         case fit, zoomIn, zoomOut
     }
@@ -128,7 +132,16 @@ struct ImageViewer: View {
             reloadImageForRotation()
         }
         .onAppear {
+            isViewActive = true
             loadImage(for: navigationState.currentPage)
+        }
+        .onDisappear {
+            // Cancel any pending image loading task and mark view as inactive
+            // This prevents crashes when the view hierarchy is torn down while
+            // an async task is still loading an image for a large document
+            isViewActive = false
+            imageLoadingTask?.cancel()
+            imageLoadingTask = nil
         }
         .onReceive(NotificationCenter.default.publisher(for: .zoomIn)) { _ in
             scale *= 1.25
@@ -202,6 +215,10 @@ struct ImageViewer: View {
     }
 
     private func loadImage(for page: Page?) {
+        // Cancel any existing loading task before starting a new one
+        imageLoadingTask?.cancel()
+        imageLoadingTask = nil
+
         guard let page = page,
               let imageData = page.imageData else {
             displayImage = nil
@@ -210,11 +227,21 @@ struct ImageViewer: View {
 
         let rotation = page.rotation
 
-        Task {
+        imageLoadingTask = Task { [weak navigationState] in
+            // Check if task was cancelled before doing work
+            guard !Task.isCancelled else { return }
+
             // Use cross-platform helper to create SwiftUI Image from Data with rotation
             if let image = PlatformImage.from(data: imageData, userRotation: rotation) {
                 let size = PlatformImage.dimensions(of: imageData, userRotation: rotation) ?? .zero
-                await MainActor.run {
+
+                // Check cancellation again before updating UI
+                guard !Task.isCancelled else { return }
+
+                await MainActor.run { [weak navigationState] in
+                    // Guard against updating state after view has disappeared
+                    // This prevents crashes when the window is deallocating
+                    guard self.isViewActive, navigationState != nil else { return }
                     self.displayImage = image
                     self.imageSize = size
                     self.scale = 1.0
@@ -222,7 +249,9 @@ struct ImageViewer: View {
                 }
             } else {
                 print("Failed to load image for page: \(page.pageNumber)")
+                guard !Task.isCancelled else { return }
                 await MainActor.run {
+                    guard self.isViewActive else { return }
                     self.displayImage = nil
                 }
             }

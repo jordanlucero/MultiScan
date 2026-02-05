@@ -294,7 +294,8 @@ struct DocumentCard: View {
         .onAppear {
             emojiInput = ""
             // Small delay to ensure popover is ready
-            DispatchQueue.main.asyncAfter(deadline: .now() + Self.focusDelay) {
+            Task {
+                try? await Task.sleep(for: .seconds(Self.focusDelay))
                 isEmojiFieldFocused = true
             }
         }
@@ -314,7 +315,8 @@ struct DocumentCard: View {
         editedName = document.name
         isEditingName = true
         // Delay to ensure TextField is mounted
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.focusDelay) {
+        Task {
+            try? await Task.sleep(for: .seconds(Self.focusDelay))
             isNameFieldFocused = true
         }
     }

@@ -227,7 +227,7 @@ struct ImageViewer: View {
 
         let rotation = page.rotation
 
-        imageLoadingTask = Task { [weak navigationState] in
+        imageLoadingTask = Task {
             // Check if task was cancelled before doing work
             guard !Task.isCancelled else { return }
 
@@ -238,10 +238,10 @@ struct ImageViewer: View {
                 // Check cancellation again before updating UI
                 guard !Task.isCancelled else { return }
 
-                await MainActor.run { [weak navigationState] in
+                await MainActor.run {
                     // Guard against updating state after view has disappeared
                     // This prevents crashes when the window is deallocating
-                    guard self.isViewActive, navigationState != nil else { return }
+                    guard self.isViewActive else { return }
                     self.displayImage = image
                     self.imageSize = size
                     self.scale = 1.0

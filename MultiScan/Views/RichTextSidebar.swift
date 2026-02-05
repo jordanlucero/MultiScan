@@ -333,7 +333,8 @@ struct RichTextSidebar: View {
         .onAppear {
             initializeEditableText()
             // Set VoiceOver focus to the header when view appears
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            Task {
+                try? await Task.sleep(for: .milliseconds(500))
                 isHeaderFocused = true
             }
         }

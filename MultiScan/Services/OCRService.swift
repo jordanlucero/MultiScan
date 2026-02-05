@@ -18,7 +18,11 @@ struct ProcessedImage {
     let originalFileName: String
 }
 
-final class OCRService: ObservableObject, @unchecked Sendable {
+/// OCR service for processing images and extracting text.
+/// MainActor-isolated because it manages @Published UI state (progress, status) observed by SwiftUI.
+/// The actual Vision OCR work runs off MainActor via withCheckedThrowingContinuation.
+@MainActor
+final class OCRService: ObservableObject {
     @Published var isProcessing = false
     @Published var progress: Double = 0
     @Published var currentFile: String = ""
@@ -30,16 +34,13 @@ final class OCRService: ObservableObject, @unchecked Sendable {
     ///   - startingPageNumber: The page number to start from (default 1 for new documents)
     /// - Returns: Array of ProcessedImage results
     func processImages(_ images: [(data: Data, fileName: String)], startingPageNumber: Int = 1) async throws -> [ProcessedImage] {
-        await MainActor.run {
-            isProcessing = true
-            progress = 0
-            currentFile = ""
-        }
+        isProcessing = true
+        progress = 0
+        currentFile = ""
+
         defer {
-            Task { @MainActor in
-                self.isProcessing = false
-                self.currentFile = ""
-            }
+            isProcessing = false
+            currentFile = ""
         }
 
         var results: [ProcessedImage] = []
@@ -48,23 +49,17 @@ final class OCRService: ObservableObject, @unchecked Sendable {
         for (index, image) in images.enumerated() {
             try Task.checkCancellation()
 
-            await MainActor.run {
-                self.currentFile = image.fileName
-                self.progress = Double(index) / Double(imageCount)
-            }
+            currentFile = image.fileName
+            progress = Double(index) / Double(imageCount)
 
             let processed = try await processImageData(image.data, fileName: image.fileName, pageNumber: startingPageNumber + index)
             results.append(processed)
 
-            await MainActor.run {
-                self.progress = Double(index + 1) / Double(imageCount)
-            }
+            progress = Double(index + 1) / Double(imageCount)
         }
 
-        await MainActor.run {
-            self.progress = 1.0
-            self.currentFile = ""
-        }
+        progress = 1.0
+        currentFile = ""
 
         return results
     }

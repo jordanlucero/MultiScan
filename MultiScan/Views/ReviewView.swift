@@ -65,7 +65,8 @@ struct ReviewView: View {
                 columnVisibility = showThumbnails ? .all : .detailOnly
 
                 // Announce document opening for VoiceOver users
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                Task {
+                    try? await Task.sleep(for: .milliseconds(300))
                     AccessibilityNotification.Announcement("\(document.name) opened. \(document.totalPages) pages.").post()
                 }
             }

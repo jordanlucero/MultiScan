@@ -2,6 +2,7 @@
 
 import SwiftUI
 import CoreGraphics
+import CoreImage
 import ImageIO
 
 /// Cross-platform image loading from Data to SwiftUI Image
@@ -122,5 +123,78 @@ enum PlatformImage {
             return nil
         }
         return CGImageSourceCreateImageAtIndex(source, 0, nil)
+    }
+
+    // MARK: - Processed CGImage for Platform Views
+
+    /// Shared CIContext for image processing (thread-safe, reusable)
+    private static let ciContext = CIContext()
+
+    /// Create a processed CGImage with rotation and optional adjustments baked in.
+    /// Unlike `from(data:userRotation:)` which returns a SwiftUI Image with orientation metadata,
+    /// this produces a correctly-oriented CGImage suitable for UIImageView / NSImageView.
+    /// - Parameters:
+    ///   - data: Image data in any system-supported format
+    ///   - userRotation: User-applied rotation in degrees (0, 90, 180, 270)
+    ///   - increaseContrast: Whether to apply contrast boost (matches SwiftUI .contrast(1.3))
+    ///   - increaseBlackPoint: Whether to apply brightness reduction (matches SwiftUI .brightness(-0.1))
+    /// - Returns: A correctly-oriented, optionally adjusted CGImage, or nil if decoding fails
+    static func processedCGImage(
+        from data: Data,
+        userRotation: Int = 0,
+        increaseContrast: Bool = false,
+        increaseBlackPoint: Bool = false
+    ) -> CGImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let rawCGImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+            return nil
+        }
+
+        // Get combined orientation (EXIF + user rotation)
+        let exif = exifOrientation(from: source)
+        let finalOrientation = combinedOrientation(exif: exif, userRotation: userRotation)
+
+        // Fast path: no rotation needed and no adjustments
+        if finalOrientation == .up && !increaseContrast && !increaseBlackPoint {
+            return rawCGImage
+        }
+
+        // Build CIImage pipeline: orientation → optional adjustments → render
+        var ciImage = CIImage(cgImage: rawCGImage)
+
+        if finalOrientation != .up {
+            ciImage = ciImage.oriented(cgImagePropertyOrientation(from: finalOrientation))
+        }
+
+        if increaseContrast || increaseBlackPoint {
+            if let filter = CIFilter(name: "CIColorControls") {
+                filter.setValue(ciImage, forKey: kCIInputImageKey)
+                if increaseContrast {
+                    filter.setValue(1.3, forKey: kCIInputContrastKey)
+                }
+                if increaseBlackPoint {
+                    filter.setValue(-0.1, forKey: kCIInputBrightnessKey)
+                }
+                if let output = filter.outputImage {
+                    ciImage = output
+                }
+            }
+        }
+
+        return ciContext.createCGImage(ciImage, from: ciImage.extent)
+    }
+
+    /// Convert SwiftUI Image.Orientation to CGImagePropertyOrientation
+    private static func cgImagePropertyOrientation(from orientation: Image.Orientation) -> CGImagePropertyOrientation {
+        switch orientation {
+        case .up: .up
+        case .upMirrored: .upMirrored
+        case .down: .down
+        case .downMirrored: .downMirrored
+        case .left: .left
+        case .leftMirrored: .leftMirrored
+        case .right: .right
+        case .rightMirrored: .rightMirrored
+        }
     }
 }

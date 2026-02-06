@@ -46,11 +46,12 @@ struct ImageViewer: View {
         ViewerBackground(rawValue: viewerBackgroundRaw) ?? .default
     }
 
-    // Use SwiftUI Image for cross-platform compatibility
-    @State private var displayImage: Image?
-    @State private var imageSize: CGSize = .zero
-    @State private var scale: CGFloat = 1.0
-    @State private var lastScale: CGFloat = 1.0
+    // Processed image ready for display (rotated + adjusted)
+    @State private var processedImage: CGImage?
+    // Identity of the current page — changes trigger zoom reset in ZoomableImageView
+    @State private var imageIdentity: String = ""
+    // Zoom scale reported back from platform scroll view (1.0 = fit-to-window)
+    @State private var currentScale: CGFloat = 1.0
     @State private var isHovering: Bool = false
     @FocusState private var focusedButton: ZoomButton?
 
@@ -63,118 +64,92 @@ struct ImageViewer: View {
     }
 
     var body: some View {
-        GeometryReader { geometry in
-            ZStack {
-                // Use user-selected selected background color, or let system decide for default
-                if let backgroundColor = viewerBackground.color {
-                    backgroundColor
-                        .backgroundExtensionEffect()
-                }
+        ZStack {
+            // Background color
+            if let backgroundColor = viewerBackground.color {
+                backgroundColor
+                    .backgroundExtensionEffect()
+            }
 
-                if let image = displayImage {
-                    ScrollView([.horizontal, .vertical]) {
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .contrast(navigationState.currentPage?.increaseContrast == true ? 1.3 : 1.0)
-                            .brightness(navigationState.currentPage?.increaseBlackPoint == true ? -0.1 : 0.0)
-                            .frame(
-                                width: fittedImageSize(in: geometry.size).width * scale,
-                                height: fittedImageSize(in: geometry.size).height * scale
-                            )
-                            .frame(
-                                minWidth: geometry.size.width,
-                                minHeight: geometry.size.height
-                            )
-                    }
-                    .scrollContentBackground(.hidden)
-                    .scrollBounceBehavior(.basedOnSize)
-                    .scrollIndicators(.automatic)
-                    .gesture(
-                        MagnificationGesture()
-                            .onChanged { value in
-                                let newScale = lastScale * value
-                                scale = min(max(newScale, 0.1), 10.0) // Clamp between 0.1x and 10x
-                            }
-                            .onEnded { _ in
-                                lastScale = scale
-                            }
+            if let cgImage = processedImage {
+                GeometryReader { geometry in
+                    ZoomableImageView(
+                        cgImage: cgImage,
+                        imageIdentity: imageIdentity,
+                        currentScale: $currentScale,
+                        safeAreaInsets: geometry.safeAreaInsets
                     )
-                    .accessibilityLabel("Page image")
-                    .accessibilityValue("Zoom \(Int(scale * 100)) percent")
-                    .accessibilityAction(named: "Zoom In") {
-                        scale *= 1.25
-                        lastScale = scale
-                    }
-                    .accessibilityAction(named: "Zoom Out") {
-                        scale *= 0.8
-                        lastScale = scale
-                    }
-                    .accessibilityAction(named: "Fit to Window") {
-                        scale = 1.0
-                        lastScale = 1.0
-                    }
-                } else {
-                    ProgressView("Loading image…")
+                    .ignoresSafeArea()
                 }
+                .accessibilityLabel("Page image")
+                .accessibilityValue("Zoom \(Int(currentScale * 100)) percent")
+                .accessibilityAction(named: "Zoom In") {
+                    NotificationCenter.default.post(name: .zoomIn, object: nil)
+                }
+                .accessibilityAction(named: "Zoom Out") {
+                    NotificationCenter.default.post(name: .zoomOut, object: nil)
+                }
+                .accessibilityAction(named: "Fit to Window") {
+                    NotificationCenter.default.post(name: .zoomActualSize, object: nil)
+                }
+            } else {
+                ProgressView("Loading image…")
             }
-            .overlay(alignment: .topTrailing) {
-                zoomControls
-            }
-            .onHover { hovering in
-                isHovering = hovering
-            }
+        }
+        .overlay(alignment: .topTrailing) {
+            zoomControls
+                .padding()
+        }
+        .onHover { hovering in
+            isHovering = hovering
         }
         .onChange(of: navigationState.currentPage) { _, newPage in
-            loadImage(for: newPage)
+            processImage(for: newPage, isNewPage: true)
         }
         .onChange(of: navigationState.currentPage?.rotation) { _, _ in
-            reloadImageForRotation()
+            processImage(for: navigationState.currentPage, isNewPage: true)
+        }
+        .onChange(of: navigationState.currentPage?.increaseContrast) { _, _ in
+            processImage(for: navigationState.currentPage, isNewPage: false)
+        }
+        .onChange(of: navigationState.currentPage?.increaseBlackPoint) { _, _ in
+            processImage(for: navigationState.currentPage, isNewPage: false)
         }
         .onAppear {
             isViewActive = true
-            loadImage(for: navigationState.currentPage)
+            processImage(for: navigationState.currentPage, isNewPage: true)
         }
         .onDisappear {
-            // Cancel any pending image loading task and mark view as inactive
-            // This prevents crashes when the view hierarchy is torn down while
-            // an async task is still loading an image for a large document
             isViewActive = false
             imageLoadingTask?.cancel()
             imageLoadingTask = nil
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .zoomIn)) { _ in
-            scale *= 1.25
-            lastScale = scale
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .zoomOut)) { _ in
-            scale *= 0.8
-            lastScale = scale
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .zoomActualSize)) { _ in
-            scale = 1.0
-            lastScale = 1.0
         }
     }
 
     @ViewBuilder
     private var zoomControls: some View {
         HStack {
-            Button(action: { scale = 1.0; lastScale = 1.0 }) {
+            Button(action: {
+                NotificationCenter.default.post(name: .zoomActualSize, object: nil)
+            }) {
                 Image(systemName: "arrow.up.left.and.arrow.down.right")
             }
             .accessibilityLabel("Fit to Window")
             .help("Fit to Window")
             .focused($focusedButton, equals: .fit)
 
-            Button(action: { scale *= 1.25; lastScale = scale }) {
+            Button(action: {
+                NotificationCenter.default.post(name: .zoomIn, object: nil)
+            }) {
                 Image(systemName: "plus.magnifyingglass")
             }
             .accessibilityLabel("Zoom In")
             .help("Zoom In")
             .focused($focusedButton, equals: .zoomIn)
 
-            Button(action: { scale *= 0.8; lastScale = scale }) {
+            Button(action: {
+                NotificationCenter.default.post(name: .zoomOut, object: nil)
+            }) {
                 Image(systemName: "minus.magnifyingglass")
             }
             .accessibilityLabel("Zoom Out")
@@ -192,74 +167,42 @@ struct ImageViewer: View {
         isHovering || focusedButton != nil
     }
 
-    /// Calculate the size the image would be when fit into the container while preserving aspect ratio
-    private func fittedImageSize(in containerSize: CGSize) -> CGSize {
-        guard imageSize.width > 0, imageSize.height > 0 else {
-            return containerSize
-        }
+    // MARK: - Image Processing
 
-        let imageAspect = imageSize.width / imageSize.height
-        let containerAspect = containerSize.width / containerSize.height
-
-        if imageAspect > containerAspect {
-            // Image is wider than container - fit to width
-            let width = containerSize.width
-            let height = width / imageAspect
-            return CGSize(width: width, height: height)
-        } else {
-            // Image is taller than container - fit to height
-            let height = containerSize.height
-            let width = height * imageAspect
-            return CGSize(width: width, height: height)
-        }
-    }
-
-    private func loadImage(for page: Page?) {
-        // Cancel any existing loading task before starting a new one
+    private func processImage(for page: Page?, isNewPage: Bool) {
         imageLoadingTask?.cancel()
         imageLoadingTask = nil
 
         guard let page = page,
               let imageData = page.imageData else {
-            displayImage = nil
+            processedImage = nil
             return
         }
 
         let rotation = page.rotation
+        let contrast = page.increaseContrast
+        let blackPoint = page.increaseBlackPoint
+        let identity = "\(page.pageNumber)-\(rotation)"
 
         imageLoadingTask = Task {
-            // Check if task was cancelled before doing work
             guard !Task.isCancelled else { return }
 
-            // Use cross-platform helper to create SwiftUI Image from Data with rotation
-            if let image = PlatformImage.from(data: imageData, userRotation: rotation) {
-                let size = PlatformImage.dimensions(of: imageData, userRotation: rotation) ?? .zero
+            let cgImage = PlatformImage.processedCGImage(
+                from: imageData,
+                userRotation: rotation,
+                increaseContrast: contrast,
+                increaseBlackPoint: blackPoint
+            )
 
-                // Check cancellation again before updating UI
-                guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else { return }
 
-                await MainActor.run {
-                    // Guard against updating state after view has disappeared
-                    // This prevents crashes when the window is deallocating
-                    guard self.isViewActive else { return }
-                    self.displayImage = image
-                    self.imageSize = size
-                    self.scale = 1.0
-                    self.lastScale = 1.0
+            await MainActor.run {
+                guard self.isViewActive else { return }
+                if isNewPage {
+                    self.imageIdentity = identity
                 }
-            } else {
-                print("Failed to load image for page: \(page.pageNumber)")
-                guard !Task.isCancelled else { return }
-                await MainActor.run {
-                    guard self.isViewActive else { return }
-                    self.displayImage = nil
-                }
+                self.processedImage = cgImage
             }
         }
-    }
-
-    /// Reload image when rotation changes
-    private func reloadImageForRotation() {
-        loadImage(for: navigationState.currentPage)
     }
 }

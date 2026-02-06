@@ -1,11 +1,11 @@
 # MultiScan
 MultiScan provides a dedicated frontend to VisionKit that makes it easy to digitize your multi-page physical documents into text. MultiScan is built to let you review VisionKit output on a page-by-page basis, search content within pages, and feed documents into the system Accessibility Reader (⌘⎋). 
 
-Built with fully-native Swift, SwiftUI, SwiftData, and VisionKit frameworks. Swift 6. Requires macOS Tahoe.
+Built with fully-native Swift, SwiftUI (with targeted usage of AppKit and UIKit), SwiftData, and VisionKit frameworks. Swift 6. Requires macOS Tahoe.
 
 ![MultiScan running on an iMac with macOS Tahoe.](https://github.com/user-attachments/assets/92505022-c688-4126-98cc-3533444fda16)
 
-Built with Claude Code running Claude Sonnet (4, 4.5) and Claude Opus (4, 4.1, 4.5). MultiScan is appropriately sandboxed and uses proper iCloud services for CloudKit syncing.
+Built with Claude Code running Claude Sonnet (4, 4.5) and Claude Opus (4, 4.1, 4.5, 4.6). MultiScan is appropriately sandboxed.
 
 # Key Limitations
 

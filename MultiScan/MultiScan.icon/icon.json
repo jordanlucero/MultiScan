@@ -28,30 +28,6 @@
     {
       "layers" : [
         {
-          "hidden" : true,
-          "image-name" : "Untitled8 ready.png",
-          "name" : "Untitled8 ready",
-          "position" : {
-            "scale" : 0.6,
-            "translation-in-points" : [
-              -3.469864164367843,
-              -9.048293530455043
-            ]
-          }
-        },
-        {
-          "hidden" : true,
-          "image-name" : "MultiScan book test.png",
-          "name" : "MultiScan book test",
-          "position" : {
-            "scale" : 0.75,
-            "translation-in-points" : [
-              -44.42091930693668,
-              -24.330727457747578
-            ]
-          }
-        },
-        {
           "blend-mode" : "plus-lighter",
           "fill-specializations" : [
             {
@@ -61,7 +37,7 @@
               }
             }
           ],
-          "glass" : true,
+          "glass" : false,
           "hidden" : false,
           "image-name" : "Untitled4356789.png",
           "name" : "Untitled4356789",
@@ -77,23 +53,72 @@
           "position" : {
             "scale" : 0.5,
             "translation-in-points" : [
-              -123.02862255776041,
-              -11.205727457747578
+              -127.00180275312051,
+              4.973799150320701e-14
             ]
           }
         },
         {
           "blend-mode" : "normal",
-          "glass" : true,
+          "fill" : "automatic",
+          "glass-specializations" : [
+            {
+              "value" : false
+            },
+            {
+              "appearance" : "tinted",
+              "value" : true
+            }
+          ],
           "hidden" : false,
-          "image-name" : "Note Jun 17, 2025.png",
-          "name" : "Note Jun 17, 2025",
-          "opacity" : 0.3,
+          "image-name" : "customshapes2.png",
+          "name" : "customshapes2",
+          "opacity-specializations" : [
+            {
+              "value" : 0.15
+            },
+            {
+              "appearance" : "tinted",
+              "value" : 0.75
+            }
+          ],
           "position" : {
             "scale" : 0.7,
             "translation-in-points" : [
-              -298.7614393103837,
-              -6.1775703927148236
+              -298.8,
+              -6.2
+            ]
+          }
+        },
+        {
+          "blend-mode" : "normal",
+          "fill" : "automatic",
+          "glass-specializations" : [
+            {
+              "value" : true
+            },
+            {
+              "appearance" : "tinted",
+              "value" : true
+            }
+          ],
+          "hidden" : true,
+          "image-name" : "Note Jun 17, 2025.png",
+          "name" : "Note Jun 17, 2025",
+          "opacity-specializations" : [
+            {
+              "value" : 0.3
+            },
+            {
+              "appearance" : "tinted",
+              "value" : 0.75
+            }
+          ],
+          "position" : {
+            "scale" : 0.7,
+            "translation-in-points" : [
+              -298.8,
+              -6.2
             ]
           }
         }

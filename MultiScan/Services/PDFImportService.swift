@@ -103,7 +103,7 @@ final class PDFImportService: @unchecked Sendable {
                     inFlight -= 1
                 }
 
-                group.addTask {
+                group.addTask(priority: .utility) {
                     try Task.checkCancellation()
 
                     guard let pdfPage = sendableDoc.document.page(at: pageIndex) else {
@@ -143,21 +143,29 @@ final class PDFImportService: @unchecked Sendable {
         return sortedResults.map { (data: $0.1, fileName: $0.2) }
     }
 
+    /// Shared CIContext for rotating rendered pages (thread-safe, reusable)
+    private static let ciContext = CIContext()
+
     /// Render a single PDF page to a CGImage
     /// - Parameters:
     ///   - page: PDF page to render
     ///   - dpi: Target resolution in dots per inch
     /// - Returns: Rendered CGImage, or nil if rendering failed
     private func renderPage(_ page: PDFPage, dpi: CGFloat) -> CGImage? {
-        let pageRect = page.bounds(for: .mediaBox)
+        guard let cgPDFPage = page.pageRef else { return nil }
+
+        let pageRotation = page.rotation // 0, 90, 180, or 270
+        // Get the raw (unrotated) cropBox directly from Core Graphics.
+        // Unlike PDFKit's bounds(for:) which bakes in the page rotation,
+        // this gives us the actual stored dimensions. Falls back to mediaBox
+        // if no cropBox is defined.
+        let rawBox = cgPDFPage.getBoxRect(.cropBox)
         let scale = dpi / 72.0 // PDF points are 72 per inch
 
-        let width = Int(pageRect.width * scale)
-        let height = Int(pageRect.height * scale)
+        let width = Int(rawBox.width * scale)
+        let height = Int(rawBox.height * scale)
 
-        guard width > 0, height > 0 else {
-            return nil
-        }
+        guard width > 0, height > 0 else { return nil }
 
         guard let context = CGContext(
             data: nil,
@@ -178,10 +186,31 @@ final class PDFImportService: @unchecked Sendable {
         // Scale context to match DPI
         context.scaleBy(x: scale, y: scale)
 
-        // Draw PDF page
-        page.draw(with: .mediaBox, to: context)
+        // Render into the raw (unrotated) dimensions. We counter-rotate the
+        // page's intrinsic rotation so getDrawingTransform maps content 1:1
+        // into our context without any fitting/letterboxing artifacts.
+        // The actual rotation is applied afterwards via CIImage.oriented().
+        let counterRotation = Int32((360 - pageRotation) % 360)
+        let drawRect = CGRect(origin: .zero, size: rawBox.size)
+        let transform = cgPDFPage.getDrawingTransform(
+            .cropBox, rect: drawRect, rotate: counterRotation, preserveAspectRatio: true
+        )
+        context.concatenate(transform)
+        context.drawPDFPage(cgPDFPage)
 
-        return context.makeImage()
+        guard let cgImage = context.makeImage() else { return nil }
+
+        // Apply page rotation to the rendered image
+        guard pageRotation != 0 else { return cgImage }
+
+        let orientation: CGImagePropertyOrientation = switch pageRotation {
+        case 90: .right
+        case 180: .down
+        case 270: .left
+        default: .up
+        }
+        let rotated = CIImage(cgImage: cgImage).oriented(orientation)
+        return Self.ciContext.createCGImage(rotated, from: rotated.extent)
     }
 
     /// Convert CGImage to HEIC data with good compression

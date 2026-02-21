@@ -39,7 +39,7 @@
       }
     },
     "%lld of %lld pages completed" : {
-      "comment" : "Progress indicator showing completed pages",
+      "comment" : "Progress indicator showing amount of reviewed pages that are considered 'completed'",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1013,12 +1013,12 @@
         }
       }
     },
-    "MultiScan Known Issues" : {
+    "MultiScan Documentation" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "MultiScan problemas conocidos"
+            "value" : "Documentación de MultiScan"
           }
         }
       }

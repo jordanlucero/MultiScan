@@ -477,6 +477,9 @@ struct MultiScanApp: App {
                     )
                 }
             }
+            #if os(macOS)
+            .windowToolbarFullScreenVisibility(.onHover)
+            #endif
             .task {
                 // ────────────────────────────────────────────────────────────────────
                 // MARK: Post-Load Validation & Self-Healing
@@ -742,7 +745,7 @@ struct MultiScanApp: App {
             
             // Help Menu Commands
             CommandGroup(replacing: .help) {
-                Link("MultiScan Known Issues", destination: URL(string: "https://github.com/jordanlucero/MultiScan/releases")!) // tips icon used by system apps missing from SF symbols. removed SF symbols from both links and temporarily just pointing to GitHub releases for Known Issues
+                Link("MultiScan Documentation", destination: URL(string: "https://multiscan.jservices.co/help")!) // tips icon used by system apps missing from SF symbols. removed SF symbols from both links and temporarily just pointing to GitHub releases for Documentation
                 Link("Open MultiScan Repository on GitHub", destination: URL(string: "https://github.com/jordanlucero/MultiScan")!)
             }
         }

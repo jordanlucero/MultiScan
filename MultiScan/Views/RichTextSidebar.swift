@@ -5,16 +5,16 @@ import UniformTypeIdentifiers
 @MainActor
 @Observable
 final class EditablePageText: Identifiable {
-    private let page: Page
+    @ObservationIgnored private let page: Page
 
     /// Debounce interval for auto-save
     private static let saveDebounceInterval: UInt64 = 1_000_000_000 // 1 second in nanoseconds
 
     /// Current debounce task - weak self in Task handles cleanup on dealloc
-    private var saveTask: Task<Void, Never>?
+    @ObservationIgnored private var saveTask: Task<Void, Never>?
 
     /// Tracks whether there are unsaved changes
-    private var hasUnsavedChanges = false
+    @ObservationIgnored private var hasUnsavedChanges = false
 
     /// The text being edited
     var text: AttributedString {
@@ -159,6 +159,9 @@ struct RichTextSidebar: View {
     /// Tracks hover state for the page header share button
     @State private var isPageHeaderHovered = false
 
+    /// Shows a checkmark confirmation after copying page text
+    @State private var showCopyConfirmation = false
+
     /// Tracks keyboard focus on the share button
     @FocusState private var isShareButtonFocused: Bool
 
@@ -193,16 +196,25 @@ struct RichTextSidebar: View {
                         }
                         pasteboard.string = page.plainText
                         #endif
+                        #if os(iOS)
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
+                        #endif
+                        showCopyConfirmation = true
+                        Task {
+                            try? await Task.sleep(for: .seconds(3))
+                            showCopyConfirmation = false
+                        }
                     } label: {
                         HStack(spacing: 6) {
                             Text("Page \(page.pageNumber) of \(document.totalPages)")
                                 .font(.headline)
                                 .foregroundStyle(.secondary)
 
-                            Image(systemName: "doc.on.doc")
+                            Image(systemName: showCopyConfirmation ? "checkmark" : "doc.on.doc")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
-                                .opacity(isShareButtonVisible ? 1 : 0)
+                                .contentTransition(.symbolEffect(.replace))
+                                .opacity(showCopyConfirmation || isShareButtonVisible ? 1 : 0)
                                 .animation(.easeInOut(duration: 0.15), value: isShareButtonVisible)
                         }
                     }

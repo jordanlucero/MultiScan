@@ -288,7 +288,7 @@ struct IOSZoomableImageView: UIViewRepresentable {
         context.coordinator.imageView = imageView
         context.coordinator.registerObservers()
 
-        // Double-tap to toggle zoom (Apple Photos behavior)
+        // Double-tap to toggle zoom
         let doubleTap = UITapGestureRecognizer(
             target: context.coordinator,
             action: #selector(Coordinator.handleDoubleTap(_:))

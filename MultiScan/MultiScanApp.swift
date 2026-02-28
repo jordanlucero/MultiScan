@@ -230,6 +230,7 @@ final class NavigationSettings {
 @main
 struct MultiScanApp: App {
     @AppStorage("showStatisticsPane") private var showStatisticsPane = true
+    @AppStorage("showSmartCleanup") private var showSmartCleanup = false
     @AppStorage("showThumbnails") private var showThumbnails = true
     @AppStorage("showTextPanel") private var showTextPanel = true
     @AppStorage("filterOption") private var filterOption = "all"
@@ -674,6 +675,9 @@ struct MultiScanApp: App {
 
                 Toggle("Show Statistics", isOn: $showStatisticsPane)
                     .keyboardShortcut("T", modifiers: [.command, .shift])
+
+                Toggle("Show Smart Cleanup", isOn: $showSmartCleanup)
+                    .keyboardShortcut("K", modifiers: [.command, .shift])
 
                 Divider()
 

@@ -57,7 +57,7 @@ final class EditablePageText: Identifiable {
         guard hasUnsavedChanges else { return }
         hasUnsavedChanges = false
 
-        // Strip any foreground color before saving (we apply it dynamically for display)
+        // Strip any foreground color before saving (applied dynamically for display)
         var cleanText = text
         for run in cleanText.runs {
             let range = run.range
@@ -145,10 +145,20 @@ struct RichTextSidebar: View {
     let document: Document
     @ObservedObject var navigationState: NavigationState
     @AppStorage("showStatisticsPane") private var showStatisticsPane = true
+    @AppStorage("showSmartCleanup") private var showSmartCleanup = false
     @Environment(\.modelContext) private var modelContext
 
     /// Editable text for the current page - always initialized when page exists
     @State private var editableText: EditablePageText?
+
+    /// Smart Cleanup analysis results for the current page
+    @State private var cleanupOptions: [TextManipulationService.CleanupOption] = []
+
+    /// Whether Smart Cleanup analysis is in progress (including 3-second linger delay)
+    @State private var isAnalyzingCleanup = false
+
+    /// Debounce task for Smart Cleanup analysis (3-second linger requirement)
+    @State private var cleanupAnalysisTask: Task<Void, Never>?
 
     /// Controls visibility of the find navigator
     @State private var isFindNavigatorPresented = false
@@ -339,6 +349,46 @@ struct RichTextSidebar: View {
                 }
                 .padding()
             }
+
+            // Smart Cleanup pane
+            if showSmartCleanup, currentPage != nil {
+                Divider()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Smart Cleanup")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+
+                    Menu {
+                        if !isAnalyzingCleanup {
+                            ForEach(cleanupOptions) { option in
+                                Button(option.label) {
+                                    executeCleanupOption(option)
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            if isAnalyzingCleanup {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("Checking\u{2026}")
+                                    .font(.caption)
+                            } else if cleanupOptions.isEmpty {
+                                Text("No suggestions")
+                                    .font(.caption)
+                            } else {
+                                Text("\(cleanupOptions.count) \(cleanupOptions.count == 1 ? "suggestion" : "suggestions")")
+                                    .font(.caption)
+                            }
+                        }
+                    }
+                    .disabled(isAnalyzingCleanup || cleanupOptions.isEmpty)
+                    .menuStyle(.borderlessButton)
+                    .accessibilityLabel("Smart Cleanup suggestions")
+                }
+                .padding()
+            }
         }
         .focusedValue(\.editableText, editableText)
         .focusedValue(\.showFindNavigator, $isFindNavigatorPresented)
@@ -372,6 +422,12 @@ struct RichTextSidebar: View {
             } else {
                 editableText = nil
             }
+
+            // Re-schedule Smart Cleanup analysis for the new page
+            scheduleCleanupAnalysis()
+        }
+        .onChange(of: showSmartCleanup) { _, _ in
+            scheduleCleanupAnalysis()
         }
     }
 
@@ -380,6 +436,205 @@ struct RichTextSidebar: View {
     private func initializeEditableText() {
         guard let page = currentPage else { return }
         editableText = EditablePageText(page: page)
+    }
+
+    // MARK: - Smart Cleanup
+
+    /// Schedules Smart Cleanup analysis after a 3-second linger on the current page.
+    /// Cancels any pending analysis when the user navigates away quickly.
+    private func scheduleCleanupAnalysis() {
+        cleanupAnalysisTask?.cancel()
+        cleanupOptions = []
+
+        guard showSmartCleanup, currentPage != nil else {
+            isAnalyzingCleanup = false
+            return
+        }
+
+        isAnalyzingCleanup = true
+
+        cleanupAnalysisTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .seconds(3))
+            } catch {
+                return // Cancelled (user navigated away)
+            }
+
+            runCleanupAnalysis()
+        }
+    }
+
+    /// Runs Smart Cleanup analysis immediately (no delay). Used after cleanup actions.
+    private func runCleanupAnalysisImmediately() {
+        cleanupAnalysisTask?.cancel()
+        cleanupOptions = []
+        isAnalyzingCleanup = true
+
+        cleanupAnalysisTask = Task { @MainActor in
+            // Save any pending edits so the cache reflects latest text
+            editableText?.saveNow()
+            runCleanupAnalysis()
+        }
+    }
+
+    /// Performs the actual analysis using the text export cache.
+    private func runCleanupAnalysis() {
+        guard let cache = TextExportCacheService.loadCache(from: document),
+              let pageNumber = currentPage?.pageNumber else {
+            isAnalyzingCleanup = false
+            return
+        }
+
+        let result = TextManipulationService.analyzeForSmartCleanup(cache: cache)
+        cleanupOptions = TextManipulationService.buildOptions(
+            from: result,
+            forPageNumber: pageNumber
+        )
+        isAnalyzingCleanup = false
+    }
+
+    /// Executes a cleanup option, modifying page text and re-analyzing.
+    private func executeCleanupOption(_ option: TextManipulationService.CleanupOption) {
+        switch option {
+        case .removePageNumber(let detection):
+            removeSingleLine(normalizedLine: detection.normalizedLine, fromPageNumber: detection.pageNumber, stripNumbers: false)
+
+        case .removeSectionHeaderFromPage(let header, let pageNumber):
+            removeSingleLine(normalizedLine: header.headerText, fromPageNumber: pageNumber, stripNumbers: true)
+
+        case .removeSectionHeaderFromRange(let header):
+            executeBatchRemoval(
+                pageNumbers: header.affectedPages,
+                normalizedLine: header.headerText,
+                stripNumbers: true
+            )
+
+        case .removeAllPageNumbers(let detections):
+            executeBatchRemovalMultiLine(detections: detections)
+
+        case .removeAllSectionHeaders(let headers):
+            for header in headers {
+                executeBatchRemoval(
+                    pageNumbers: header.affectedPages,
+                    normalizedLine: header.headerText,
+                    stripNumbers: true
+                )
+            }
+        }
+
+        // Re-analyze immediately so removed options disappear
+        runCleanupAnalysisImmediately()
+    }
+
+    /// Removes a single line from a single page's text.
+    /// - Parameter stripNumbers: When true, strips trailing/leading numbers before matching (for section headers in mixed lines)
+    private func removeSingleLine(normalizedLine: String, fromPageNumber pageNumber: Int, stripNumbers: Bool) {
+        if pageNumber == currentPage?.pageNumber, let editableText = editableText {
+            // Current page: modify the in-memory editable text
+            let cleaned = TextManipulationService.removeLine(
+                matching: normalizedLine,
+                from: editableText.text,
+                stripNumbers: stripNumbers
+            )
+            editableText.text = cleaned
+            editableText.saveNow()
+        } else {
+            // Other page: use cache richText to avoid external storage load
+            guard let cache = TextExportCacheService.loadCache(from: document),
+                  let entry = cache.pages.first(where: { $0.pageNumber == pageNumber }) else { return }
+
+            let cleaned = TextManipulationService.removeLine(
+                matching: normalizedLine,
+                from: entry.richText,
+                stripNumbers: stripNumbers
+            )
+
+            if let page = document.unwrappedPages.first(where: { $0.pageNumber == pageNumber }) {
+                page.richText = cleaned
+                TextExportCacheService.updateEntry(
+                    pageNumber: pageNumber,
+                    richText: cleaned,
+                    in: document
+                )
+            }
+        }
+    }
+
+    /// Batch removes a single normalized line from multiple pages efficiently.
+    /// Loads the cache once, modifies all entries, and saves once.
+    /// - Parameter stripNumbers: When true, strips trailing/leading numbers before matching (for section headers in mixed lines)
+    private func executeBatchRemoval(pageNumbers: [Int], normalizedLine: String, stripNumbers: Bool) {
+        editableText?.saveNow()
+
+        guard var cache = TextExportCacheService.loadCache(from: document) else { return }
+
+        for pageNumber in pageNumbers {
+            guard let entryIndex = cache.pages.firstIndex(where: { $0.pageNumber == pageNumber }) else { continue }
+
+            let cleaned = TextManipulationService.removeLine(
+                matching: normalizedLine,
+                from: cache.pages[entryIndex].richText,
+                stripNumbers: stripNumbers
+            )
+
+            // Update page model
+            if let page = document.unwrappedPages.first(where: { $0.pageNumber == pageNumber }) {
+                page.richText = cleaned
+            }
+
+            // Update cache entry in memory
+            cache.pages[entryIndex] = PageCacheEntry(
+                pageNumber: pageNumber,
+                fileName: cache.pages[entryIndex].fileName,
+                richText: cleaned
+            )
+        }
+
+        // Save cache once
+        TextExportCacheService.saveCache(cache, to: document)
+
+        // Refresh editor if current page was modified
+        if let currentPageNum = currentPage?.pageNumber,
+           pageNumbers.contains(currentPageNum),
+           let page = currentPage {
+            editableText = EditablePageText(page: page)
+        }
+    }
+
+    /// Batch removes page numbers (each page may have a different line to remove).
+    private func executeBatchRemovalMultiLine(detections: [TextManipulationService.PageNumberDetection]) {
+        editableText?.saveNow()
+
+        guard var cache = TextExportCacheService.loadCache(from: document) else { return }
+
+        for detection in detections {
+            guard let entryIndex = cache.pages.firstIndex(where: { $0.pageNumber == detection.pageNumber }) else { continue }
+
+            let cleaned = TextManipulationService.removeLine(
+                matching: detection.normalizedLine,
+                from: cache.pages[entryIndex].richText
+            )
+
+            if let page = document.unwrappedPages.first(where: { $0.pageNumber == detection.pageNumber }) {
+                page.richText = cleaned
+            }
+
+            cache.pages[entryIndex] = PageCacheEntry(
+                pageNumber: detection.pageNumber,
+                fileName: cache.pages[entryIndex].fileName,
+                richText: cleaned
+            )
+        }
+
+        TextExportCacheService.saveCache(cache, to: document)
+
+        // Refresh editor if current page was modified
+        let modifiedPageNumbers = Set(detections.map { $0.pageNumber })
+        if let currentPageNum = currentPage?.pageNumber,
+           modifiedPageNumbers.contains(currentPageNum),
+           let page = currentPage {
+            editableText = EditablePageText(page: page)
+        }
     }
 }
 

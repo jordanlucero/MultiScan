@@ -28,6 +28,17 @@
         }
       }
     },
+    "%lld %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld %2$@"
+          }
+        }
+      },
+      "shouldTranslate" : false
+    },
     "%lld characters" : {
       "localizations" : {
         "es-419" : {
@@ -331,6 +342,9 @@
           }
         }
       }
+    },
+    "Checking…" : {
+
     },
     "Clear" : {
       "localizations" : {
@@ -1146,6 +1160,9 @@
         }
       }
     },
+    "No suggestions" : {
+
+    },
     "Not reviewed" : {
       "comment" : "Accessibility value for unreviewed page",
       "localizations" : {
@@ -1504,6 +1521,25 @@
       "comment" : "Debug only",
       "shouldTranslate" : false
     },
+    "Remove \"%@\" from pages %lld–%lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Remove \"%1$@\" from pages %2$lld–%3$lld"
+          }
+        }
+      }
+    },
+    "Remove \"%@\" from this page" : {
+
+    },
+    "Remove detected page numbers from the entire document" : {
+
+    },
+    "Remove detected section headers from the entire document" : {
+
+    },
     "Remove Line Breaks" : {
       "localizations" : {
         "es-419" : {
@@ -1513,6 +1549,9 @@
           }
         }
       }
+    },
+    "Remove page number (%lld) from this page" : {
+
     },
     "Rename…" : {
       "localizations" : {
@@ -1712,6 +1751,9 @@
         }
       }
     },
+    "Show Smart Cleanup" : {
+
+    },
     "Show Statistics" : {
       "localizations" : {
         "es-419" : {
@@ -1762,6 +1804,12 @@
           }
         }
       }
+    },
+    "Smart Cleanup" : {
+
+    },
+    "Smart Cleanup suggestions" : {
+
     },
     "Statistics" : {
       "localizations" : {

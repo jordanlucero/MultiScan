@@ -710,3 +710,83 @@ The `processFileURLs()` method handles mixed imports:
 - **Imported images**: Use HEIC only if "Optimize images on import" is enabled
 - **PDF pages**: Always rendered to HEIC (since we're creating new images, not preserving originals)
 - **Thumbnails**: Always HEIC at 400px max dimension, 0.7 quality
+
+## Smart Cleanup
+
+Detects repeated OCR artifacts (physical page numbers and section/chapter headers) across document pages and offers one-click removal.
+
+### How It Works
+
+Smart Cleanup analyzes all pages via the `TextExportCache` (single file read, no N disk loads) to detect:
+
+1. **Page numbers**: Numerals at the first or last non-empty line of each page. Matches standalone numbers (`42`), `Page X`, `p. X`, and `- X -` patterns. Also detects page numbers embedded in mixed lines (e.g., `"Chapter 1    42"`) via `decomposeHeaderLine()`.
+2. **Section headers**: Text in the first 2-3 non-empty lines that repeats across 3+ contiguous pages. Each contiguous run defines a "section" with a page range. Strips trailing/leading page numbers before comparing, so `"Chapter 1  42"` and `"Chapter 1  43"` both match as `"chapter 1"`. Allows alternating left/right page headers (gap of 1 page) — e.g., "Chapter 1" on even pages and "Middletown Lights Up" on odd pages.
+
+All matching uses **normalized comparison** (case-insensitive, whitespace-collapsed, OCR-variant dashes/quotes normalized).
+
+### Key Files
+- `Services/TextManipulationService.swift`: Analysis algorithms, data types, line removal logic
+- `Views/RichTextSidebar.swift`: Smart Cleanup pane UI, state management, cleanup execution
+
+### Data Types (in `TextManipulationService`)
+- **`PageNumberDetection`**: Detected page number with page, detected numeral, line text, position (first/last line)
+- **`SectionHeaderDetection`**: Detected header with normalized text, display text, page range, and `affectedPages` (actual pages with the header — may be a subset of the range for alternating headers)
+- **`LineComponents`**: Result of `decomposeHeaderLine()` — splits a line into core text and optional trailing/leading page number
+- **`SmartCleanupResult`**: All detections from a document analysis
+- **`CleanupOption`**: Actionable cleanup options (per-page, per-range, or document-wide removal)
+
+### Analysis Pipeline
+```
+TextExportCache → analyzeForSmartCleanup() → SmartCleanupResult
+SmartCleanupResult + currentPageNumber → buildOptions() → [CleanupOption]
+```
+
+### UI Location
+Bottom of `RichTextSidebar` inspector, below the Statistics pane. Toggled via:
+- `@AppStorage("showSmartCleanup")` (default: OFF)
+- View menu: "Show Smart Cleanup" (⌘⇧K)
+
+### UI States
+| State | Menu Appearance |
+|-------|-----------------|
+| Analyzing (3s linger + analysis) | `ProgressView` + "Checking..." (disabled) |
+| No suggestions | "No suggestions" (disabled) |
+| Suggestions available | "\(count) suggestions" with chevron (enabled dropdown) |
+
+### Cleanup Options (per current page)
+1. "Remove page number (42) from this page" — single page
+2. "Remove "Chapter 1" from this page" — single page
+3. "Remove "Chapter 1" from pages 50–65" — range
+4. "Remove detected page numbers from the entire document" — all pages
+5. "Remove detected section headers from the entire document" — all pages
+
+### Timing
+- Analysis runs after user lingers on a page for **3 seconds** (debounces rapid page flips)
+- Only runs when the Smart Cleanup pane is visible
+- After a cleanup action, re-analyzes immediately (no 3s delay)
+
+### Removal Behavior
+- Executes immediately (no confirmation dialog)
+- Removes the **entire line** containing the detected text (including newline)
+- Uses `AttributedString.removeSubrange()` to preserve formatting on surrounding text
+- **Single-page**: Modifies `editableText.text` directly (triggers auto-save)
+- **Batch (range/document-wide)**: Loads cache once, modifies all entries in memory, writes each page's `richText`, saves cache once (avoids O(N^2) decode/encode)
+- After batch modification of current page, re-initializes `EditablePageText` to refresh the editor
+
+### Line Removal (`TextManipulationService.removeLine`)
+1. Splits `AttributedString` into lines via plain text
+2. Finds first line whose normalized content matches the target
+3. Calculates character offsets (including newline) and maps to `AttributedString.Index`
+4. Calls `removeSubrange` — preserves all formatting attributes on remaining text
+
+Supports `stripNumbers: Bool` parameter (default `false`). When `true`, strips trailing/leading page numbers from each line before comparing — used for section header removal so `"chapter 1"` matches a line containing `"Chapter 1  42"`.
+
+### Mixed Header+Number Lines (`decomposeHeaderLine`)
+Handles lines like `"Chapter 1    42"` that combine a section header with a page number:
+- Splits normalized text by spaces, checks if first/last token is purely numeric
+- Returns `LineComponents(coreText:, pageNumber:, fullNormalized:)`
+- Only strips edge numbers — `"chapter 1 of 3 42"` → core: `"chapter 1 of 3"`, number: `42`
+- Used by both page number detection (to find embedded numbers) and section header detection (to group lines ignoring varying page numbers)
+
+### Alternating Left/Right Page Headers
+Books commonly alternate headers: left pages show the chapter number, right pages show the chapter title. Detection uses a gap tolerance of 2 (allows one skipped page) when finding contiguous runs, so headers appearing on every other page still form detectable sections. `SectionHeaderDetection.affectedPages` stores only the pages that actually have the header (not every page in the range), preventing false modifications during batch removal.

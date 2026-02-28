@@ -344,7 +344,8 @@ enum TextExportCacheService {
     // MARK: - Private Helpers
 
     /// Encodes and saves the cache to the document.
-    private static func saveCache(_ cache: TextExportCache, to document: Document) {
+    /// Internal access for batch operations (e.g., Smart Cleanup) that modify multiple entries.
+    static func saveCache(_ cache: TextExportCache, to document: Document) {
         do {
             let data = try JSONEncoder().encode(cache)
             document.textExportCache = data

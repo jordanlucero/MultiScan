@@ -156,9 +156,7 @@ final class PDFImportService: @unchecked Sendable {
 
         let pageRotation = page.rotation // 0, 90, 180, or 270
         // Get the raw (unrotated) cropBox directly from Core Graphics.
-        // Unlike PDFKit's bounds(for:) which bakes in the page rotation,
-        // this gives us the actual stored dimensions. Falls back to mediaBox
-        // if no cropBox is defined.
+        // Provides  actual stored dimensions. Falls back to mediaBox if no cropBox is defined.
         let rawBox = cgPDFPage.getBoxRect(.cropBox)
         let scale = dpi / 72.0 // PDF points are 72 per inch
 

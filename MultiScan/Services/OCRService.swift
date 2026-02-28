@@ -7,6 +7,7 @@ import CoreGraphics
 import ImageIO
 import UniformTypeIdentifiers
 import SwiftUI
+import os
 
 /// Result type for processed images
 struct ProcessedImage {
@@ -118,7 +119,14 @@ final class OCRService: ObservableObject {
 
     private nonisolated func recognizeText(from cgImage: CGImage) async throws -> (text: String, boundingBoxes: [CGRect]) {
         return try await withCheckedThrowingContinuation { continuation in
+            // Track whether continuation has been resumed to prevent double-resume crashes.
+            // Vision can both throw from perform() AND call the completion handler with an error
+            // for the same failure (e.g., CoreML neural network errors), which would crash.
+            let resumed = OSAllocatedUnfairLock(initialState: false)
+
             let request = VNRecognizeTextRequest { request, error in
+                guard resumed.withLock({ guard !$0 else { return false }; $0 = true; return true }) else { return }
+
                 if let error = error {
                     continuation.resume(throwing: error)
                     return
@@ -146,6 +154,7 @@ final class OCRService: ObservableObject {
             do {
                 try handler.perform([request])
             } catch {
+                guard resumed.withLock({ guard !$0 else { return false }; $0 = true; return true }) else { return }
                 continuation.resume(throwing: error)
             }
         }

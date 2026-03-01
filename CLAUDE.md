@@ -717,22 +717,24 @@ Detects repeated OCR artifacts (physical page numbers and section/chapter header
 
 ### How It Works
 
-Smart Cleanup analyzes all pages via the `TextExportCache` (single file read, no N disk loads) to detect:
+Smart Cleanup analyzes all pages via the `TextExportCache` (single file read, no N disk loads) to detect three types of artifacts:
 
-1. **Page numbers**: Numerals at the first or last non-empty line of each page. Matches standalone numbers (`42`), `Page X`, `p. X`, and `- X -` patterns. Also detects page numbers embedded in mixed lines (e.g., `"Chapter 1    42"`) via `decomposeHeaderLine()`.
-2. **Section headers**: Text in the first 2-3 non-empty lines that repeats across 3+ contiguous pages. Each contiguous run defines a "section" with a page range. Strips trailing/leading page numbers before comparing, so `"Chapter 1  42"` and `"Chapter 1  43"` both match as `"chapter 1"`. Allows alternating left/right page headers (gap of 1 page) — e.g., "Chapter 1" on even pages and "Middletown Lights Up" on odd pages.
+1. **Page numbers (first/last line)**: Numerals at the first or last non-empty line of each page. Matches standalone numbers (`42`), `Page X`, `p. X`, `- X -` patterns, and comma-formatted numbers (`1,234`). Also detects page numbers embedded in mixed lines (e.g., `"Chapter 1    42"`) via `decomposeHeaderLine()`. Numbers must be ≤ 5 characters (digits + commas). No adjacent-page verification required.
+2. **Section headers**: Any non-empty line (anywhere in the page text) that repeats across 2+ near-contiguous pages. Lines must be at least 3 characters after normalization to avoid false positives on short OCR artifacts. Strips trailing/leading page numbers before comparing. Allows gaps of up to 5 pages between occurrences. Uses **OCR-aware fuzzy matching**: applies `ocrNormalize()` (maps `1`→`l`, `0`→`o`) then merges groups within Levenshtein edit distance ≤ 2 (≤ 1 for strings < 5 chars). Displays the most common text variant in the UI, so OCR errors like "Rile in the Rain" merge with "Rite in the Rain" and the correct spelling is shown. Removal also uses fuzzy matching so the correct line is found regardless of per-page OCR variation. Full-text scanning enables detection of headers from two-page book spreads scanned as a single image, where headers appear in the middle of the OCR text.
+3. **Consecutive numbers (anywhere in text)**: Numbers found anywhere in the interior text (not first/last line) that form consecutive integer series across adjacent project pages. Requires cross-page adjacency verification: each number must have at least one adjacent project page (±1) with a number from the same consecutive run.
 
-All matching uses **normalized comparison** (case-insensitive, whitespace-collapsed, OCR-variant dashes/quotes normalized).
+All matching uses **normalized comparison** (case-insensitive, whitespace-collapsed, OCR-variant dashes/quotes normalized). Number parsing uses `parseNumericToken()` which handles digits and thousands-separator commas with a 5-character limit.
 
 ### Key Files
-- `Services/TextManipulationService.swift`: Analysis algorithms, data types, line removal logic
+- `Services/TextManipulationService.swift`: Analysis algorithms, data types, removal logic
 - `Views/RichTextSidebar.swift`: Smart Cleanup pane UI, state management, cleanup execution
 
 ### Data Types (in `TextManipulationService`)
-- **`PageNumberDetection`**: Detected page number with page, detected numeral, line text, position (first/last line)
+- **`PageNumberDetection`**: Detected page number with page, detected numeral, `numberText` (exact text for token removal), line text, position (first/last line)
 - **`SectionHeaderDetection`**: Detected header with normalized text, display text, page range, and `affectedPages` (actual pages with the header — may be a subset of the range for alternating headers)
+- **`ConsecutiveNumberGroup`**: Group of consecutive integers found across adjacent pages, with `pageMapping` (project page → number texts), sorted `numbers`, and `pageRange`
 - **`LineComponents`**: Result of `decomposeHeaderLine()` — splits a line into core text and optional trailing/leading page number
-- **`SmartCleanupResult`**: All detections from a document analysis
+- **`SmartCleanupResult`**: All detections from a document analysis (page numbers, section headers, consecutive numbers)
 - **`CleanupOption`**: Actionable cleanup options (per-page, per-range, or document-wide removal)
 
 ### Analysis Pipeline
@@ -754,11 +756,14 @@ Bottom of `RichTextSidebar` inspector, below the Statistics pane. Toggled via:
 | Suggestions available | "\(count) suggestions" with chevron (enabled dropdown) |
 
 ### Cleanup Options (per current page)
-1. "Remove page number (42) from this page" — single page
-2. "Remove "Chapter 1" from this page" — single page
-3. "Remove "Chapter 1" from pages 50–65" — range
-4. "Remove detected page numbers from the entire document" — all pages
-5. "Remove detected section headers from the entire document" — all pages
+1. "Remove page number (42) from this page" — single page, first/last line
+2. "Remove "Chapter 1" from this page" — single page, section header
+3. "Remove "Chapter 1" from pages 50–65" — range, section header
+4. "Remove 349, 350 from this page" — single page, consecutive numbers
+5. "Remove consecutive page numbers from pages 5–7" — range, consecutive numbers
+6. "Remove detected page numbers from the entire document" — all pages (includes both first/last line AND consecutive)
+
+Note: Document-wide section header removal was removed (too many false positives). Only per-page and per-range options are offered for section headers.
 
 ### Timing
 - Analysis runs after user lingers on a page for **3 seconds** (debounces rapid page flips)
@@ -766,27 +771,46 @@ Bottom of `RichTextSidebar` inspector, below the Statistics pane. Toggled via:
 - After a cleanup action, re-analyzes immediately (no 3s delay)
 
 ### Removal Behavior
-- Executes immediately (no confirmation dialog)
-- Removes the **entire line** containing the detected text (including newline)
-- Uses `AttributedString.removeSubrange()` to preserve formatting on surrounding text
+
+**Page numbers** (first/last line and consecutive): Token-level removal via `removePageNumberToken()`.
+- Removes only the number text (≤ 5 chars) + adjacent whitespace, NOT the entire line
+- Prefers removing preceding whitespace; falls back to following whitespace
+- If the remaining line content is empty, collapses the entire line (including newline)
+- Example: `"Chapter 1    42"` → removes `"    42"` → leaves `"Chapter 1"`
+- Example: standalone `"42"` → line empty → collapses line
+
+**Section headers**: Full line removal via `removeLine()`.
+- Removes the entire line containing the header text (including newline)
+- Supports `stripNumbers: true` for matching mixed header+number lines
+
+Both use `AttributedString.removeSubrange()` to preserve formatting on surrounding text.
+
 - **Single-page**: Modifies `editableText.text` directly (triggers auto-save)
 - **Batch (range/document-wide)**: Loads cache once, modifies all entries in memory, writes each page's `richText`, saves cache once (avoids O(N^2) decode/encode)
 - After batch modification of current page, re-initializes `EditablePageText` to refresh the editor
 
-### Line Removal (`TextManipulationService.removeLine`)
-1. Splits `AttributedString` into lines via plain text
-2. Finds first line whose normalized content matches the target
-3. Calculates character offsets (including newline) and maps to `AttributedString.Index`
-4. Calls `removeSubrange` — preserves all formatting attributes on remaining text
+### Number Parsing (`parseNumericToken`)
+Handles digits and thousands-separator commas with a 5-character limit:
+- `"42"` → 42, `"1,234"` → 1234, `"9,999"` → 9999
+- Rejects: `"100000"` (6 chars), `"1,23,4"` (invalid commas), `"abc"` (non-numeric)
+- Used by `extractPageNumber()`, `decomposeHeaderLine()`, and `extractStandaloneNumbers()`
 
-Supports `stripNumbers: Bool` parameter (default `false`). When `true`, strips trailing/leading page numbers from each line before comparing — used for section header removal so `"chapter 1"` matches a line containing `"Chapter 1  42"`.
+### Consecutive Number Detection (`detectConsecutiveNumbers`)
+Finds physical page numbers embedded anywhere in OCR text by detecting cross-page consecutive series:
+1. `extractStandaloneNumbers()` scans each page's interior text (excluding first/last non-empty lines) for standalone numeric tokens ≤ 5 chars
+2. Builds value-to-pages mapping across all pages
+3. Finds maximal consecutive integer runs
+4. Verifies cross-page adjacency: each (value, page) pair must have at least one adjacent project page (±1) with a number from the same run
+5. Groups surviving pairs into `ConsecutiveNumberGroup` objects
+
+Per-page options are deduplicated against first/last line detections to avoid duplicate suggestions.
 
 ### Mixed Header+Number Lines (`decomposeHeaderLine`)
 Handles lines like `"Chapter 1    42"` that combine a section header with a page number:
-- Splits normalized text by spaces, checks if first/last token is purely numeric
+- Splits normalized text by spaces, checks if first/last token is numeric via `parseNumericToken()`
 - Returns `LineComponents(coreText:, pageNumber:, fullNormalized:)`
 - Only strips edge numbers — `"chapter 1 of 3 42"` → core: `"chapter 1 of 3"`, number: `42`
 - Used by both page number detection (to find embedded numbers) and section header detection (to group lines ignoring varying page numbers)
 
 ### Alternating Left/Right Page Headers
-Books commonly alternate headers: left pages show the chapter number, right pages show the chapter title. Detection uses a gap tolerance of 2 (allows one skipped page) when finding contiguous runs, so headers appearing on every other page still form detectable sections. `SectionHeaderDetection.affectedPages` stores only the pages that actually have the header (not every page in the range), preventing false modifications during batch removal.
+Books commonly alternate headers: left pages show the chapter number, right pages show the chapter title. Detection uses a gap tolerance of 5 pages when finding contiguous runs, so headers appearing on every other page, or even with a few missing pages, still form detectable sections. `SectionHeaderDetection.affectedPages` stores only the pages that actually have the header (not every page in the range), preventing false modifications during batch removal.

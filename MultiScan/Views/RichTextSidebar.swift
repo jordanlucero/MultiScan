@@ -497,28 +497,28 @@ struct RichTextSidebar: View {
     private func executeCleanupOption(_ option: TextManipulationService.CleanupOption) {
         switch option {
         case .removePageNumber(let detection):
-            removeSingleLine(normalizedLine: detection.normalizedLine, fromPageNumber: detection.pageNumber, stripNumbers: false)
+            removePageNumberTokenFromPage(numberText: detection.numberText, pageNumber: detection.pageNumber)
 
         case .removeSectionHeaderFromPage(let header, let pageNumber):
             removeSingleLine(normalizedLine: header.headerText, fromPageNumber: pageNumber, stripNumbers: true)
 
         case .removeSectionHeaderFromRange(let header):
-            executeBatchRemoval(
+            executeBatchLineRemoval(
                 pageNumbers: header.affectedPages,
                 normalizedLine: header.headerText,
                 stripNumbers: true
             )
 
-        case .removeAllPageNumbers(let detections):
-            executeBatchRemovalMultiLine(detections: detections)
+        case .removeConsecutiveNumbers(let group, let pageNumber):
+            executeConsecutiveNumberRemoval(group: group, pageNumber: pageNumber)
 
-        case .removeAllSectionHeaders(let headers):
-            for header in headers {
-                executeBatchRemoval(
-                    pageNumbers: header.affectedPages,
-                    normalizedLine: header.headerText,
-                    stripNumbers: true
-                )
+        case .removeConsecutiveNumbersFromRange(let group):
+            executeBatchConsecutiveRemoval(group: group)
+
+        case .removeAllPageNumbers(let detections, let consecutiveGroups):
+            executeBatchPageNumberRemoval(detections: detections)
+            for group in consecutiveGroups {
+                executeBatchConsecutiveRemoval(group: group)
             }
         }
 
@@ -526,83 +526,56 @@ struct RichTextSidebar: View {
         runCleanupAnalysisImmediately()
     }
 
-    /// Removes a single line from a single page's text.
-    /// - Parameter stripNumbers: When true, strips trailing/leading numbers before matching (for section headers in mixed lines)
-    private func removeSingleLine(normalizedLine: String, fromPageNumber pageNumber: Int, stripNumbers: Bool) {
+    // MARK: - Page Number Token Removal
+
+    /// Removes a single page number token from a single page's text.
+    private func removePageNumberTokenFromPage(numberText: String, pageNumber: Int) {
         if pageNumber == currentPage?.pageNumber, let editableText = editableText {
-            // Current page: modify the in-memory editable text
-            let cleaned = TextManipulationService.removeLine(
-                matching: normalizedLine,
-                from: editableText.text,
-                stripNumbers: stripNumbers
-            )
+            let cleaned = TextManipulationService.removePageNumberToken(numberText, from: editableText.text)
             editableText.text = cleaned
             editableText.saveNow()
         } else {
-            // Other page: use cache richText to avoid external storage load
             guard let cache = TextExportCacheService.loadCache(from: document),
                   let entry = cache.pages.first(where: { $0.pageNumber == pageNumber }) else { return }
 
-            let cleaned = TextManipulationService.removeLine(
-                matching: normalizedLine,
-                from: entry.richText,
-                stripNumbers: stripNumbers
-            )
+            let cleaned = TextManipulationService.removePageNumberToken(numberText, from: entry.richText)
 
             if let page = document.unwrappedPages.first(where: { $0.pageNumber == pageNumber }) {
                 page.richText = cleaned
-                TextExportCacheService.updateEntry(
-                    pageNumber: pageNumber,
-                    richText: cleaned,
-                    in: document
-                )
+                TextExportCacheService.updateEntry(pageNumber: pageNumber, richText: cleaned, in: document)
             }
         }
     }
 
-    /// Batch removes a single normalized line from multiple pages efficiently.
-    /// Loads the cache once, modifies all entries, and saves once.
-    /// - Parameter stripNumbers: When true, strips trailing/leading numbers before matching (for section headers in mixed lines)
-    private func executeBatchRemoval(pageNumbers: [Int], normalizedLine: String, stripNumbers: Bool) {
-        editableText?.saveNow()
+    /// Removes consecutive numbers from a single page.
+    private func executeConsecutiveNumberRemoval(group: TextManipulationService.ConsecutiveNumberGroup, pageNumber: Int) {
+        guard let numberTexts = group.pageMapping[pageNumber], !numberTexts.isEmpty else { return }
 
-        guard var cache = TextExportCacheService.loadCache(from: document) else { return }
+        if pageNumber == currentPage?.pageNumber, let editableText = editableText {
+            var text = editableText.text
+            for numberText in numberTexts {
+                text = TextManipulationService.removePageNumberToken(numberText, from: text)
+            }
+            editableText.text = text
+            editableText.saveNow()
+        } else {
+            guard let cache = TextExportCacheService.loadCache(from: document),
+                  let entry = cache.pages.first(where: { $0.pageNumber == pageNumber }) else { return }
 
-        for pageNumber in pageNumbers {
-            guard let entryIndex = cache.pages.firstIndex(where: { $0.pageNumber == pageNumber }) else { continue }
-
-            let cleaned = TextManipulationService.removeLine(
-                matching: normalizedLine,
-                from: cache.pages[entryIndex].richText,
-                stripNumbers: stripNumbers
-            )
-
-            // Update page model
-            if let page = document.unwrappedPages.first(where: { $0.pageNumber == pageNumber }) {
-                page.richText = cleaned
+            var text = entry.richText
+            for numberText in numberTexts {
+                text = TextManipulationService.removePageNumberToken(numberText, from: text)
             }
 
-            // Update cache entry in memory
-            cache.pages[entryIndex] = PageCacheEntry(
-                pageNumber: pageNumber,
-                fileName: cache.pages[entryIndex].fileName,
-                richText: cleaned
-            )
-        }
-
-        // Save cache once
-        TextExportCacheService.saveCache(cache, to: document)
-
-        // Refresh editor if current page was modified
-        if let currentPageNum = currentPage?.pageNumber,
-           pageNumbers.contains(currentPageNum),
-           let page = currentPage {
-            editableText = EditablePageText(page: page)
+            if let page = document.unwrappedPages.first(where: { $0.pageNumber == pageNumber }) {
+                page.richText = text
+                TextExportCacheService.updateEntry(pageNumber: pageNumber, richText: text, in: document)
+            }
         }
     }
 
-    /// Batch removes page numbers (each page may have a different line to remove).
-    private func executeBatchRemovalMultiLine(detections: [TextManipulationService.PageNumberDetection]) {
+    /// Batch removes page number tokens (each page may have a different number to remove).
+    private func executeBatchPageNumberRemoval(detections: [TextManipulationService.PageNumberDetection]) {
         editableText?.saveNow()
 
         guard var cache = TextExportCacheService.loadCache(from: document) else { return }
@@ -610,8 +583,8 @@ struct RichTextSidebar: View {
         for detection in detections {
             guard let entryIndex = cache.pages.firstIndex(where: { $0.pageNumber == detection.pageNumber }) else { continue }
 
-            let cleaned = TextManipulationService.removeLine(
-                matching: detection.normalizedLine,
+            let cleaned = TextManipulationService.removePageNumberToken(
+                detection.numberText,
                 from: cache.pages[entryIndex].richText
             )
 
@@ -628,10 +601,111 @@ struct RichTextSidebar: View {
 
         TextExportCacheService.saveCache(cache, to: document)
 
-        // Refresh editor if current page was modified
         let modifiedPageNumbers = Set(detections.map { $0.pageNumber })
         if let currentPageNum = currentPage?.pageNumber,
            modifiedPageNumbers.contains(currentPageNum),
+           let page = currentPage {
+            editableText = EditablePageText(page: page)
+        }
+    }
+
+    /// Batch removes all numbers in a consecutive group from all affected pages.
+    private func executeBatchConsecutiveRemoval(group: TextManipulationService.ConsecutiveNumberGroup) {
+        editableText?.saveNow()
+
+        guard var cache = TextExportCacheService.loadCache(from: document) else { return }
+
+        var modifiedPages: Set<Int> = []
+
+        for (pageNumber, numberTexts) in group.pageMapping {
+            guard let entryIndex = cache.pages.firstIndex(where: { $0.pageNumber == pageNumber }) else { continue }
+
+            var text = cache.pages[entryIndex].richText
+            for numberText in numberTexts {
+                text = TextManipulationService.removePageNumberToken(numberText, from: text)
+            }
+
+            if let page = document.unwrappedPages.first(where: { $0.pageNumber == pageNumber }) {
+                page.richText = text
+            }
+
+            cache.pages[entryIndex] = PageCacheEntry(
+                pageNumber: pageNumber,
+                fileName: cache.pages[entryIndex].fileName,
+                richText: text
+            )
+            modifiedPages.insert(pageNumber)
+        }
+
+        TextExportCacheService.saveCache(cache, to: document)
+
+        if let currentPageNum = currentPage?.pageNumber,
+           modifiedPages.contains(currentPageNum),
+           let page = currentPage {
+            editableText = EditablePageText(page: page)
+        }
+    }
+
+    // MARK: - Section Header Line Removal
+
+    /// Removes a single line from a single page's text (used for section headers).
+    /// - Parameter stripNumbers: When true, strips trailing/leading numbers before matching
+    private func removeSingleLine(normalizedLine: String, fromPageNumber pageNumber: Int, stripNumbers: Bool) {
+        if pageNumber == currentPage?.pageNumber, let editableText = editableText {
+            let cleaned = TextManipulationService.removeLine(
+                matching: normalizedLine,
+                from: editableText.text,
+                stripNumbers: stripNumbers
+            )
+            editableText.text = cleaned
+            editableText.saveNow()
+        } else {
+            guard let cache = TextExportCacheService.loadCache(from: document),
+                  let entry = cache.pages.first(where: { $0.pageNumber == pageNumber }) else { return }
+
+            let cleaned = TextManipulationService.removeLine(
+                matching: normalizedLine,
+                from: entry.richText,
+                stripNumbers: stripNumbers
+            )
+
+            if let page = document.unwrappedPages.first(where: { $0.pageNumber == pageNumber }) {
+                page.richText = cleaned
+                TextExportCacheService.updateEntry(pageNumber: pageNumber, richText: cleaned, in: document)
+            }
+        }
+    }
+
+    /// Batch removes a single normalized line from multiple pages efficiently (used for section headers).
+    private func executeBatchLineRemoval(pageNumbers: [Int], normalizedLine: String, stripNumbers: Bool) {
+        editableText?.saveNow()
+
+        guard var cache = TextExportCacheService.loadCache(from: document) else { return }
+
+        for pageNumber in pageNumbers {
+            guard let entryIndex = cache.pages.firstIndex(where: { $0.pageNumber == pageNumber }) else { continue }
+
+            let cleaned = TextManipulationService.removeLine(
+                matching: normalizedLine,
+                from: cache.pages[entryIndex].richText,
+                stripNumbers: stripNumbers
+            )
+
+            if let page = document.unwrappedPages.first(where: { $0.pageNumber == pageNumber }) {
+                page.richText = cleaned
+            }
+
+            cache.pages[entryIndex] = PageCacheEntry(
+                pageNumber: pageNumber,
+                fileName: cache.pages[entryIndex].fileName,
+                richText: cleaned
+            )
+        }
+
+        TextExportCacheService.saveCache(cache, to: document)
+
+        if let currentPageNum = currentPage?.pageNumber,
+           pageNumbers.contains(currentPageNum),
            let page = currentPage {
             editableText = EditablePageText(page: page)
         }

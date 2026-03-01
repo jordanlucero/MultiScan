@@ -1534,10 +1534,20 @@
     "Remove \"%@\" from this page" : {
 
     },
-    "Remove detected page numbers from the entire document" : {
+    "Remove %@ from this page" : {
 
     },
-    "Remove detected section headers from the entire document" : {
+    "Remove consecutive page numbers from pages %lld–%lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Remove consecutive page numbers from pages %1$lld–%2$lld"
+          }
+        }
+      }
+    },
+    "Remove detected page numbers from the entire document" : {
 
     },
     "Remove Line Breaks" : {

@@ -1,18 +1,28 @@
 MultiScan provides a dedicated frontend to VisionKit that makes it easy to digitize your multi-page physical documents into text. MultiScan is built to let you review VisionKit output on a page-by-page basis, search content within pages, and feed documents into the system Accessibility Reader (⌘⎋). 
 
-Built with fully-native Swift, SwiftUI (with targeted usage of AppKit and UIKit), SwiftData, and VisionKit frameworks. Swift 6. Requires macOS Tahoe.
+Built with Swift 6, SwiftUI (with targeted usage of AppKit and UIKit), SwiftData, and VisionKit.
 
 ![MultiScan running on an iMac with macOS Tahoe.](https://github.com/user-attachments/assets/92505022-c688-4126-98cc-3533444fda16)
 
 Built with Claude Code running Claude Sonnet (4, 4.5, 4.6) and Claude Opus (4, 4.1, 4.5, 4.6, 4.7). MultiScan is appropriately sandboxed.
 
-# Usage and Key Limitations
+# Features
 
-MultiScan is designed for casual reading or workflows where the OCR output can be reviewed. Text might be placed out of order. Fingers, image noise, and specks of dust/dirt might be mistaken for new or accented characters. When you're in low-light, consider using flash or night mode for MultiScan-bound images. Avoid glare.
+MultiScan projects allow you to take physical pages and perfect them into a scan that’s easy to read, analyze, and share.
 
-MultiScan doesn't have the capacity to identify illustrations or images on document pages. VisionKit will attempt to transcribe the text within artwork in a way that doesn't make sense. It's useful to include an in-line note to yourself when you export from MultiScan in case you want to add a screenshot or external scan of the artwork in an external word processor.
+* Export to RTF with optional page separation and mods
+* Track your progress throughout a digitization project
+* Keyword search your physical documents
 
-This implementation of VisionKit will add line breaks at the end of each line of text that's shown on the physical document's pages. You may need to manually delete these line breaks so that text will flow more naturally in external usage.
+## Key Limitations
+
+MultiScan is designed for casual reading or workflows where the OCR output can be reviewed. 
+
+* Fingers, image noise, and specks of dust/dirt might be mistaken for new or accented characters. When you're in low-light, consider using flash or night mode for MultiScan-bound images. Avoid glare.
+
+* MultiScan doesn't have the capacity to identify illustrations or images on document pages. VisionKit will attempt to transcribe the text within artwork in a way that doesn't make sense. It's useful to include an in-line note to yourself when you export from MultiScan in case you want to add a screenshot or external scan of the artwork in an external word processor.
+
+* This implementation of VisionKit adds line breaks at the end of each physical line of text. When appropriate, you can choose to purge line breaks from a page when editing.
 
 # Copyright Note
 

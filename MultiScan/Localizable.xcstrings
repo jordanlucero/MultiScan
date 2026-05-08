@@ -386,10 +386,6 @@
         }
       }
     },
-    "Container Active" : {
-      "comment" : "Debug only",
-      "shouldTranslate" : false
-    },
     "Copy the Current Page's Text" : {
       "comment" : "Copy Page Text button on “Page x of x” RichTextSidebar header",
       "localizations" : {
@@ -427,14 +423,6 @@
           }
         }
       }
-    },
-    "Debug Settings" : {
-      "comment" : "Debug only",
-      "shouldTranslate" : false
-    },
-    "Debug: CloudKit Status" : {
-      "comment" : "Debug only",
-      "shouldTranslate" : false
     },
     "Default" : {
       "comment" : "Viewer background option: system default",
@@ -506,10 +494,6 @@
           }
         }
       }
-    },
-    "Device ID" : {
-      "comment" : "Debug only",
-      "shouldTranslate" : false
     },
     "Disable" : {
       "localizations" : {
@@ -731,10 +715,6 @@
         }
       }
     },
-    "Force Sync Now" : {
-      "comment" : "Debug only",
-      "shouldTranslate" : false
-    },
     "Format" : {
       "localizations" : {
         "es-419" : {
@@ -808,10 +788,6 @@
       }
     },
     "iCloud" : {
-      "comment" : "Debug only",
-      "shouldTranslate" : false
-    },
-    "iCloud Services" : {
       "comment" : "Debug only",
       "shouldTranslate" : false
     },
@@ -920,10 +896,6 @@
           }
         }
       }
-    },
-    "Last Sync Attempt" : {
-      "comment" : "Debug only",
-      "shouldTranslate" : false
     },
     "Light Gray" : {
       "comment" : "Viewer background option: light gray color",
@@ -1109,6 +1081,7 @@
       }
     },
     "No" : {
+      "extractionState" : "stale",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -1119,6 +1092,7 @@
       }
     },
     "No (restart required)" : {
+      "extractionState" : "stale",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -1517,10 +1491,6 @@
         }
       }
     },
-    "Refresh Status" : {
-      "comment" : "Debug only",
-      "shouldTranslate" : false
-    },
     "Remove \"%@\" from pages %lld–%lld" : {
       "localizations" : {
         "en" : {
@@ -1747,10 +1717,6 @@
         }
       }
     },
-    "Setting Enabled" : {
-      "comment" : "Debug only",
-      "shouldTranslate" : false
-    },
     "Settings…" : {
       "localizations" : {
         "es-419" : {
@@ -1890,10 +1856,6 @@
           }
         }
       }
-    },
-    "Test CloudKit Access" : {
-      "comment" : "Debug only",
-      "shouldTranslate" : false
     },
     "Text Editor, Page %lld of %lld. Select to copy the page text." : {
       "comment" : "Accessibility label on RichTextSidebar header",
@@ -2124,6 +2086,7 @@
       }
     },
     "Yes" : {
+      "extractionState" : "stale",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {

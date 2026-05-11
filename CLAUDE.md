@@ -256,16 +256,26 @@ When extending functionality:
 
 ## Rich Text Storage Architecture
 
-The app uses **native SwiftData storage for AttributedString** (macOS 26+), eliminating the need for manual JSON encoding.
+The app stores rich text as **JSON-encoded `Data` with `@Attribute(.externalStorage)`**, exposed via a computed `richText: AttributedString` property. CloudKit doesn't natively support `AttributedString`, so encoding to `Data` is required for sync.
 
 ### Page Model (`Models.swift`)
 ```swift
 @Model
 final class Page {
-    /// Rich text stored natively by SwiftData — no manual encoding needed
+    /// Rich text content stored as JSON-encoded Data for CloudKit compatibility.
     @Attribute(.externalStorage)
-    var richText: AttributedString = AttributedString() {
-        didSet { lastModified = Date() }
+    var richTextData: Data?
+
+    /// Computed accessor that encodes/decodes from `richTextData`.
+    var richText: AttributedString {
+        get {
+            guard let data = richTextData else { return AttributedString() }
+            return (try? JSONDecoder().decode(AttributedString.self, from: data)) ?? AttributedString()
+        }
+        set {
+            richTextData = try? JSONEncoder().encode(newValue)
+            lastModified = Date()
+        }
     }
 
     /// Plain text accessor for search/statistics (computed from richText)
@@ -276,10 +286,11 @@ final class Page {
 ```
 
 **Key points:**
-- `AttributedString` stored directly with `@Attribute(.externalStorage)`
-- SwiftData handles serialization automatically
-- No transient/persistent split, no `willSave` observers, no JSON encoding
-- `plainText` is computed on-the-fly for search/filter (independent of storage)
+- Stored property is `richTextData: Data?` — CloudKit-friendly type, externally stored as a CKAsset.
+- `richText` is a computed property; encode/decode happens on every set/get. Callers (e.g. `EditablePageText`) snapshot it once per page rather than reading it repeatedly.
+- `lastModified` updates in the `richText` setter, so it only fires on local writes — remote CloudKit sync writes directly to `richTextData` and won't bump the timestamp.
+- During `init`, encode the `AttributedString` directly into `richTextData` rather than going through the `richText` setter, to avoid touching `lastModified` on creation.
+- `plainText` is computed on-the-fly for search/filter (independent of storage).
 
 ### RichTextSupport (`Services/RichTextSupport.swift`)
 Provides formatting helpers and RTF export:
@@ -374,9 +385,8 @@ All save calls check `hasUnsavedChanges` first — no-op if no edits were made.
 
 ### Persistence Flow (Simplified)
 1. `saveNow()` strips foreground color and assigns to `page.richText`
-2. Page's `didSet` updates `lastModified` timestamp
-3. SwiftData automatically persists `AttributedString` to external storage
-4. No manual encoding — SwiftData handles serialization natively
+2. The `richText` setter JSON-encodes to `richTextData` and updates `lastModified`
+3. SwiftData persists `richTextData` to external storage (and CKAsset, if iCloud sync is enabled)
 
 ### Important Notes
 - No separate "view mode" vs "edit mode" — always editable

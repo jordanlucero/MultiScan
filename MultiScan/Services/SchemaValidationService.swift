@@ -4,15 +4,12 @@
 //
 //  Validates data integrity and performs self-healing for minor issues.
 //
-//  ## Purpose
 //
 //  This service ensures data consistency and handles schema version checking:
 //  1. Pre-load checks (before ModelContainer creation)
 //  2. Post-load validation (after container loads successfully)
 //  3. Integrity validation (document/page consistency)
 //  4. Self-healing for minor fixable issues
-//
-//  ## Self-Healing Philosophy
 //
 //  Minor issues are automatically fixed without user intervention:
 //  - totalPages mismatch → recalculate from actual page count

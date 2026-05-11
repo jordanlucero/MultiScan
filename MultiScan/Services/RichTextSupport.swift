@@ -47,7 +47,7 @@ struct RichText: Transferable {
             try richText.toRTFDataOrThrow()
         }
 
-        // 3. Plain text fallback - works everywhere
+        // 3. Plain text fallback
         ProxyRepresentation { richText in
             String(richText.attributedString.characters)
         }

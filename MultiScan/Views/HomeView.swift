@@ -28,44 +28,24 @@ struct HomeView: View {
 
     // Settings
     @AppStorage("optimizeImagesOnImport") private var optimizeImagesOnImport = false
+    @AppStorage(SchemaVersioning.iCloudSyncEnabledKey) private var iCloudSyncEnabled = false
 
     // Accessibility announcement tracking
     @State private var hasAnnouncedHalfway = false
     @State private var processingPageCount = 0
-
-    // Selection state for focused document
-    @State private var selectedDocumentID: PersistentIdentifier?
-
-    // Export panel state for menu bar command
-    @State private var showingExportPanel = false
 
     // Automatically shows debug settings sheet (iOS only)
     #if DEBUG && os(iOS)
     @State private var showingDebugSettings = true
     #endif
 
-    /// The currently selected document (for menu bar commands)
-    private var selectedDocument: Document? {
-        guard let id = selectedDocumentID else { return nil }
-        return documents.first { $0.persistentModelID == id }
-    }
-
     var body: some View {
-        ScrollView {
-            LazyVGrid(columns: [
-                GridItem(.adaptive(minimum: 200, maximum: 260), spacing: 24, alignment: .top)
-            ], alignment: .leading, spacing: 16) {
-                newDocumentCard
-                    .frame(maxHeight: .infinity, alignment: .top)
-                ForEach(documents.sorted(by: { $0.createdAt > $1.createdAt })) { document in
-                    documentLink(for: document)
-                }
+        Group {
+            if documents.isEmpty && !isPreparingImport {
+                emptyState
+            } else {
+                documentsGrid
             }
-            .padding()
-        }
-        .onTapGesture {
-            // Deselect when clicking empty space
-            selectedDocumentID = nil
         }
         .onDrop(of: [.fileURL], isTargeted: $isDragOver) { providers in
             handleDrop(providers: providers)
@@ -98,7 +78,11 @@ struct HomeView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: { document in
-            Text("Are you sure you want to delete this project? This cannot be undone.")
+            if iCloudSyncEnabled {
+                Text("Are you sure you want to delete this project? It will also be removed from your other iCloud devices. This cannot be undone.")
+            } else {
+                Text("Are you sure you want to delete this project? This cannot be undone.")
+            }
         }
         .onChange(of: selectedPhotos) { _, items in
             Task { await processSelectedPhotos(items) }
@@ -110,23 +94,8 @@ struct HomeView: View {
                 AccessibilityNotification.Announcement("Processing is 50% done.").post()
             }
         }
-        .focusedSceneValue(\.document, selectedDocument)
-        .focusedSceneValue(\.showExportPanel, $showingExportPanel)
-        .sheet(isPresented: $showingExportPanel) {
-            if let document = selectedDocument {
-                ExportPanelView(document: document)
-            }
-        }
         // to fix inconsistent window corner radius :(
-        .toolbar {
-            ToolbarItemGroup {
-                Button("Export Project Text…", systemImage: "square.and.arrow.up") {
-                    showingExportPanel = true
-                }
-                .disabled(selectedDocument == nil || isSelectedDocumentProcessing)
-                .help("Export project text")
-            }
-        }
+        .toolbar { toolbarContent }
         #if DEBUG && os(iOS)
         .sheet(isPresented: $showingDebugSettings) {
             NavigationStack {
@@ -148,62 +117,82 @@ struct HomeView: View {
         #endif
     }
 
-    /// Whether the currently selected document is still being processed
-    private var isSelectedDocumentProcessing: Bool {
-        guard let id = selectedDocumentID else { return false }
-        return processingDocumentIDs.contains(id)
-    }
-
     // MARK: - View Components
 
-    private var newDocumentCard: some View {
+    private var emptyState: some View {
+        ContentUnavailableView {
+            Label("No Projects", systemImage: "document.viewfinder")
+        } description: {
+            Text("Choose the + button in the toolbar to start a project from your photos or files.")
+        }
+    }
+
+    private var documentsGrid: some View {
+        ScrollView {
+            LazyVGrid(columns: [
+                GridItem(.adaptive(minimum: 200, maximum: 260), spacing: 24, alignment: .top)
+            ], alignment: .leading, spacing: 16) {
+                if isPreparingImport {
+                    placeholderCard
+                }
+                ForEach(documents.sorted(by: { $0.createdAt > $1.createdAt })) { document in
+                    documentLink(for: document)
+                }
+            }
+            .padding()
+        }
+    }
+
+    private var placeholderCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.gray.opacity(0.1))
+
+                VStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.large)
+                }
+            }
+            .aspectRatio(8.5/11, contentMode: .fit)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+
+            Text("New Project")
+                .font(.headline)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+        }
+        .frame(maxHeight: .infinity, alignment: .top)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Preparing new project")
+    }
+
+    // MARK: - Toolbar Content
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .primaryAction) {
+            addProjectToolbarItem
+        }
+    }
+
+    private var addProjectToolbarItem: some View {
         Menu {
             Button("Import from Photos…", systemImage: "photo.on.rectangle") {
                 showingPhotosPicker = true
             }
-
             Button("Import from Files…", systemImage: "folder") {
                 showingFilePicker = true
             }
-
         } label: {
-            VStack(alignment: .leading, spacing: 12) {
-                // White page with plus sign or spinner
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.gray.opacity(0.1))
-
-                    if isPreparingImport {
-                        VStack(spacing: 8) {
-                            ProgressView()
-                                .controlSize(.large)
-                            Text("Preparing…")
-                                .font(.caption)
-                                .foregroundStyle(.primary)
-                        }
-                    } else {
-                        Image(systemName: "plus")
-                            .font(.system(size: 40, weight: .medium))
-                            .foregroundStyle(Color.accentColor)
-                    }
-                }
-                .aspectRatio(8.5/11, contentMode: .fit)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                // Title
-                Text("New Project")
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-            }
-            .contentShape(Rectangle())
+            Label("Start Project", systemImage: "plus")
+                .labelStyle(.iconOnly)
         }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .disabled(isPreparingImport)
-        .accessibilityLabel(isPreparingImport ? "Preparing import" : "New Project")
-        .accessibilityHint(isPreparingImport ? "Import in progress" : "Activate to start a project using imported images from your photos or files")
+        .help(isPreparingImport ? "Preparing import" : "Start a new project")
+        .accessibilityLabel(isPreparingImport ? "Preparing import" : "Start Project")
+        .accessibilityHint(isPreparingImport ? "Import in progress" : "Start a project using imported images from your photos or files")
     }
 
     private func documentLink(for document: Document) -> some View {
@@ -213,10 +202,6 @@ struct HomeView: View {
             document: document,
             isProcessing: isProcessing,
             ocrProgress: ocrService.progress,
-            isSelected: selectedDocumentID == document.persistentModelID,
-            onSelect: {
-                selectedDocumentID = document.persistentModelID
-            },
             onOpen: {
                 onDocumentSelected(document)
             },
@@ -378,7 +363,9 @@ struct HomeView: View {
     private func processSelectedPhotos(_ items: [PhotosPickerItem]) async {
         guard !items.isEmpty else { return }
 
+        isPreparingImport = true
         let images = await importService.processSelectedPhotos(items, optimizeImages: optimizeImagesOnImport)
+        isPreparingImport = false
 
         guard !images.isEmpty else {
             print("No photos could be loaded")

@@ -13,8 +13,7 @@ import SwiftUI
 @Model
 final class Page {
     // MARK: - CloudKit Compatibility
-    // All properties must have default values for CloudKit sync.
-    // Relationships must be optional.
+    // All properties must have default values for CloudKit sync. Relationships must be optional.
 
     var pageNumber: Int = 0
     var document: Document?
@@ -98,8 +97,7 @@ final class Page {
 @Model
 final class Document {
     // MARK: - CloudKit Compatibility
-    // All properties must have default values for CloudKit sync.
-    // Relationships must be optional.
+    // All properties must have default values for CloudKit sync. Relationships must be optional.
 
     var name: String = ""
     var totalPages: Int = 0
@@ -170,6 +168,12 @@ final class Document {
             if let richTextData = page.richTextData {
                 totalBytes += Int64(richTextData.count)
             }
+            if let boundingBoxesData = page.boundingBoxesData {
+                totalBytes += Int64(boundingBoxesData.count)
+            }
+        }
+        if let textExportCache = textExportCache {
+            totalBytes += Int64(textExportCache.count)
         }
         cachedStorageBytes = totalBytes
     }

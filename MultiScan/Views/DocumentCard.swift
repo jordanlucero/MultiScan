@@ -5,8 +5,6 @@ struct DocumentCard: View {
     @Bindable var document: Document
     let isProcessing: Bool
     let ocrProgress: Double
-    let isSelected: Bool
-    let onSelect: () -> Void
     let onOpen: () -> Void
     let onDelete: () -> Void
     let onOptimize: () -> Void
@@ -39,9 +37,9 @@ struct DocumentCard: View {
           showEncompassingContainer || isMenuButtonFocused
       }
 
-    /// Whether to show the encompassing container (when selected or hovered)
+    /// Whether to show the encompassing container (when hovered or keyboard-focused)
     private var showEncompassingContainer: Bool {
-        isSelected || isHovered
+        isHovered || isCardFocused
     }
 
     var body: some View {
@@ -66,18 +64,9 @@ struct DocumentCard: View {
             guard !isProcessing else { return }
             onOpen()
         }
-        .onTapGesture(count: 1) {
-            onSelect()
-            //change to just simple system focus, no need for extra complexity?
-        }
         .contextMenu { contextMenuContent }
         .focusable()
         .focused($isCardFocused)
-        .onChange(of: isCardFocused) { _, isFocused in
-            if isFocused {
-                onSelect()
-            }
-        }
         .onKeyPress(.return) {
             guard !isProcessing else { return .ignored }
             // Let focused child elements handle their own activation
@@ -145,7 +134,7 @@ struct DocumentCard: View {
                             .controlSize(.regular)
                         Text("\(Int(ocrProgress * 100))%")
                             .font(.body)
-                            .foregroundColor(.primary)
+                            .foregroundStyle(Color.primary)
                     }
                 } else if let lastPage = document.lastModifiedPage,
                           let thumbData = lastPage.thumbnailData,
@@ -232,7 +221,7 @@ struct DocumentCard: View {
                 } else {
                     Image(systemName: "doc.text.fill")
                         .font(.title3)
-                        .foregroundColor(.accentColor)
+                        .foregroundStyle(Color.accentColor)
                 }
             }
             .frame(width: 28, height: 28)
@@ -342,12 +331,12 @@ struct DocumentCard: View {
             // Last edited date (absolute format with timezone support)
             Text(document.lastModifiedDate, format: .dateTime.month(.wide).day().year().hour().minute())
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundStyle(Color.secondary)
 
             // Completion status
             Text("\(document.unwrappedPages.filter { $0.isDone }.count) of \(document.totalPages) pages reviewed (\(document.completionPercentage)%)")
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundStyle(Color.secondary)
         }
     }
 
@@ -400,8 +389,6 @@ private struct DocumentCardPreviewHelper: View {
             document: document,
             isProcessing: isProcessing,
             ocrProgress: 0.99,
-            isSelected: isSelected,
-            onSelect: {},
             onOpen: {},
             onDelete: {},
             onOptimize: {}

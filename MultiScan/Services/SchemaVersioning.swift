@@ -97,8 +97,7 @@ enum SchemaVersioning {
     /// - Users who want sync can opt-in
     /// - If user isn't signed into iCloud, enabling this has no effect (data stays local)
     ///
-    /// **Important**: Changing this setting requires an app restart because
-    /// SwiftData's `cloudKitDatabase` is configured at container creation time.
+    /// **Important**: Changing this setting requires an app restart because SwiftData's `cloudKitDatabase` is configured at container creation time.
     static let iCloudSyncEnabledKey = "multiScanICloudSyncEnabled"
 
     /// Returns the current iCloud sync setting.
@@ -113,8 +112,7 @@ enum SchemaVersioning {
 /// Tracks schema metadata within the database itself.
 ///
 /// This single-row model stores version information that persists with the data.
-/// It's particularly important for CloudKit sync scenarios where another device
-/// might sync data written by a newer app version.
+/// It's particularly important for CloudKit sync scenarios where another device might sync data written by a newer app version.
 ///
 /// ## Usage
 ///
@@ -126,8 +124,8 @@ enum SchemaVersioning {
 ///
 /// ## CloudKit Sync Scenario
 ///
-/// Device A (v1.5.2) creates data with schemaVersion = 2
-/// Device B (v1.5.1) syncs and sees schemaVersion = 2 > currentVersion = 1
+/// Device A (v2.0) creates data with schemaVersion = 2
+/// Device B (v1.6) syncs and sees schemaVersion = 2 > currentVersion = 1
 /// Device B shows "Please update the app" warning instead of corrupting data
 ///
 @Model
@@ -191,8 +189,7 @@ final class SchemaMetadata {
     func recordSuccessfulLoad() {
         self.lastSuccessfulLoad = Date()
         self.lastAppBuild = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown"
-        // Note: Don't update schemaVersion here - it should only change when
-        // we deliberately bump it for breaking changes
+        // Note: Don't update schemaVersion here - it should only change when we deliberately bump it for breaking changes
     }
 }
 

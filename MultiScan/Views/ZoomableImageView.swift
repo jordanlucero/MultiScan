@@ -12,8 +12,7 @@ struct ZoomableImageView: View {
     /// Reports current zoom scale back to parent (1.0 = fit-to-window)
     @Binding var currentScale: CGFloat
     /// Safe area insets from the SwiftUI layout (sidebar, inspector, toolbar).
-    /// Applied as content insets so the image centers in the visible area
-    /// while still rendering behind the glass panels.
+    /// Applied as content insets so the image centers in the visible area while still rendering behind the glass panels.
     var safeAreaInsets: EdgeInsets = EdgeInsets()
 
     var body: some View {

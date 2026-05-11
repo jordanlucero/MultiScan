@@ -4,10 +4,8 @@
 //
 //  Print-panel-style export view with preview and options.
 //
-//  ## Performance
 //  Uses `TextExporter` with document-based initialization to enable cache-based export.
-//  This loads page data from a single cached file instead of N external storage files,
-//  dramatically improving performance for large documents.
+//  This loads page data from a single cached file instead of N external storage files, dramatically improving performance for large documents.
 //
 
 import SwiftUI
@@ -36,7 +34,7 @@ struct ExportPanelView: View {
         let fullCount = previewText.characters.count
         guard fullCount > Self.previewCharacterLimit else { return previewText }
 
-        // Truncate while preserving attributes (use direct subscript, not .characters which strips formatting)
+        // Truncate while preserving attributes (use direct subscript, not .characters which strips formatting) Hopefully remove soon
         let endIndex = previewText.characters.index(previewText.startIndex, offsetBy: Self.previewCharacterLimit)
         var truncated = AttributedString(previewText[previewText.startIndex..<endIndex])
         truncated.append(AttributedString("\n\n[Preview truncated — \(fullCount - Self.previewCharacterLimit) more characters]\n[Full text will be exported]"))

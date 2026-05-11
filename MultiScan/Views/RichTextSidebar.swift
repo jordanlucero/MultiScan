@@ -144,7 +144,7 @@ final class EditablePageText: Identifiable {
 struct RichTextSidebar: View {
     let document: Document
     @ObservedObject var navigationState: NavigationState
-    @AppStorage("showStatisticsPane") private var showStatisticsPane = true
+    @AppStorage("showStatisticsPane") private var showStatisticsPane = false
     @AppStorage("showSmartCleanup") private var showSmartCleanup = false
     @Environment(\.modelContext) private var modelContext
 

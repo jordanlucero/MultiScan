@@ -13,13 +13,13 @@ struct ProgressPopover: View {
                 HStack {
                     Text("\(navigationState.donePageCount) of \(navigationState.totalPageCount) pages completed", comment: "Progress indicator showing amount of reviewed pages that are considered 'completed'")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(Color.secondary)
                     
                     Spacer()
                     
                     Text("\(Int(navigationState.progress * 100))%")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(Color.secondary)
                 }
             }
         }

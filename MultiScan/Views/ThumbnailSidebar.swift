@@ -358,6 +358,7 @@ struct ThumbnailView: View {
                         VStack {
                             Image("custom.document.badge.questionmark")
                                 .font(.largeTitle)
+                                .foregroundStyle(Color.secondary)
                         }
                     }
 
@@ -367,7 +368,7 @@ struct ThumbnailView: View {
                                 Spacer()
                                 Image(systemName: "checkmark.circle.fill")
                                     .font(.title2)
-                                    .foregroundColor(.green)
+                                    .foregroundStyle(Color.green)
                                     .background(Circle().fill(Color.white).padding(-2))
                                     .padding(8)
                             }
@@ -413,7 +414,7 @@ struct ThumbnailView: View {
                     Button {
                         page.rotation = (page.rotation + 270) % 360
                     } label: {
-                        Label("Rotate Counterclockwise", systemImage: "rotate.left")
+                        Label("Rotate Counterclockwise", systemImage: "")
                     }
                 }
 
@@ -430,7 +431,7 @@ struct ThumbnailView: View {
                         get: { page.increaseBlackPoint },
                         set: { page.increaseBlackPoint = $0 }
                     )) {
-                        Label("Increase Black Point", systemImage: "circle.bottomhalf.filled")
+                        Label("Increase Black Point", systemImage: "")
                     }
                 }
 
@@ -446,7 +447,7 @@ struct ThumbnailView: View {
                     Button {
                         movePageDown()
                     } label: {
-                        Label("Move Page Down", systemImage: "arrow.down")
+                        Label("Move Page Down", systemImage: "")
                     }
                     .disabled(!canMoveDown)
                 }

@@ -1,9 +1,4 @@
-//  Recovery UI shown when the app fails to load data or detects incompatibilities.
-//
-//  This view replaces invisible crashes with actionable user options:
-//  - Try Again: Retry loading the container
-//  - Reset All Data: Delete database and start fresh
-//  - Report Issue: Link to GitHub for bug reports
+//  remove??
 
 import SwiftUI
 
@@ -88,7 +83,7 @@ struct SchemaRecoveryView: View {
             switch state {
             case .incompatible:
                 // For incompatible data, "Check for Updates" is primary
-                Link(destination: URL(string: "itms-apps://")!) {
+                Link(destination: URL(string: "itms-apps://apps.apple.com/updates")!) {
                     Label {
                         Text("Open App Store")
                     } icon: {
@@ -176,7 +171,7 @@ enum RecoveryState {
     var description: LocalizedStringResource {
         switch self {
         case .incompatible:
-            return "Your projects were last modified by a newer version of MultiScan. Please update the app on this device to access your projects."
+            return "Your projects were last modified by a newer version of MultiScan. Please update the app on this device."
         case .failed:
             return "MultiScan was unable to load your projects due to an unexpected error."
         }
@@ -185,7 +180,7 @@ enum RecoveryState {
     var technicalDetail: String? {
         switch self {
         case .incompatible(let version):
-            return String(localized: "Data schema version: \(version), App supports: \(SchemaVersioning.currentVersion)")
+            return String(localized: "Data from version: \(version), Supported: \(SchemaVersioning.currentVersion)")
         case .failed(let error):
             return error
         }
@@ -199,9 +194,6 @@ struct ContainerLoadingView: View {
     var body: some View {
         VStack(spacing: 16) {
             ProgressView()
-            Text("Loading…")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
         }
     }
 }

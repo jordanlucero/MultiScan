@@ -229,7 +229,7 @@ final class NavigationSettings {
 
 @main
 struct MultiScanApp: App {
-    @AppStorage("showStatisticsPane") private var showStatisticsPane = true
+    @AppStorage("showStatisticsPane") private var showStatisticsPane = false
     @AppStorage("showSmartCleanup") private var showSmartCleanup = false
     @AppStorage("showThumbnails") private var showThumbnails = true
     @AppStorage("showTextPanel") private var showTextPanel = true
@@ -874,8 +874,7 @@ struct SettingsView: View {
         .navigationTitle(selectedPane.wrappedValue.displayName)
         .onAppear {
             // ⚠️ WORKAROUND: Disable minimize and zoom buttons per HIG for settings windows.
-            // Native Settings scene handles this automatically. Delete this block when
-            // switching back to native Settings scene.
+            // Native Settings scene handles this automatically. Delete this block when switching back to native Settings scene.
             if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "settings" }) {
                 window.standardWindowButton(.miniaturizeButton)?.isEnabled = false
                 window.standardWindowButton(.zoomButton)?.isEnabled = false
@@ -908,7 +907,7 @@ struct ImportAndStorageSettingsView: View {
                 Toggle("Optimize images on import", isOn: $optimizeImagesOnImport)
                 Text("MultiScan will optimize images it stores to save storage.")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(Color.secondary)
             }
 
             Section("iCloud") {
@@ -924,7 +923,7 @@ struct ImportAndStorageSettingsView: View {
 
                 Text("Sync your MultiScan projects in iCloud to work with them across your devices. Image data in larger projects may use significant iCloud storage.")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(Color.secondary)
             }
 
             #if DEBUG
@@ -963,7 +962,7 @@ struct ImportAndStorageSettingsView: View {
                         .foregroundColor(.secondary)
                 }
 
-                Button("Force Sync Now") {
+                Button("Attempt Force Sync") {
                     forceSyncNow()
                 }
                 .disabled(!SchemaVersioning.isICloudSyncEnabled)
@@ -1101,12 +1100,12 @@ struct ViewerSettingsView: View {
                 Toggle("Navigate only between filtered pages (Sequential)", isOn: Bindable(navigationSettings).sequentialUsesFilteredNavigation)
                 Text("When a filter is active, the previous and next page buttons will skip pages that don't match the filter.")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(Color.secondary)
 
                 Toggle("Navigate only between filtered pages (Shuffled)", isOn: Bindable(navigationSettings).shuffledUsesFilteredNavigation)
                 Text("When shuffle is on and a filter is active, the previous and next page buttons will only visit matching pages.")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(Color.secondary)
             }
         }
         .formStyle(.grouped)
@@ -1217,7 +1216,7 @@ struct ImportAndStorageSettingsView: View {
                         .foregroundColor(.secondary)
                 }
 
-                Button("Force Sync Now") {
+                Button("Attempt Force Sync") {
                     forceSyncNow()
                 }
                 .disabled(!SchemaVersioning.isICloudSyncEnabled)

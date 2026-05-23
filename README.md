@@ -4,8 +4,7 @@ MultiScan provides a dedicated frontend to VisionKit that makes it easy to digit
 
 Built with Swift 6, SwiftUI (with targeted usage of AppKit and UIKit), SwiftData, and VisionKit.
 
-<img width="3352" height="2217" alt="MultiScan running with a project open on an iMac" src="https://github.com/user-attachments/assets/790ca5f6-9d80-4536-9e0f-5502e13c815f" />
-
+<img width="3352" height="2217" alt="MultiScan running with a project open on an iMac" src="https://github.com/user-attachments/assets/40a99bfa-7a49-4193-a807-859bf1df69f4" />
 <br></br>
 Built with Claude Code running Claude Sonnet (4, 4.5, 4.6) and Claude Opus (4, 4.1, 4.5, 4.6, 4.7). MultiScan is appropriately sandboxed.
 

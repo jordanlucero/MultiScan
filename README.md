@@ -1,3 +1,5 @@
+<img width="2153" height="1083" alt="MultiScan" src="https://jordanhas.fun/portfolio-images/r4rm-MultiScanBanner-Landscape-HDR.avif" />
+
 MultiScan provides a dedicated frontend to VisionKit that makes it easy to digitize your multi-page physical documents into text. MultiScan is built to let you review VisionKit output on a page-by-page basis, search content within pages, and feed documents into the system Accessibility Reader (⌘⎋). 
 
 Built with Swift 6, SwiftUI (with targeted usage of AppKit and UIKit), SwiftData, and VisionKit.

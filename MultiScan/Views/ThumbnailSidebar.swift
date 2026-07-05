@@ -12,6 +12,13 @@ struct ThumbnailSidebar: View {
     @ObservedObject var navigationState: NavigationState
     @Binding var selectedPageNumber: Int?
 
+    #if os(iOS)
+    /// Callbacks for inserting pages at a position (iOS only).
+    /// The Int is the page number to insert after (0 = insert at beginning).
+    var onInsertFromPhotos: ((Int) -> Void)?
+    var onInsertFromFiles: ((Int) -> Void)?
+    #endif
+
     enum FilterOption: String, CaseIterable {
         case all
         case done
@@ -131,6 +138,20 @@ struct ThumbnailSidebar: View {
             ScrollView {
                 LazyVStack(spacing: 10) {
                     ForEach(filteredPages) { page in
+                        #if os(iOS)
+                        ThumbnailView(
+                            page: page,
+                            document: document,
+                            isSelected: selectedPageNumber == page.pageNumber,
+                            navigationState: navigationState,
+                            onInsertFromPhotos: onInsertFromPhotos,
+                            onInsertFromFiles: onInsertFromFiles
+                        ) {
+                            navigationState.goToPage(pageNumber: page.pageNumber)
+                            selectedPageNumber = page.pageNumber
+                        }
+                        .id(page.persistentModelID)  // Use stable model ID for animation
+                        #else
                         ThumbnailView(
                             page: page,
                             document: document,
@@ -141,6 +162,7 @@ struct ThumbnailSidebar: View {
                             selectedPageNumber = page.pageNumber
                         }
                         .id(page.persistentModelID)  // Use stable model ID for animation
+                        #endif
                     }
                 }
                 .padding()
@@ -238,6 +260,11 @@ struct ThumbnailView: View {
     let document: Document
     let isSelected: Bool
     var navigationState: NavigationState?
+    #if os(iOS)
+    /// Callbacks for inserting pages at a position (iOS only).
+    var onInsertFromPhotos: ((Int) -> Void)?
+    var onInsertFromFiles: ((Int) -> Void)?
+    #endif
     let action: () -> Void
 
     @Environment(\.modelContext) private var modelContext
@@ -451,6 +478,43 @@ struct ThumbnailView: View {
                     }
                     .disabled(!canMoveDown)
                 }
+
+                #if os(iOS)
+                // MARK: - Insert Pages Section (iOS only)
+                if onInsertFromPhotos != nil || onInsertFromFiles != nil {
+                    Section {
+                        Menu {
+                            if let onInsertFromPhotos {
+                                Button("From Photos…", systemImage: "photo.on.rectangle") {
+                                    onInsertFromPhotos(page.pageNumber - 1)
+                                }
+                            }
+                            if let onInsertFromFiles {
+                                Button("From Files…", systemImage: "folder") {
+                                    onInsertFromFiles(page.pageNumber - 1)
+                                }
+                            }
+                        } label: {
+                            Label("Insert Pages Before", systemImage: "doc.badge.plus")
+                        }
+
+                        Menu {
+                            if let onInsertFromPhotos {
+                                Button("From Photos…", systemImage: "photo.on.rectangle") {
+                                    onInsertFromPhotos(page.pageNumber)
+                                }
+                            }
+                            if let onInsertFromFiles {
+                                Button("From Files…", systemImage: "folder") {
+                                    onInsertFromFiles(page.pageNumber)
+                                }
+                            }
+                        } label: {
+                            Label("Insert Pages After", systemImage: "doc.badge.plus")
+                        }
+                    }
+                }
+                #endif
 
                 // MARK: - Delete Section
                 Section {

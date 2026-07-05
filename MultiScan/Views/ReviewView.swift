@@ -21,6 +21,9 @@ struct ReviewView: View {
     @State private var selectedPhotos: [PhotosPickerItem] = []
     @State private var isAddingPages: Bool = false
 
+    /// Page number to insert new pages after (nil = append to end). Set by iOS insert menus.
+    @State private var insertAfterPageNumber: Int?
+
     // Use proper NavigationSplitViewVisibility type for animated sidebar transitions
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @AppStorage("showThumbnails") private var showThumbnails = true
@@ -44,6 +47,13 @@ struct ReviewView: View {
 
     var body: some View {
         mainContent
+            #if os(iOS)
+            // On iOS the progress button lives inside the More menu, so the popover
+            // can't anchor to it — attach it to the root instead.
+            .popover(isPresented: $showProgress) {
+                ProgressPopover(navigationState: navigationState)
+            }
+            #endif
             .sheet(isPresented: $showExportPanel) {
                 ExportPanelView(document: document)
             }
@@ -121,12 +131,29 @@ struct ReviewView: View {
 
     private var splitView: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
+            #if os(iOS)
+            ThumbnailSidebar(
+                document: document,
+                navigationState: navigationState,
+                selectedPageNumber: $selectedPageNumber,
+                onInsertFromPhotos: { insertAfter in
+                    insertAfterPageNumber = insertAfter
+                    showAddFromPhotos = true
+                },
+                onInsertFromFiles: { insertAfter in
+                    insertAfterPageNumber = insertAfter
+                    showAddFromFiles = true
+                }
+            )
+            .navigationSplitViewColumnWidth(min: 150, ideal: 200, max: 400)
+            #else
             ThumbnailSidebar(
                 document: document,
                 navigationState: navigationState,
                 selectedPageNumber: $selectedPageNumber
             )
             .navigationSplitViewColumnWidth(min: 150, ideal: 200, max: 400)
+            #endif
         } detail: {
             ImageViewer(
                 document: document,
@@ -154,6 +181,124 @@ struct ReviewView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
+        #if os(iOS)
+        iOSToolbarContent
+        #else
+        macToolbarContent
+        #endif
+    }
+
+    #if os(iOS)
+    // iPad toolbar: page navigation stays visible; everything else lives in a "More" menu.
+    @ToolbarContentBuilder
+    private var iOSToolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .navigation) {
+            Button(action: onDismiss) {
+                Label("Back", systemImage: "chevron.left")
+            }
+            .accessibilityLabel("Back to Projects")
+        }
+
+        ToolbarItemGroup(placement: .primaryAction) {
+            Button { navigationState.previousPage() } label: {
+                Label("Previous", systemImage: "chevron.left")
+            }
+            .disabled(!navigationState.hasPrevious)
+
+            Button { navigationState.nextPage() } label: {
+                Label("Next", systemImage: "chevron.right")
+            }
+            .disabled(!navigationState.hasNext)
+
+            Menu {
+                // Review
+                Button { navigationState.toggleCurrentPageDone() } label: {
+                    Label(
+                        navigationState.currentPage?.isDone == true ? "Mark as Not Reviewed" : "Mark as Reviewed",
+                        systemImage: navigationState.currentPage?.isDone == true ? "checkmark.circle.fill" : "checkmark.circle"
+                    )
+                }
+
+                Button { navigationState.toggleRandomization() } label: {
+                    Label(
+                        navigationState.isRandomized ? "Sequential Order" : "Shuffled Order",
+                        systemImage: navigationState.isRandomized ? "shuffle.circle.fill" : "shuffle.circle"
+                    )
+                }
+
+                Button { showProgress.toggle() } label: {
+                    Label("View Progress", systemImage: "flag.pattern.checkered")
+                }
+
+                Divider()
+
+                // Image adjustments
+                if let page = navigationState.currentPage {
+                    Section("Image") {
+                        Button {
+                            page.rotation = (page.rotation + 90) % 360
+                        } label: {
+                            Label("Rotate Clockwise", systemImage: "rotate.right")
+                        }
+
+                        Button {
+                            page.rotation = (page.rotation + 270) % 360
+                        } label: {
+                            Label("Rotate Counterclockwise", systemImage: "rotate.left")
+                        }
+
+                        Toggle(isOn: Binding(
+                            get: { page.increaseContrast },
+                            set: { page.increaseContrast = $0 }
+                        )) {
+                            Label("Increase Contrast", systemImage: "circle.lefthalf.filled")
+                        }
+
+                        Toggle(isOn: Binding(
+                            get: { page.increaseBlackPoint },
+                            set: { page.increaseBlackPoint = $0 }
+                        )) {
+                            Label("Increase Black Point", systemImage: "circle.bottomhalf.filled")
+                        }
+                    }
+
+                    Divider()
+                }
+
+                // Panels
+                Button { showTextPanel.toggle() } label: {
+                    Label(
+                        showTextPanel ? "Hide Text Panel" : "Show Text Panel",
+                        systemImage: "sidebar.right"
+                    )
+                }
+                .keyboardShortcut("i", modifiers: [.command, .option])
+
+                Divider()
+
+                // Export
+                Section("Export") {
+                    Button { showExportPanel = true } label: {
+                        Label("Export Project Text…", systemImage: "square.and.arrow.up.on.square")
+                    }
+                }
+
+                Divider()
+
+                // Statistics
+                if let page = navigationState.currentPage {
+                    let wordCount = page.plainText.split(separator: " ").count
+                    let charCount = page.plainText.count
+                    Label("\(wordCount) words, \(charCount) characters", systemImage: "textformat")
+                }
+            } label: {
+                Label("More", systemImage: "ellipsis.circle")
+            }
+        }
+    }
+    #else
+    @ToolbarContentBuilder
+    private var macToolbarContent: some ToolbarContent {
         // Back button in navigation position
         ToolbarItem(placement: .navigation) {
             Button(action: onDismiss) {
@@ -230,6 +375,7 @@ struct ReviewView: View {
             .keyboardShortcut("i", modifiers: [.command, .option])
         }
     }
+    #endif
 
     // MARK: - Add Pages from Photos Sheet
 
@@ -332,10 +478,20 @@ struct ReviewView: View {
 
     @MainActor
     private func addPagesToDocument(images: [(data: Data, fileName: String)]) async {
-        let startingPageNumber = document.totalPages + 1
+        // Insert after a specific page (iOS insert menus) or append to the end (default).
+        let insertAfterNum = insertAfterPageNumber ?? document.totalPages
+        let insertStart = insertAfterNum + 1
+        let isAppend = insertAfterNum >= document.totalPages
+        defer { insertAfterPageNumber = nil }
 
         do {
-            let results = try await ocrService.processImages(images, startingPageNumber: startingPageNumber)
+            let results = try await ocrService.processImages(images, startingPageNumber: insertStart)
+            let newCount = results.count
+
+            // Shift existing pages that come after the insertion point (no-op when appending)
+            for page in document.unwrappedPages where page.pageNumber >= insertStart {
+                page.pageNumber += newCount
+            }
 
             // Collect new pages for cache update
             var newPages: [Page] = []
@@ -354,16 +510,27 @@ struct ReviewView: View {
                 newPages.append(page)
             }
 
-            document.totalPages += results.count
+            document.totalPages += newCount
             document.recalculateStorageSize()
 
             // Add new page entries to export cache while richText is still in memory
-            TextExportCacheService.addEntries(for: newPages, to: document)
+            if isAppend {
+                TextExportCacheService.addEntries(for: newPages, to: document)
+            } else {
+                // Page numbers shifted — update cache entries in memory (no external storage loads)
+                TextExportCacheService.insertEntries(for: newPages, in: document, shiftingFrom: insertStart, by: newCount)
+            }
 
             try modelContext.save()
 
             // Refresh navigation state with new pages
             navigationState.setupNavigation(for: document)
+
+            // Navigate to the first inserted page so the user sees the result
+            if !isAppend, let firstNew = newPages.first {
+                navigationState.goToPage(pageNumber: firstNew.pageNumber)
+                selectedPageNumber = firstNew.pageNumber
+            }
 
         } catch {
             print("Failed to add pages: \(error)")

@@ -1334,5 +1334,87 @@ struct ImportAndStorageSettingsView: View {
     }
     #endif
 }
+
+// MARK: - Viewer Settings (iOS)
+
+struct ViewerSettingsView: View {
+    @Binding var viewerBackground: String
+    var navigationSettings: NavigationSettings
+
+    var body: some View {
+        Form {
+            Section("Viewer") {
+                Picker("Background", selection: $viewerBackground) {
+                    ForEach(ViewerBackground.allCases, id: \.rawValue) { option in
+                        Text(option.label).tag(option.rawValue)
+                    }
+                }
+            }
+
+            Section("Project Navigation") {
+                Toggle("Navigate only between filtered pages (Sequential)", isOn: Bindable(navigationSettings).sequentialUsesFilteredNavigation)
+                Text("When a filter is active, the previous and next page buttons will skip pages that don't match the filter.")
+                    .font(.caption)
+                    .foregroundStyle(Color.secondary)
+
+                Toggle("Navigate only between filtered pages (Shuffled)", isOn: Bindable(navigationSettings).shuffledUsesFilteredNavigation)
+                Text("When shuffle is on and a filter is active, the previous and next page buttons will only visit matching pages.")
+                    .font(.caption)
+                    .foregroundStyle(Color.secondary)
+            }
+        }
+    }
+}
+
+// MARK: - Settings Sheet (iOS)
+
+/// iOS/iPadOS settings surface, presented as a sheet from the Home screen's gear button.
+/// Mirrors the panes of the macOS Settings window.
+struct SettingsSheetView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    @AppStorage("optimizeImagesOnImport") private var optimizeImagesOnImport = false
+    @AppStorage("viewerBackground") private var viewerBackground = ViewerBackground.default.rawValue
+
+    /// Reads from and persists to UserDefaults; review sessions pick up changes on next open.
+    @State private var navigationSettings = NavigationSettings()
+
+    var body: some View {
+        NavigationStack {
+            List {
+                NavigationLink {
+                    ImportAndStorageSettingsView(optimizeImagesOnImport: $optimizeImagesOnImport)
+                        .navigationTitle("Import and Storage")
+                        .navigationBarTitleDisplayMode(.inline)
+                } label: {
+                    Label("Import and Storage", systemImage: "square.and.arrow.down")
+                }
+
+                NavigationLink {
+                    ViewerSettingsView(
+                        viewerBackground: $viewerBackground,
+                        navigationSettings: navigationSettings
+                    )
+                    .navigationTitle("Viewer")
+                    .navigationBarTitleDisplayMode(.inline)
+                } label: {
+                    Label("Viewer", systemImage: "eye")
+                }
+            }
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "checkmark")
+                    }
+                    .buttonStyle(.glassProminent)
+                }
+            }
+        }
+    }
+}
 #endif
 

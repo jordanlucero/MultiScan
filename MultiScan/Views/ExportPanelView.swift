@@ -42,30 +42,64 @@ struct ExportPanelView: View {
     }
 
     var body: some View {
+        panelContent
+            .onAppear { schedulePreviewUpdate(immediate: true) }
+            .onChange(of: settings.createVisualSeparation) { schedulePreviewUpdate() }
+            .onChange(of: settings.separatorStyle) { schedulePreviewUpdate() }
+            .onChange(of: settings.includePageNumber) { schedulePreviewUpdate() }
+            .onChange(of: settings.includeFilename) { schedulePreviewUpdate() }
+            .onChange(of: settings.includeStatistics) { schedulePreviewUpdate() }
+            .onDisappear {
+                exportTask?.cancel()
+                debounceTask?.cancel()
+            }
+    }
+
+    @ViewBuilder
+    private var panelContent: some View {
+        #if os(iOS)
+        // Vertical sheet layout: preview on top, options below, actions in the toolbar
+        NavigationStack {
+            VStack(spacing: 0) {
+                previewPane
+
+                Divider()
+
+                optionsPane
+            }
+            .navigationTitle("Export")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    ShareLink(item: RichText(previewText), preview: SharePreview("Project Text")) {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                    .buttonStyle(.glassProminent)
+                }
+            }
+        }
+        #else
+        // Print-panel-style layout: preview on the left, options on the right
         HStack(spacing: 0) {
-            // Left side: Preview
             previewPane
                 .frame(minWidth: 350, idealWidth: 450)
 
             Divider()
 
-            // Right side: Options
             optionsPane
                 .frame(width: 280)
         }
-        .onAppear { schedulePreviewUpdate(immediate: true) }
-        .onChange(of: settings.createVisualSeparation) { schedulePreviewUpdate() }
-        .onChange(of: settings.separatorStyle) { schedulePreviewUpdate() }
-        .onChange(of: settings.includePageNumber) { schedulePreviewUpdate() }
-        .onChange(of: settings.includeFilename) { schedulePreviewUpdate() }
-        .onChange(of: settings.includeStatistics) { schedulePreviewUpdate() }
-        .onDisappear {
-            exportTask?.cancel()
-            debounceTask?.cancel()
-        }
+        #endif
     }
 
-    // MARK: - Preview Pane (Left)
+    // MARK: - Preview Pane
 
     private var previewPane: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -117,8 +151,50 @@ struct ExportPanelView: View {
         }
     }
 
-    // MARK: - Options Pane (Right)
+    // MARK: - Options Pane
 
+    #if os(iOS)
+    private var optionsPane: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                // Visual separation toggle
+                Toggle("Add visual separation", isOn: $settings.createVisualSeparation)
+
+                // Separator style picker (only shown when visual separation is enabled)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Separator Style")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    Picker("", selection: $settings.separatorStyle) {
+                        ForEach(SeparatorStyle.allCases, id: \.self) { style in
+                            Text(style.label).tag(style)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                }
+                .disabled(!settings.createVisualSeparation)
+                .opacity(settings.createVisualSeparation ? 1.0 : 0.5)
+
+                // Separator mods (metadata options)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Separator Mods")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    Toggle("Page number", isOn: $settings.includePageNumber)
+                    Toggle("Filename", isOn: $settings.includeFilename)
+                    Toggle("Statistics", isOn: $settings.includeStatistics)
+                }
+                .disabled(!settings.createVisualSeparation)
+                .opacity(settings.createVisualSeparation ? 1.0 : 0.5)
+            }
+            .padding()
+        }
+        .frame(maxHeight: 320)
+    }
+    #else
     private var optionsPane: some View {
         VStack(alignment: .leading, spacing: 20) {
             Text("Export Options")
@@ -138,11 +214,7 @@ struct ExportPanelView: View {
                         Text(style.label).tag(style)
                     }
                 }
-                #if os(macOS)
                 .pickerStyle(.radioGroup)
-                #else
-                //idk
-                #endif
                 .labelsHidden()
             }
             .disabled(!settings.createVisualSeparation)
@@ -172,7 +244,7 @@ struct ExportPanelView: View {
 
                 Spacer()
 
-                // TODO: Dismiss panel after successful share. SwiftUI's ShareLink has no completion callback (?) — would need NSSharingServicePicker with delegate.
+                // TODO: Dismiss panel after successful share. SwiftUI's ShareLink has no completion callback as of now (double-check)
                 ShareLink(item: RichText(previewText), preview: SharePreview("Project Text")) {
                     Text("Export…")
                 }
@@ -182,6 +254,7 @@ struct ExportPanelView: View {
         }
         .padding()
     }
+    #endif
 
     // MARK: - Logic
 

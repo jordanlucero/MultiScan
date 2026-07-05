@@ -40,7 +40,7 @@ struct RichText: Transferable {
             try data.write(to: tempURL)
             return SentTransferredFile(tempURL)
         }
-        .suggestedFileName("Exported Text.rtf")
+        .suggestedFileName("Exported Text.rtf") // doesn't work
 
         // 2. Data-based RTF for clipboard operations (Copy)
         DataRepresentation(exportedContentType: .rtf) { richText in

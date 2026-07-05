@@ -4,15 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-MultiScan is a macOS SwiftUI application that uses SwiftData for persistence. Currently implements a basic timestamp-based item management system with a master-detail interface.
+MultiScan is a multiplatform SwiftUI application (macOS, iOS, iPadOS) that uses SwiftData for persistence. It imports images/PDFs, runs OCR, and provides a review/edit/export workflow for the recognized text.
 
 ## Technology Stack
 
-- **Platform**: macOS 26.0+
+- **Platforms**: macOS 27.0+, iOS/iPadOS 27.0+ (single app target, `SUPPORTED_PLATFORMS = iphoneos iphonesimulator macosx`)
 - **UI Framework**: SwiftUI
 - **Persistence**: SwiftData
 - **Language**: Swift 6.0+
-- **IDE**: Xcode 26.0+
+- **IDE**: Xcode 27.0+
 
 ## Architecture
 
@@ -20,8 +20,9 @@ MultiScan is a macOS SwiftUI application that uses SwiftData for persistence. Cu
 
 1. **MultiScanApp.swift**: Entry point, configures SwiftData model container
 2. **HomeView.swift**: Document list with creation/import functionality
-3. **ReviewView.swift**: Main document editing UI with NavigationSplitView
-4. **Models.swift**: SwiftData models (`Document`, `Page`)
+3. **ReviewView.swift**: Main document editing UI with NavigationSplitView (macOS + iPad regular size class)
+4. **CompactReviewView.swift**: iPhone document editing UI (iOS-only file)
+5. **Models.swift**: SwiftData models (`Document`, `Page`)
 
 ### Data Models
 - **Document**: Container for pages with metadata (name, emoji, storage size). Uses optional `pages` relationship with `unwrappedPages` accessor for CloudKit compatibility.
@@ -55,10 +56,75 @@ xcodebuild -scheme MultiScan clean
 ## Key Implementation Details
 
 - **App Sandbox**: Enabled with read-only user file access (`com.apple.security.files.user-selected.read-only`)
-- **Minimum Deployment**: macOS 26.0
+- **Minimum Deployment**: macOS 27.0, iOS/iPadOS 27.0
 - **SwiftData Container**: Automatically manages SQLite database for Item model
 - **Navigation**: Split view pattern suitable for document-based or list-detail interfaces
 - **CloudKit Sync**: Enabled via `.private("iCloud.co.jservices.MultiScan")` container
+
+## Multiplatform Architecture (2.0)
+
+One app target builds for macOS, iPadOS, and iPhone. Platform differences are handled with `#if os(iOS)` / `#if os(macOS)` conditionals in shared files, plus a small set of iOS-only view files. **Guiding principle: the Mac experience stays as-is; iOS branches adapt around it.**
+
+### Layout Routing
+
+```
+ContentView
+├─ macOS ──────────────► ReviewView (NavigationSplitView + inspector)
+└─ iOS ─► AdaptiveReviewView (routes by horizontalSizeClass)
+          ├─ regular (iPad) ─► ReviewView (same split view as Mac, iOS toolbar)
+          └─ compact (iPhone) ─► CompactReviewView
+```
+
+Size classes (`\.horizontalSizeClass`, `\.verticalSizeClass`) don't exist on macOS — any use must be wrapped in `#if os(iOS)`.
+
+### iOS-Only View Files (entire file wrapped in `#if os(iOS)`)
+
+| File | Purpose |
+|------|---------|
+| `Views/AdaptiveReviewView.swift` | Size-class router between ReviewView and CompactReviewView |
+| `Views/CompactReviewView.swift` | iPhone layout: NavigationStack + full-screen ImageViewer + persistent RichTextSidebar bottom sheet (`presentationDetents`, background interaction enabled) + "More" menu toolbar |
+| `Views/SlideGridView.swift` | Searchable page-grid sheet for iPhone: navigate, add pages before/after a position, reorder, delete |
+
+CompactReviewView presents the text sheet with `interactiveDismissDisabled()` and swaps it out temporarily when the page grid or export panel opens (`onChange` handlers toggle `showTextSheet`). It also runs its own Smart Cleanup analysis (the sidebar's panes are hidden via `hideBottomPanels`).
+
+### Platform Behavior Differences in Shared Views
+
+| View | macOS | iOS/iPadOS |
+|------|-------|------------|
+| `ReviewView` toolbar | Discrete icon buttons (nav / review / progress / inspector) | Prev/Next + "More" (ellipsis) menu containing review, image, panel, export actions; progress popover attaches to the view root (can't anchor to a menu item) |
+| `ThumbnailSidebar` | Existing context menu | Adds "Insert Pages Before/After" context-menu section (insert-at-position is deliberately iOS-only) |
+| `RichTextSidebar` header | Page # + copy button, B/I/U/S + remove-line-breaks toolbar | Page # + copy button only (see formatting note below); Remove Line Breaks moves into the Smart Cleanup pane (iPad) or the More menu (iPhone) |
+| `ExportPanelView` | Two-pane HStack (preview left, options right), radio-group picker | Vertical NavigationStack sheet (preview top, options below), segmented picker, share/dismiss in the nav bar |
+| `HomeView` | Bare content in the window toolbar | Wrapped in NavigationStack, "MultiScan" title, gear (Settings) + plus toolbar; grid is fixed 2 columns on iPhone portrait, adaptive otherwise |
+| `DocumentCard` | Double-click opens | Single tap opens |
+| Settings | Custom Settings `Window` scene (workaround) | `SettingsSheetView` sheet from the Home gear button → Import & Storage / Viewer panes (defined in the iOS branch of MultiScanApp.swift) |
+
+### ⚠️ Text Formatting on iOS — Do Not "Fix"
+
+The iOS text panel header intentionally has **no Bold/Italic/Underline/Strikethrough buttons**. This is not apparent from the code: on iOS/iPadOS, SwiftUI's `TextEditor` bound to an `AttributedString` surfaces formatting controls **in the system keyboard itself** (and the Format menu commands work for iPad hardware keyboards). Do not add in-app formatting buttons on iOS.
+
+### Undo (iOS only)
+
+`EditablePageText` has a weak `undoManager` reference that is only wired on iOS (via `makeEditableText(for:)` in RichTextSidebar). Formatting operations and Smart Cleanup removals register undo actions, enabling shake-to-undo and three-finger-swipe gestures. On macOS the reference stays nil so undo registration is a no-op — Mac behavior is unchanged. Undo history is cleared when switching pages.
+
+### Insert Pages at Position (iOS only)
+
+`ReviewView.addPagesToDocument` and CompactReviewView support inserting after a specific page number: existing pages/cache entries at or beyond the insertion point are shifted, then `TextExportCacheService.insertEntries(for:in:shiftingFrom:by:)` updates the cache in memory (no external-storage rebuild). Appending (the only path reachable on macOS) still uses `addEntries` as before.
+
+### Save Protection on iOS
+
+In addition to the shared debounce/page-switch/disappear saves, iOS adds `UIApplication.willTerminateNotification` (RichTextSidebar) and a `scenePhase == .background` save (CompactReviewView), since iOS apps are rarely quit explicitly.
+
+### Menu Commands on iPadOS
+
+The `.commands` block is shared across platforms — iPadOS renders them in its menu bar and hardware-keyboard shortcuts work. Only the Settings command/window is macOS-gated.
+
+### Project Configuration Notes
+
+- iPhone orientations: portrait + landscape (`INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone`); iPad supports all four
+- Launch screen is generated (`INFOPLIST_KEY_UILaunchScreen_Generation = YES`) — there is no storyboard
+- One shared entitlements file (iCloud + aps only); macOS sandbox comes from the `ENABLE_APP_SANDBOX` build setting, which iOS ignores
+- The `MultiScan.icon` Icon Composer file provides the app icon for all platforms
 
 ## CloudKit Sync Architecture
 
@@ -391,8 +457,8 @@ All save calls check `hasUnsavedChanges` first — no-op if no edits were made.
 ### Important Notes
 - No separate "view mode" vs "edit mode" — always editable
 - Click outside TextEditor to unfocus (removes cursor)
-- Formatting toolbar always visible in header when page selected
-- `modelContext.save()` on app quit ensures synchronous disk write before termination
+- Formatting toolbar always visible in header when page selected (macOS only — iOS uses the system keyboard's formatting controls; see Multiplatform Architecture)
+- `modelContext.save()` on app quit ensures synchronous disk write before termination (`NSApplication`/`UIApplication` `willTerminateNotification` per platform; iPhone also saves on `scenePhase == .background`)
 
 ## Full Document Text Cache
 
@@ -754,9 +820,11 @@ SmartCleanupResult + currentPageNumber → buildOptions() → [CleanupOption]
 ```
 
 ### UI Location
-Bottom of `RichTextSidebar` inspector, below the Statistics pane. Toggled via:
+Bottom of `RichTextSidebar` inspector, below the Statistics pane (macOS + iPad). Toggled via:
 - `@AppStorage("showSmartCleanup")` (default: OFF)
 - View menu: "Show Smart Cleanup" (⌘⇧K)
+
+On iPhone, the sidebar's panes are hidden (`hideBottomPanels`); Smart Cleanup instead lives in CompactReviewView's "More" menu and is always active there.
 
 ### UI States
 | State | Menu Appearance |
@@ -777,8 +845,9 @@ Note: Document-wide section header removal was removed (too many false positives
 
 ### Timing
 - Analysis runs after user lingers on a page for **3 seconds** (debounces rapid page flips)
-- Only runs when the Smart Cleanup pane is visible
+- Only runs when the Smart Cleanup pane is visible (macOS/iPad); always runs on iPhone (More menu)
 - After a cleanup action, re-analyzes immediately (no 3s delay)
+- Analysis runs **off the MainActor**: the raw cache `Data` is handed to a detached task, decoded via the nonisolated `TextExportCacheService.decodeCache(from:)`, and only the resulting options are applied back on the main actor
 
 ### Removal Behavior
 

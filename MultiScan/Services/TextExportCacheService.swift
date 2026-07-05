@@ -235,6 +235,38 @@ enum TextExportCacheService {
         saveCache(cache, to: document)
     }
 
+    /// Inserts new page entries mid-document, shifting existing entries' page numbers.
+    ///
+    /// Call this after inserting pages at a specific position. Existing entries at or after
+    /// `insertStart` are renumbered by `count` to match the already-renumbered Page models.
+    /// Avoids `rebuildCache(for:)`, which would load every page from external storage.
+    ///
+    /// - Parameters:
+    ///   - pages: The newly inserted pages (with richText already loaded)
+    ///   - document: The document containing the cache
+    ///   - insertStart: The first page number of the inserted range
+    ///   - count: How many pages were inserted
+    static func insertEntries(for pages: [Page], in document: Document, shiftingFrom insertStart: Int, by count: Int) {
+        guard var cache = loadCache(from: document) else {
+            rebuildCache(for: document)
+            return
+        }
+
+        for index in cache.pages.indices where cache.pages[index].pageNumber >= insertStart {
+            let entry = cache.pages[index]
+            cache.pages[index] = PageCacheEntry(
+                pageNumber: entry.pageNumber + count,
+                fileName: entry.fileName,
+                richText: entry.richText
+            )
+        }
+
+        cache.pages.append(contentsOf: pages.map { PageCacheEntry(from: $0) })
+        cache.pages.sort { $0.pageNumber < $1.pageNumber }
+
+        saveCache(cache, to: document)
+    }
+
     /// Removes a page entry and renumbers subsequent pages.
     ///
     /// Call this after a page is deleted from the document.
@@ -314,7 +346,12 @@ enum TextExportCacheService {
     /// - Returns: The decoded cache, or nil if unavailable
     static func loadCache(from document: Document) -> TextExportCache? {
         guard let data = document.textExportCache else { return nil }
+        return Self.decodeCache(from: data)
+    }
 
+    /// Decodes a cache from raw data without requiring MainActor isolation.
+    /// Use this to pass cache data to background threads for analysis.
+    nonisolated static func decodeCache(from data: Data) -> TextExportCache? {
         do {
             let cache = try JSONDecoder().decode(TextExportCache.self, from: data)
 

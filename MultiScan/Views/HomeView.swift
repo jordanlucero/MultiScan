@@ -7,6 +7,10 @@ struct HomeView: View {
     var onDocumentSelected: (Document) -> Void
 
     @Environment(\.modelContext) private var modelContext
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    #endif
     @Query private var documents: [Document]
     @StateObject private var ocrService = OCRService()
     private let importService = ImageImportService()
@@ -34,12 +38,27 @@ struct HomeView: View {
     @State private var hasAnnouncedHalfway = false
     @State private var processingPageCount = 0
 
-    // Automatically shows debug settings sheet (iOS only)
-    #if DEBUG && os(iOS)
-    @State private var showingDebugSettings = true
+    // Settings sheet (iOS only — macOS uses the Settings window)
+    #if os(iOS)
+    @State private var showingSettings = false
     #endif
 
     var body: some View {
+        #if os(iOS)
+        // iOS needs a NavigationStack for the toolbar; macOS uses the window toolbar
+        NavigationStack {
+            homeContent
+                .navigationTitle("MultiScan")
+        }
+        .sheet(isPresented: $showingSettings) {
+            SettingsSheetView()
+        }
+        #else
+        homeContent
+        #endif
+    }
+
+    private var homeContent: some View {
         Group {
             if documents.isEmpty && !isPreparingImport {
                 emptyState
@@ -96,25 +115,6 @@ struct HomeView: View {
         }
         // to fix inconsistent window corner radius :(
         .toolbar { toolbarContent }
-        #if DEBUG && os(iOS)
-        .sheet(isPresented: $showingDebugSettings) {
-            NavigationStack {
-                ImportAndStorageSettingsView(optimizeImagesOnImport: $optimizeImagesOnImport)
-                    .navigationTitle("Debug Settings")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button {
-                                showingDebugSettings = false
-                            } label: {
-                                Image(systemName: "checkmark")
-                            }
-                            .buttonStyle(.glassProminent)
-                        }
-                    }
-            }
-        }
-        #endif
     }
 
     // MARK: - View Components
@@ -127,11 +127,19 @@ struct HomeView: View {
         }
     }
 
+    /// Grid columns: fixed 2 on iPhone portrait, adaptive everywhere else
+    private var gridColumns: [GridItem] {
+        #if os(iOS)
+        if horizontalSizeClass == .compact && verticalSizeClass == .regular {
+            return Array(repeating: GridItem(.flexible(), spacing: 24, alignment: .top), count: 2)
+        }
+        #endif
+        return [GridItem(.adaptive(minimum: 200, maximum: 260), spacing: 24, alignment: .top)]
+    }
+
     private var documentsGrid: some View {
         ScrollView {
-            LazyVGrid(columns: [
-                GridItem(.adaptive(minimum: 200, maximum: 260), spacing: 24, alignment: .top)
-            ], alignment: .leading, spacing: 16) {
+            LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 16) {
                 if isPreparingImport {
                     placeholderCard
                 }
@@ -171,6 +179,18 @@ struct HomeView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
+        #if os(iOS)
+        // Settings live in a sheet on iOS (macOS has a Settings window via the app menu)
+        ToolbarItem(placement: .topBarLeading) {
+            Button {
+                showingSettings = true
+            } label: {
+                Label("Settings", systemImage: "gear")
+            }
+            .accessibilityLabel("Settings")
+        }
+        #endif
+
         ToolbarItem(placement: .primaryAction) {
             addProjectToolbarItem
         }
@@ -389,11 +409,8 @@ struct HomeView: View {
     private func handleDrop(providers: [NSItemProvider]) {
         guard let provider = providers.first else { return }
 
-        provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { (item, error) in
-            guard let data = item as? Data,
-                  let url = URL(dataRepresentation: data, relativeTo: nil) else {
-                return
-            }
+        _ = provider.loadObject(ofClass: URL.self) { url, _ in
+            guard let url else { return }
 
             Task { @MainActor in
                 await processFileURLs([url])
@@ -460,7 +477,6 @@ struct HomeView: View {
         document.recalculateStorageSize()
 
         // Build text export cache while page richText is still in memory
-        // This avoids external storage loads when exporting later
         TextExportCacheService.buildInitialCache(for: document, from: document.unwrappedPages)
 
         do {

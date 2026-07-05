@@ -14,11 +14,7 @@ struct ContentView: View {
     var body: some View {
         Group {
             if let document = selectedDocument {
-                ReviewView(document: document, onDismiss: {
-                    withAnimation(.easeInOut(duration: 0.25)) {
-                        selectedDocument = nil
-                    }
-                })
+                documentView(for: document)
                 .transition(.opacity.combined(with: .scale(scale: 0.98)))
             } else {
                 HomeView(onDocumentSelected: { document in
@@ -28,6 +24,22 @@ struct ContentView: View {
                 })
                 .transition(.opacity.combined(with: .scale(scale: 0.98)))
             }
+        }
+    }
+
+    /// Routes to the size-class-adaptive layout on iOS; macOS always uses ReviewView.
+    @ViewBuilder
+    private func documentView(for document: Document) -> some View {
+        #if os(iOS)
+        AdaptiveReviewView(document: document, onDismiss: dismissDocument)
+        #else
+        ReviewView(document: document, onDismiss: dismissDocument)
+        #endif
+    }
+
+    private func dismissDocument() {
+        withAnimation(.easeInOut(duration: 0.25)) {
+            selectedDocument = nil
         }
     }
 }

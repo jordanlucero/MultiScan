@@ -1,5 +1,8 @@
 {
   "color-space-for-untagged-svg-colors" : "display-p3",
+  "features" : [
+    "specular-location"
+  ],
   "fill-specializations" : [
     {
       "value" : {
@@ -26,6 +29,7 @@
   ],
   "groups" : [
     {
+      "blur-material" : null,
       "layers" : [
         {
           "blend-mode" : "plus-lighter",
@@ -37,7 +41,7 @@
               }
             }
           ],
-          "glass" : false,
+          "glass" : true,
           "hidden" : false,
           "image-name" : "Untitled4356789.png",
           "name" : "Untitled4356789",
@@ -70,7 +74,7 @@
               "value" : true
             }
           ],
-          "hidden" : false,
+          "hidden" : true,
           "image-name" : "customshapes2.png",
           "name" : "customshapes2",
           "opacity-specializations" : [
@@ -93,25 +97,17 @@
         {
           "blend-mode" : "normal",
           "fill" : "automatic",
-          "glass-specializations" : [
-            {
-              "value" : true
-            },
-            {
-              "appearance" : "tinted",
-              "value" : true
-            }
-          ],
-          "hidden" : true,
+          "glass" : true,
+          "hidden" : false,
           "image-name" : "Note Jun 17, 2025.png",
           "name" : "Note Jun 17, 2025",
           "opacity-specializations" : [
             {
-              "value" : 0.3
+              "value" : 0.4
             },
             {
               "appearance" : "tinted",
-              "value" : 0.75
+              "value" : 0.5
             }
           ],
           "position" : {
@@ -123,13 +119,20 @@
           }
         }
       ],
-      "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.5
+      "lighting" : "combined",
+      "refractivity" : {
+        "depth" : 1,
+        "enabled" : false,
+        "strength" : 0.213984375
       },
+      "shadow" : {
+        "kind" : "none",
+        "opacity" : 0.44
+      },
+      "specular" : "inside",
       "translucency" : {
         "enabled" : true,
-        "value" : 0.5
+        "value" : 0.7
       }
     }
   ],

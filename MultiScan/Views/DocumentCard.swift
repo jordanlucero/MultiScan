@@ -60,10 +60,19 @@ struct DocumentCard: View {
         .onHover { hovering in
             isHovered = hovering
         }
+        #if os(iOS)
+        // Touch: single tap opens the project
+        .onTapGesture {
+            guard !isProcessing else { return }
+            onOpen()
+        }
+        #else
+        // Mac: double-click opens (single click selects/focuses)
         .onTapGesture(count: 2) {
             guard !isProcessing else { return }
             onOpen()
         }
+        #endif
         .contextMenu { contextMenuContent }
         .focusable()
         .focused($isCardFocused)

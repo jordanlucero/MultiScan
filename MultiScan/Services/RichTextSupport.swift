@@ -1,5 +1,3 @@
-//  Rich text utilities and AttributedString extensions for macOS 26+ aligned releases
-
 import Foundation
 import SwiftUI
 import CoreText

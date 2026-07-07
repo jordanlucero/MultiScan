@@ -3,8 +3,6 @@
 //  MultiScan
 //
 //  Searchable page grid presented as a sheet in the compact (iPhone) layout.
-//  Supports navigation, insertion at a position, reordering, and deletion.
-//
 
 #if os(iOS)
 import SwiftUI

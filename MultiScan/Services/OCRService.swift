@@ -1,5 +1,5 @@
 // OCRService may be useful for exaptation from MultiScan.
-// Based on the version from MultiScan v1.x releases
+// Based on the version from MultiScan v2.x releases
 
 import Foundation
 import Vision

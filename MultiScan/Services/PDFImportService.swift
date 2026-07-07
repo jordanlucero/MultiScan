@@ -1,5 +1,5 @@
 // PDFImportService may be useful for exaptation from MultiScan. PDF documents are rendered as images and passed to VisionKit.
-// Based on the version from MultiScan v1.x releases
+// Based on the version from MultiScan v2.x releases
 
 import Foundation
 import PDFKit

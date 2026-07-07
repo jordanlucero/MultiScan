@@ -2,9 +2,7 @@
 //  CompactReviewView.swift
 //  MultiScan
 //
-//  iPhone (compact size class) review layout: full-screen image viewer with a
-//  persistent bottom sheet for the page text, a page grid sheet for navigation
-//  and management, and a "More" menu for all page actions.
+//  iPhone (compact size class) review layout: full-screen image viewer with a persistent bottom sheet for the page text, a page grid sheet for navigation, and a toolbar.
 //
 
 #if os(iOS)

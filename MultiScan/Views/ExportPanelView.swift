@@ -5,7 +5,6 @@
 //  Print-panel-style export view with preview and options.
 //
 //  Uses `TextExporter` with document-based initialization to enable cache-based export.
-//  This loads page data from a single cached file instead of N external storage files, dramatically improving performance for large documents.
 //
 
 import SwiftUI

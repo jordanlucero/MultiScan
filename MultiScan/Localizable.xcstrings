@@ -449,6 +449,7 @@
     },
     "Default" : {
       "comment" : "Viewer background option: system default",
+      "extractionState" : "stale",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -1993,6 +1994,9 @@
           }
         }
       }
+    },
+    "System" : {
+      "comment" : "Viewer background option: system default"
     },
     "Text Editor, Page %lld of %lld. Select to copy the page text." : {
       "comment" : "Accessibility label on RichTextSidebar header",

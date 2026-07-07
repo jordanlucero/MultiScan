@@ -235,7 +235,7 @@ struct MultiScanApp: App {
     @AppStorage("showTextPanel") private var showTextPanel = true
     @AppStorage("filterOption") private var filterOption = "all"
     @AppStorage("optimizeImagesOnImport") private var optimizeImagesOnImport = false
-    @AppStorage("viewerBackground") private var viewerBackground = ViewerBackground.default.rawValue
+    @AppStorage("viewerBackground") private var viewerBackground = ViewerBackground.system.rawValue
 
     @FocusedValue(\.document) private var focusedDocument: Document?
     @FocusedValue(\.navigationState) private var focusedNavigationState: NavigationState?
@@ -1114,7 +1114,7 @@ struct ViewerSettingsView: View {
 
 #Preview("Settings Pane (English)") {
     @Previewable @State var optimizeImages = false
-    @Previewable @State var viewerBackground = ViewerBackground.default.rawValue
+    @Previewable @State var viewerBackground = ViewerBackground.system.rawValue
     @Previewable @State var navigationSettings = NavigationSettings()
 
     SettingsView(
@@ -1127,7 +1127,7 @@ struct ViewerSettingsView: View {
 
 #Preview("Settings Pane (es-419)") {
     @Previewable @State var optimizeImages = false
-    @Previewable @State var viewerBackground = ViewerBackground.default.rawValue
+    @Previewable @State var viewerBackground = ViewerBackground.system.rawValue
     @Previewable @State var navigationSettings = NavigationSettings()
 
     SettingsView(
@@ -1374,7 +1374,7 @@ struct SettingsSheetView: View {
     @Environment(\.dismiss) private var dismiss
 
     @AppStorage("optimizeImagesOnImport") private var optimizeImagesOnImport = false
-    @AppStorage("viewerBackground") private var viewerBackground = ViewerBackground.default.rawValue
+    @AppStorage("viewerBackground") private var viewerBackground = ViewerBackground.system.rawValue
 
     /// Reads from and persists to UserDefaults; review sessions pick up changes on next open.
     @State private var navigationSettings = NavigationSettings()

@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 100;
 	objects = {
 
 /* Begin PBXFileReference section */
@@ -34,10 +34,8 @@
 /* Begin PBXFrameworksBuildPhase section */
 		B4BCDE092DE1209B00BBA2C2 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
@@ -71,14 +69,10 @@
 			);
 			buildRules = (
 			);
-			dependencies = (
-			);
 			fileSystemSynchronizedGroups = (
 				B4BCDE0E2DE1209B00BBA2C2 /* MultiScan */,
 			);
 			name = MultiScan;
-			packageProductDependencies = (
-			);
 			productName = MultiScan;
 			productReference = B4BCDE0C2DE1209B00BBA2C2 /* MultiScan.app */;
 			productType = "com.apple.product-type.application";
@@ -108,7 +102,7 @@
 			);
 			mainGroup = B4BCDE032DE1209B00BBA2C2;
 			minimizedProjectReferenceProxies = 1;
-			preferredProjectObjectVersion = 77;
+			preferredProjectObjectVersion = 100;
 			productRefGroup = B4BCDE0D2DE1209B00BBA2C2 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -121,25 +115,21 @@
 /* Begin PBXResourcesBuildPhase section */
 		B4BCDE0A2DE1209B00BBA2C2 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		B4BCDE082DE1209B00BBA2C2 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		B4BCDE182DE1209D00BBA2C2 /* Debug */ = {
+		B4BCDE182DE1209D00BBA2C2 /* Debug configuration for PBXProject "MultiScan" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -208,7 +198,7 @@
 			};
 			name = Debug;
 		};
-		B4BCDE192DE1209D00BBA2C2 /* Release */ = {
+		B4BCDE192DE1209D00BBA2C2 /* Release configuration for PBXProject "MultiScan" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -269,7 +259,7 @@
 			};
 			name = Release;
 		};
-		B4BCDE1B2DE1209D00BBA2C2 /* Debug */ = {
+		B4BCDE1B2DE1209D00BBA2C2 /* Debug configuration for PBXNativeTarget "MultiScan" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = MultiScan;
@@ -278,7 +268,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 475;
+				CURRENT_PROJECT_VERSION = 476;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 72TUR237NP;
 				ENABLE_APP_SANDBOX = YES;
@@ -316,7 +306,7 @@
 			};
 			name = Debug;
 		};
-		B4BCDE1C2DE1209D00BBA2C2 /* Release */ = {
+		B4BCDE1C2DE1209D00BBA2C2 /* Release configuration for PBXNativeTarget "MultiScan" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = MultiScan;
@@ -325,7 +315,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 475;
+				CURRENT_PROJECT_VERSION = 476;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 72TUR237NP;
 				ENABLE_APP_SANDBOX = YES;
@@ -369,19 +359,17 @@
 		B4BCDE072DE1209B00BBA2C2 /* Build configuration list for PBXProject "MultiScan" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				B4BCDE182DE1209D00BBA2C2 /* Debug */,
-				B4BCDE192DE1209D00BBA2C2 /* Release */,
+				B4BCDE182DE1209D00BBA2C2 /* Debug configuration for PBXProject "MultiScan" */,
+				B4BCDE192DE1209D00BBA2C2 /* Release configuration for PBXProject "MultiScan" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 		B4BCDE1A2DE1209D00BBA2C2 /* Build configuration list for PBXNativeTarget "MultiScan" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				B4BCDE1B2DE1209D00BBA2C2 /* Debug */,
-				B4BCDE1C2DE1209D00BBA2C2 /* Release */,
+				B4BCDE1B2DE1209D00BBA2C2 /* Debug configuration for PBXNativeTarget "MultiScan" */,
+				B4BCDE1C2DE1209D00BBA2C2 /* Release configuration for PBXNativeTarget "MultiScan" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */

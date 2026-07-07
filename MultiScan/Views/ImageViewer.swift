@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Background color options for the image viewer
 enum ViewerBackground: String, CaseIterable {
-    case `default` = "default"
+    case `system` = "system"
     case white = "white"
     case lightGray = "lightGray"
     case gray = "gray"
@@ -12,7 +12,7 @@ enum ViewerBackground: String, CaseIterable {
 
     var label: LocalizedStringResource {
         switch self {
-        case .default: LocalizedStringResource("Default", comment: "Viewer background option: system default")
+        case .system: LocalizedStringResource("System", comment: "Viewer background option: system default")
         case .white: LocalizedStringResource("White", comment: "Viewer background option: white color")
         case .lightGray: LocalizedStringResource("Light Gray", comment: "Viewer background option: light gray color")
         case .gray: LocalizedStringResource("Gray", comment: "Viewer background option: gray color")
@@ -24,7 +24,7 @@ enum ViewerBackground: String, CaseIterable {
 
     var color: Color? {
         switch self {
-        case .default: nil
+        case .system: nil
         case .white: .white
         case .lightGray: Color(white: 0.9)
         case .gray: Color(white: 0.6)
@@ -40,10 +40,10 @@ struct ImageViewer: View {
     @ObservedObject var navigationState: NavigationState
 
     // Settings
-    @AppStorage("viewerBackground") private var viewerBackgroundRaw = ViewerBackground.default.rawValue
+    @AppStorage("viewerBackground") private var viewerBackgroundRaw = ViewerBackground.system.rawValue
 
     private var viewerBackground: ViewerBackground {
-        ViewerBackground(rawValue: viewerBackgroundRaw) ?? .default
+        ViewerBackground(rawValue: viewerBackgroundRaw) ?? .system
     }
 
     // Processed image ready for display (rotated + adjusted)

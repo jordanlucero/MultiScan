@@ -2,9 +2,7 @@
 //  AdaptiveReviewView.swift
 //  MultiScan
 //
-//  Size-class-aware wrapper that routes to either the regular
-//  NavigationSplitView layout (iPad) or the compact bottom-sheet layout (iPhone).
-//  iOS-only: macOS uses ReviewView directly (size classes don't exist on macOS).
+//  Size-class-aware wrapper that routes to either the regular NavigationSplitView layout (iPad) or the compact bottom-sheet layout (iPhone).
 //
 
 #if os(iOS)

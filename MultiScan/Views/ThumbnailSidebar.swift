@@ -424,7 +424,7 @@ struct ThumbnailView: View {
 
                 // MARK: - Export Section
                 Section {
-                    ShareLink(item: RichText(page.richText),
+                    ShareLink(item: RichText(page.attributedText),
                               preview: SharePreview(String(localized: "Page \(page.pageNumber) Text"))) {
                         Label("Export Page Text…", systemImage: "square.and.arrow.up")
                     }

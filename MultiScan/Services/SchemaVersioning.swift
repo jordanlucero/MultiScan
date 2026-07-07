@@ -31,9 +31,13 @@
 //
 //  See CLAUDE.md for detailed version history.
 //
-//  | Version | Notes                                    |
-//  |---------|------------------------------------------|
-//  | 1       | Initial tracked version with CloudKit    |
+//  | Version | Notes                                                        |
+//  |---------|--------------------------------------------------------------|
+//  | 1       | Initial tracked version with CloudKit                        |
+//  | 2       | 2.0: Page.richTextData format changed from JSON-encoded      |
+//  |         | AttributedString to RTF (TextKit 2 engine). Same property/   |
+//  |         | type, so the SwiftData schema is unchanged — but v1 apps     |
+//  |         | cannot decode RTF text and must not write over it.           |
 //
 
 import Foundation
@@ -60,7 +64,11 @@ enum SchemaVersioning {
     ///
     /// After bumping, update the version history in CLAUDE.md and add handling
     /// in SchemaValidationService for the migration path.
-    static let currentVersion = 1
+    ///
+    /// Version 2 (app 2.0): rich text data format changed to RTF. Older app builds
+    /// decode `richTextData` as JSON and would see empty text (and could overwrite
+    /// it), so they must be gated behind the "Update Required" flow.
+    static let currentVersion = 2
 
     /// Minimum schema version this app can read.
     ///
@@ -189,7 +197,12 @@ final class SchemaMetadata {
     func recordSuccessfulLoad() {
         self.lastSuccessfulLoad = Date()
         self.lastAppBuild = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown"
-        // Note: Don't update schemaVersion here - it should only change when we deliberately bump it for breaking changes
+        // Raise (never lower) the stored version: once this app version runs it writes
+        // current-format data, and older devices syncing via CloudKit must see the bump
+        // so their version gate fires.
+        if schemaVersion < SchemaVersioning.currentVersion {
+            schemaVersion = SchemaVersioning.currentVersion
+        }
     }
 }
 

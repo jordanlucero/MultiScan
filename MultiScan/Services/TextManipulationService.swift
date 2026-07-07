@@ -3,34 +3,35 @@
 
 import Foundation
 
-/// Service for programmatic text transformations on AttributedString.
-/// All operations preserve formatting attributes (bold, italic, etc.)
+/// Service for programmatic text transformations on NSAttributedString and for
+/// Smart Cleanup analysis of plain text.
+///
+/// Analysis operates purely on the plain text stored in the export cache (no
+/// attributed string decoding). Removal operations compute ranges on plain text
+/// and delete them from `NSMutableAttributedString`, which preserves formatting
+/// attributes on the surrounding text automatically.
 enum TextManipulationService {
 
     // MARK: - Line Break Removal
 
-    /// Replaces all line break characters (\n, \r\n, \r) with single spaces
-    /// - Parameter text: The attributed string to transform
-    /// - Returns: A new attributed string with line breaks replaced by spaces
-    static func removingLineBreaks(from text: AttributedString) -> AttributedString {
-        var result = AttributedString()
-
-        // Iterate through runs to preserve attributes on each segment
-        for run in text.runs {
-            var runText = String(text[run.range].characters)
-
-            // Replace all line break variants with single space
-            runText = runText.replacingOccurrences(of: "\r\n", with: " ")
-            runText = runText.replacingOccurrences(of: "\n", with: " ")
-            runText = runText.replacingOccurrences(of: "\r", with: " ")
-
-            // Create new attributed substring with same attributes
-            var newSegment = AttributedString(runText)
-            newSegment.mergeAttributes(run.attributes)
-            result.append(newSegment)
+    /// Replaces all line break characters (\n, \r\n, \r) with single spaces, in place.
+    /// Editing through `mutableString` preserves attributes on the surrounding text.
+    static func replaceLineBreaks(in text: NSMutableAttributedString) {
+        let mutable = text.mutableString
+        for lineBreak in ["\r\n", "\n", "\r"] {
+            mutable.replaceOccurrences(
+                of: lineBreak,
+                with: " ",
+                range: NSRange(location: 0, length: mutable.length)
+            )
         }
+    }
 
-        return result
+    /// Non-mutating variant of `replaceLineBreaks(in:)`.
+    static func removingLineBreaks(from text: NSAttributedString) -> NSAttributedString {
+        let mutable = NSMutableAttributedString(attributedString: text)
+        replaceLineBreaks(in: mutable)
+        return mutable
     }
 
     // MARK: - Smart Cleanup Types
@@ -319,7 +320,7 @@ enum TextManipulationService {
         // Detect page numbers (standalone patterns AND mixed header+number lines)
         var pageNumberDetections: [PageNumberDetection] = []
         for entry in sortedEntries {
-            let plainText = String(entry.richText.characters)
+            let plainText = entry.plainText
             let lines = plainText.components(separatedBy: .newlines)
             let nonEmptyLines = lines.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
 
@@ -423,7 +424,7 @@ enum TextManipulationService {
         var lineOccurrences: [String: [Occurrence]] = [:]
 
         for entry in entries {
-            let plainText = String(entry.richText.characters)
+            let plainText = entry.plainText
             let lines = plainText.components(separatedBy: .newlines)
             let allNonEmpty = lines
                 .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -608,8 +609,7 @@ enum TextManipulationService {
         var valueToOccurrences: [Int: [(page: Int, text: String)]] = [:]
 
         for entry in entries {
-            let plainText = String(entry.richText.characters)
-            let numbers = extractStandaloneNumbers(from: plainText)
+            let numbers = extractStandaloneNumbers(from: entry.plainText)
             for num in numbers {
                 valueToOccurrences[num.value, default: []].append((page: entry.pageNumber, text: num.text))
             }
@@ -753,19 +753,32 @@ enum TextManipulationService {
 
     // MARK: - Page Number Token Removal
 
-    /// Removes a page number token and adjacent whitespace from an AttributedString.
-    /// Only removes the number text (not the entire line). Collapses the line if it becomes empty.
-    /// Searches for the first standalone occurrence of `numberText` (surrounded by non-digit/non-comma characters).
-    static func removePageNumberToken(
-        _ numberText: String,
-        from text: AttributedString
-    ) -> AttributedString {
-        let plainText = String(text.characters)
-        guard !plainText.isEmpty, !numberText.isEmpty else { return text }
+    /// Removes a page number token and adjacent whitespace from an attributed string, in place.
+    /// Deleting a range from `NSMutableAttributedString` preserves surrounding formatting.
+    static func removePageNumberToken(_ numberText: String, in text: NSMutableAttributedString) {
+        let plainText = text.string
+        guard let range = removalRange(forPageNumberToken: numberText, in: plainText) else { return }
+        text.deleteCharacters(in: NSRange(range, in: plainText))
+    }
+
+    /// Non-mutating variant of `removePageNumberToken(_:in:)`.
+    static func removingPageNumberToken(_ numberText: String, from text: NSAttributedString) -> NSAttributedString {
+        let mutable = NSMutableAttributedString(attributedString: text)
+        removePageNumberToken(numberText, in: mutable)
+        return mutable
+    }
+
+    /// Computes the removal range for a page number token and its adjacent whitespace.
+    /// Only covers the number text (not the entire line), but collapses the whole line
+    /// (including newline) if removing the token would leave it empty.
+    /// Searches for the first standalone occurrence of `numberText` (surrounded by
+    /// non-digit/non-comma characters). Returns nil when the token isn't found.
+    static func removalRange(forPageNumberToken numberText: String, in plainText: String) -> Range<String.Index>? {
+        guard !plainText.isEmpty, !numberText.isEmpty else { return nil }
 
         // Find the number as a standalone token in the plain text
         guard let tokenRange = findStandaloneToken(numberText, in: plainText) else {
-            return text
+            return nil
         }
 
         let tokenStart = tokenRange.lowerBound
@@ -834,12 +847,10 @@ enum TextManipulationService {
             }
         }
 
-        // Map character offsets to AttributedString indices and remove
-        var result = text
-        let startIdx = result.characters.index(result.startIndex, offsetBy: removeStart)
-        let endIdx = result.characters.index(result.startIndex, offsetBy: removeEnd)
-        result.removeSubrange(startIdx..<endIdx)
-        return result
+        // Map character offsets to String indices
+        let startIdx = plainText.index(plainText.startIndex, offsetBy: removeStart)
+        let endIdx = plainText.index(plainText.startIndex, offsetBy: removeEnd)
+        return startIdx..<endIdx
     }
 
     /// Finds the first standalone occurrence of a token in text.
@@ -907,18 +918,39 @@ enum TextManipulationService {
 
     // MARK: - Line Removal
 
-    /// Removes the first line whose content matches `normalizedTarget` from the given AttributedString.
+    /// Removes the first line whose content matches `normalizedTarget`, in place.
     /// Removes the entire line including its newline character.
     /// Preserves all formatting attributes on surrounding text.
+    static func removeLine(
+        matching normalizedTarget: String,
+        in text: NSMutableAttributedString,
+        stripNumbers: Bool = false
+    ) {
+        let plainText = text.string
+        guard let range = lineRemovalRange(matching: normalizedTarget, in: plainText, stripNumbers: stripNumbers) else { return }
+        text.deleteCharacters(in: NSRange(range, in: plainText))
+    }
+
+    /// Non-mutating variant of `removeLine(matching:in:stripNumbers:)`.
+    static func removingLine(
+        matching normalizedTarget: String,
+        from text: NSAttributedString,
+        stripNumbers: Bool = false
+    ) -> NSAttributedString {
+        let mutable = NSMutableAttributedString(attributedString: text)
+        removeLine(matching: normalizedTarget, in: mutable, stripNumbers: stripNumbers)
+        return mutable
+    }
+
+    /// Computes the removal range (line + newline) for the first line matching `normalizedTarget`.
     ///
     /// When `stripNumbers` is true, uses OCR-aware fuzzy matching: strips trailing/leading page numbers,
     /// applies OCR normalization (digit-letter confusions), and allows edit distance ≤ 2.
-    static func removeLine(
+    static func lineRemovalRange(
         matching normalizedTarget: String,
-        from text: AttributedString,
+        in plainText: String,
         stripNumbers: Bool = false
-    ) -> AttributedString {
-        let plainText = String(text.characters)
+    ) -> Range<String.Index>? {
         let lines = plainText.components(separatedBy: "\n")
 
         // Pre-compute OCR-normalized target for fuzzy matching
@@ -958,21 +990,15 @@ enum TextManipulationService {
                     removeLength += 1
                 }
 
-                // Map character offsets to AttributedString indices
-                var result = text
-                let startIdx = result.characters.index(
-                    result.startIndex, offsetBy: removeStart
-                )
-                let endIdx = result.characters.index(
-                    startIdx, offsetBy: removeLength
-                )
-                result.removeSubrange(startIdx..<endIdx)
-                return result
+                // Map character offsets to String indices
+                let startIdx = plainText.index(plainText.startIndex, offsetBy: removeStart)
+                let endIdx = plainText.index(startIdx, offsetBy: removeLength)
+                return startIdx..<endIdx
             }
             charOffset += line.count + 1 // +1 for the \n separator
         }
 
         // No match found
-        return text
+        return nil
     }
 }

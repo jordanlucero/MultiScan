@@ -5,6 +5,9 @@
 //  Print-panel-style export view with preview and options.
 //
 //  Uses `TextExporter` with document-based initialization to enable cache-based export.
+//  The preview is a read-only TextKit 2 view (`RichTextPreview`), so the full combined
+//  document is displayed without truncation — viewport-based layout keeps even very
+//  large exports responsive.
 //
 
 import SwiftUI
@@ -17,28 +20,13 @@ struct ExportPanelView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var settings = ExportSettings()
-    @State private var previewText: AttributedString = AttributedString()
+    @State private var exportResult: TextExportResult = .empty
     @State private var isLoading = false
     @State private var exportTask: Task<Void, Never>?
     @State private var debounceTask: Task<Void, Never>?
 
     /// Convenience accessor for page count display
     private var pageCount: Int { document.unwrappedPages.count }
-
-    /// Maximum characters to display in preview (SwiftUI Text chokes on huge strings)
-    private static let previewCharacterLimit = 50_000
-
-    /// Truncated preview for display — full text is still used for export/share
-    private var displayPreviewText: AttributedString {
-        let fullCount = previewText.characters.count
-        guard fullCount > Self.previewCharacterLimit else { return previewText }
-
-        // Truncate while preserving attributes (use direct subscript, not .characters which strips formatting) Hopefully remove soon
-        let endIndex = previewText.characters.index(previewText.startIndex, offsetBy: Self.previewCharacterLimit)
-        var truncated = AttributedString(previewText[previewText.startIndex..<endIndex])
-        truncated.append(AttributedString("\n\n[Preview truncated — \(fullCount - Self.previewCharacterLimit) more characters]\n[Full text will be exported]"))
-        return truncated
-    }
 
     var body: some View {
         panelContent
@@ -77,7 +65,7 @@ struct ExportPanelView: View {
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    ShareLink(item: RichText(previewText), preview: SharePreview("Project Text")) {
+                    ShareLink(item: exportResult.richText, preview: SharePreview("Project Text")) {
                         Image(systemName: "square.and.arrow.up")
                     }
                     .buttonStyle(.glassProminent)
@@ -119,20 +107,14 @@ struct ExportPanelView: View {
             Divider()
 
             ZStack {
-                ScrollView {
-                    Text(displayPreviewText)
-                        .font(.body)
-                        .textSelection(.disabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding()
-                }
+                RichTextPreview(text: exportResult.attributedText)
                 #if os(macOS)
-                .background(Color(nsColor: .textBackgroundColor))
+                    .background(Color(nsColor: .textBackgroundColor))
                 #else
-                .background(Color(.secondarySystemBackground))
+                    .background(Color(.secondarySystemBackground))
                 #endif
 
-                if isLoading && previewText.characters.isEmpty {
+                if isLoading && exportResult.plainText.isEmpty {
                     VStack(spacing: 12) {
                         ProgressView()
                         Text("Preparing export…")
@@ -244,7 +226,7 @@ struct ExportPanelView: View {
                 Spacer()
 
                 // TODO: Dismiss panel after successful share. SwiftUI's ShareLink has no completion callback as of now (double-check)
-                ShareLink(item: RichText(previewText), preview: SharePreview("Project Text")) {
+                ShareLink(item: exportResult.richText, preview: SharePreview("Project Text")) {
                     Text("Export…")
                 }
                 .keyboardShortcut(.defaultAction)
@@ -286,7 +268,7 @@ struct ExportPanelView: View {
             let result = await exporter.buildCombinedTextAsync()
 
             guard !Task.isCancelled else { return }
-            previewText = result
+            exportResult = result
         }
     }
 }
@@ -307,20 +289,26 @@ private struct ExportPanelPreviewHelper: View {
         let document = Document(name: documentName, totalPages: 3)
 
         (1...3).forEach { i in
-            var richText = AttributedString("\(pageTextPrefix) \(i). It contains multiple sentences to demonstrate the export functionality. ")
+            let baseFont = PageTextStyle.storageFont
+            let richText = NSMutableAttributedString(
+                string: "\(pageTextPrefix) \(i). It contains multiple sentences to demonstrate the export functionality. ",
+                attributes: [.font: baseFont]
+            )
 
-            var bold = AttributedString(boldText)
-            bold.inlinePresentationIntent = .stronglyEmphasized
-            richText.append(bold)
+            richText.append(NSAttributedString(
+                string: boldText,
+                attributes: [.font: baseFont.applyingTraits(bold: true, italic: false)]
+            ))
 
-            var italic = AttributedString(italicText)
-            italic.inlinePresentationIntent = .emphasized
-            richText.append(italic)
+            richText.append(NSAttributedString(
+                string: italicText,
+                attributes: [.font: baseFont.applyingTraits(bold: false, italic: true)]
+            ))
 
-            richText.append(AttributedString(regularText))
+            richText.append(NSAttributedString(string: regularText, attributes: [.font: baseFont]))
 
             let page = Page(pageNumber: i, text: "", imageData: nil)
-            page.richText = richText
+            page.attributedText = richText
             page.originalFileName = locale == "en" ? "page-\(i).jpg" : "pagina-\(i).jpg"
             document.pages?.append(page)
         }

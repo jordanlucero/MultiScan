@@ -32,8 +32,8 @@ struct ReviewView: View {
     // Use AppStorage directly for inspector to sync with menu commands
     @AppStorage("showTextPanel") private var showTextPanel = true
 
-    // Access editable text for save-before-export
-    @FocusedValue(\.editableText) private var editableText
+    // Access the text editing controller for save-before-export
+    @FocusedValue(\.pageTextController) private var pageTextController
 
     /// Sorted pages for rotor navigation
     private var sortedPages: [Page] {

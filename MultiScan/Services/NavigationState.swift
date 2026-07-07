@@ -36,9 +36,6 @@ class NavigationState: ObservableObject {
     /// Plain text version of the entire document for TTS and search
     @Published private(set) var fullDocumentPlainText: String = ""
 
-    /// Attributed text version of the entire document with formatting
-    @Published private(set) var fullDocumentAttributedText: AttributedString = AttributedString()
-
     /// Version counter that increments when page order changes, used to trigger view updates
     @Published private(set) var pageOrderVersion: Int = 0
 
@@ -543,24 +540,22 @@ class NavigationState: ObservableObject {
     func rebuildTextCache() {
         guard let document = selectedDocument else {
             fullDocumentPlainText = ""
-            fullDocumentAttributedText = AttributedString()
             return
         }
 
         let sortedPages = document.unwrappedPages.sorted { $0.pageNumber < $1.pageNumber }
 
-        // Build plain text version (for TTS, search, accessibility)
-        fullDocumentPlainText = sortedPages.map { $0.plainText }.joined(separator: "\n\n")
-
-        // Build attributed text version (preserves formatting)
-        var attributed = AttributedString()
-        for (index, page) in sortedPages.enumerated() {
-            if index > 0 {
-                attributed.append(AttributedString("\n\n"))
-            }
-            attributed.append(page.richText)
+        // Build plain text version (for TTS, search, accessibility).
+        // Prefer the export cache (one external-storage read) over decoding N pages.
+        if let cache = TextExportCacheService.loadCache(from: document),
+           cache.pages.count == sortedPages.count {
+            fullDocumentPlainText = cache.pages
+                .sorted { $0.pageNumber < $1.pageNumber }
+                .map { $0.plainText }
+                .joined(separator: "\n\n")
+        } else {
+            fullDocumentPlainText = sortedPages.map { $0.plainText }.joined(separator: "\n\n")
         }
-        fullDocumentAttributedText = attributed
     }
 
     /// Refreshes page ordering arrays after pages have been reordered

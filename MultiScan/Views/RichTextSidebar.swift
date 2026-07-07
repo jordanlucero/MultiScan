@@ -1,183 +1,15 @@
+//
+//  RichTextSidebar.swift
+//  MultiScan
+//
+//  The page text panel: a TextKit 2 editor (PageTextEditor + PageTextController)
+//  with the page header, formatting toolbar (macOS), Statistics pane, and Smart
+//  Cleanup pane.
+//
+
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
-
-/// View model for managing editable rich text with debounced auto-save
-@MainActor
-@Observable
-final class EditablePageText: Identifiable {
-    @ObservationIgnored private let page: Page
-
-    /// Debounce interval for auto-save
-    private static let saveDebounceInterval: UInt64 = 1_000_000_000 // 1 second in nanoseconds
-
-    /// Current debounce task - weak self in Task handles cleanup on dealloc
-    @ObservationIgnored private var saveTask: Task<Void, Never>?
-
-    /// Tracks whether there are unsaved changes
-    @ObservationIgnored private var hasUnsavedChanges = false
-
-    /// Undo manager for formatting and cleanup operations.
-    /// Only wired up on iOS (enables shake-to-undo and three-finger swipe);
-    /// left nil on macOS so undo registration is a no-op there.
-    @ObservationIgnored weak var undoManager: UndoManager?
-
-    /// The text being edited
-    var text: AttributedString {
-        didSet {
-            hasUnsavedChanges = true
-            scheduleDebouncedSave()
-        }
-    }
-
-    /// Selection tracking for formatting operations
-    var selection: AttributedTextSelection
-
-    init(page: Page) {
-        self.page = page
-        // Apply primary color for proper dark/light mode display in editor
-        var displayText = page.richText
-        displayText.foregroundColor = Color.primary
-        self.text = displayText
-        self.selection = AttributedTextSelection()
-    }
-
-    /// Schedule a debounced save - cancels any pending save and schedules a new one
-    private func scheduleDebouncedSave() {
-        saveTask?.cancel()
-        saveTask = Task { @MainActor [weak self] in
-            do {
-                try await Task.sleep(nanoseconds: Self.saveDebounceInterval)
-                self?.saveNow()
-            } catch {
-                // Task was cancelled, no action needed
-            }
-        }
-    }
-
-    /// Save changes back to the page immediately (only if there are unsaved changes)
-    func saveNow() {
-        saveTask?.cancel()
-        saveTask = nil
-
-        guard hasUnsavedChanges else { return }
-        hasUnsavedChanges = false
-
-        // Strip any foreground color before saving (applied dynamically for display)
-        var cleanText = text
-        for run in cleanText.runs {
-            let range = run.range
-            cleanText[range].foregroundColor = nil
-        }
-        page.richText = cleanText
-
-        // Update the export cache with the new text (using cleanText to avoid re-accessing page.richText)
-        // This keeps the cache in sync for efficient export later
-        if let document = page.document {
-            TextExportCacheService.updateEntry(
-                pageNumber: page.pageNumber,
-                richText: cleanText,
-                in: document
-            )
-        }
-    }
-
-    // MARK: - Undo Support
-
-    /// Registers an undo action to restore previous text state (supports shake-to-undo on iOS).
-    /// Automatically registers the inverse as a redo action. No-op when `undoManager` is nil (macOS).
-    private func registerUndo(previousText: AttributedString, actionName: String) {
-        undoManager?.registerUndo(withTarget: self) { target in
-            MainActor.assumeIsolated {
-                let currentText = target.text
-                target.text = previousText
-                target.registerUndo(previousText: currentText, actionName: actionName)
-            }
-        }
-        undoManager?.setActionName(actionName)
-    }
-
-    /// Replaces text with undo support — for use by cleanup operations and other external callers
-    func replaceText(with newText: AttributedString, actionName: String) {
-        let previousText = text
-        text = newText
-        registerUndo(previousText: previousText, actionName: actionName)
-    }
-
-    /// Apply bold formatting to the current selection
-    func applyBold() {
-        let previousText = text
-        text.transformAttributes(in: &selection) { container in
-            let currentFont = container.font
-            let resolved = currentFont?.resolve(in: EnvironmentValues().fontResolutionContext)
-            let isBold = resolved?.isBold ?? false
-            let isItalic = resolved?.isItalic ?? false
-
-            if isBold {
-                container.font = isItalic ? .body.italic() : nil
-            } else {
-                container.font = isItalic ? .body.bold().italic() : .body.bold()
-            }
-        }
-        registerUndo(previousText: previousText, actionName: "Bold")
-    }
-
-    /// Apply italic formatting to the current selection
-    func applyItalic() {
-        let previousText = text
-        text.transformAttributes(in: &selection) { container in
-            let currentFont = container.font
-            let resolved = currentFont?.resolve(in: EnvironmentValues().fontResolutionContext)
-            let isBold = resolved?.isBold ?? false
-            let isItalic = resolved?.isItalic ?? false
-
-            if isItalic {
-                container.font = isBold ? .body.bold() : nil
-            } else {
-                container.font = isBold ? .body.bold().italic() : .body.italic()
-            }
-        }
-        registerUndo(previousText: previousText, actionName: "Italic")
-    }
-
-    /// Apply underline formatting to the current selection
-    func applyUnderline() {
-        let previousText = text
-        text.transformAttributes(in: &selection) { container in
-            if container.underlineStyle != nil {
-                container.underlineStyle = nil
-            } else {
-                container.underlineStyle = .single
-            }
-        }
-        registerUndo(previousText: previousText, actionName: "Underline")
-    }
-
-    /// Apply strikethrough formatting to the current selection
-    func applyStrikethrough() {
-        let previousText = text
-        text.transformAttributes(in: &selection) { container in
-            if container.strikethroughStyle != nil {
-                container.strikethroughStyle = nil
-            } else {
-                container.strikethroughStyle = .single
-            }
-        }
-        registerUndo(previousText: previousText, actionName: "Strikethrough")
-    }
-
-    /// Remove all line breaks from the text, replacing with spaces
-    func removeLineBreaks() {
-        let previousText = text
-        text = TextManipulationService.removingLineBreaks(from: text)
-        registerUndo(previousText: previousText, actionName: "Remove Line Breaks")
-    }
-
-    /// Check if there's an active text selection
-    var hasSelection: Bool {
-        true // We can't easily check, so always enable formatting buttons
-    }
-}
 
 struct RichTextSidebar: View {
     let document: Document
@@ -190,12 +22,9 @@ struct RichTextSidebar: View {
     @AppStorage("showStatisticsPane") private var showStatisticsPane = false
     @AppStorage("showSmartCleanup") private var showSmartCleanup = false
     @Environment(\.modelContext) private var modelContext
-    #if os(iOS)
-    @Environment(\.undoManager) private var undoManager
-    #endif
 
-    /// Editable text for the current page - always initialized when page exists
-    @State private var editableText: EditablePageText?
+    /// Editing controller for the current page - always initialized when a page exists
+    @State private var textController: PageTextController?
 
     /// Smart Cleanup analysis results for the current page
     @State private var cleanupOptions: [TextManipulationService.CleanupOption] = []
@@ -206,7 +35,7 @@ struct RichTextSidebar: View {
     /// Debounce task for Smart Cleanup analysis (3-second linger requirement)
     @State private var cleanupAnalysisTask: Task<Void, Never>?
 
-    /// Controls visibility of the find navigator
+    /// Controls visibility of the find UI (find bar on macOS, find navigator on iOS)
     @State private var isFindNavigatorPresented = false
 
     /// Accessibility focus state for VoiceOver navigation
@@ -236,30 +65,7 @@ struct RichTextSidebar: View {
             VStack(alignment: .leading, spacing: 6) {
                 if let page = currentPage {
                     Button {
-                        #if os(macOS)
-                        let pasteboard = NSPasteboard.general
-                        pasteboard.clearContents()
-                        // Copy both RTF (for rich text apps) and plain text (as fallback)
-                        if let rtfData = try? RichText(page.richText).toRTFDataOrThrow() {
-                            pasteboard.setData(rtfData, forType: .rtf)
-                        }
-                        pasteboard.setString(page.plainText, forType: .string)
-                        #else
-                        let pasteboard = UIPasteboard.general
-                        // Copy both RTF (for rich text apps) and plain text (as fallback)
-                        if let rtfData = try? RichText(page.richText).toRTFDataOrThrow() {
-                            pasteboard.setData(rtfData, forPasteboardType: UTType.rtf.identifier)
-                        }
-                        pasteboard.string = page.plainText
-                        #endif
-                        #if os(iOS)
-                        UINotificationFeedbackGenerator().notificationOccurred(.success)
-                        #endif
-                        showCopyConfirmation = true
-                        Task {
-                            try? await Task.sleep(for: .seconds(3))
-                            showCopyConfirmation = false
-                        }
+                        copyCurrentPageText(page)
                     } label: {
                         HStack(spacing: 6) {
                             Text("Page \(page.pageNumber) of \(document.totalPages)")
@@ -286,13 +92,13 @@ struct RichTextSidebar: View {
                     .help("Copy the Current Page's Text")
                 }
 
-                // Formatting "toolbar" (macOS only — iOS/iPadOS surface formatting
-                // controls in the system keyboard for AttributedString TextEditors)
+                // Formatting "toolbar" (macOS only — on iOS/iPadOS the system provides
+                // formatting controls in UITextView's edit menu / keyboard)
                 #if os(macOS)
-                if let editableText = editableText {
+                if let textController = textController {
                     HStack(spacing: 12) {
                         Group {
-                            Button(action: { editableText.applyBold() }) {
+                            Button(action: { textController.toggleBold() }) {
                                 Image(systemName: "bold")
                                     .frame(width: 24, height: 24)
                             }
@@ -300,7 +106,7 @@ struct RichTextSidebar: View {
                             .accessibilityLabel("Bold")
                             .help("Bold (⌘B)")
 
-                            Button(action: { editableText.applyItalic() }) {
+                            Button(action: { textController.toggleItalic() }) {
                                 Image(systemName: "italic")
                                     .frame(width: 24, height: 24)
                             }
@@ -308,7 +114,7 @@ struct RichTextSidebar: View {
                             .accessibilityLabel("Italic")
                             .help("Italic (⌘I)")
 
-                            Button(action: { editableText.applyUnderline() }) {
+                            Button(action: { textController.toggleUnderline() }) {
                                 Image(systemName: "underline")
                                     .frame(width: 24, height: 24)
                             }
@@ -316,7 +122,7 @@ struct RichTextSidebar: View {
                             .accessibilityLabel("Underline")
                             .help("Underline (⌘U)")
 
-                            Button(action: { editableText.applyStrikethrough() }) {
+                            Button(action: { textController.toggleStrikethrough() }) {
                                 Image(systemName: "strikethrough")
                                     .frame(width: 24, height: 24)
                             }
@@ -329,7 +135,7 @@ struct RichTextSidebar: View {
 
                         Spacer()
 
-                        Button(action: { editableText.removeLineBreaks() }) {
+                        Button(action: { textController.removeLineBreaks() }) {
                             Image(systemName: "line.3.horizontal")
                                 .frame(width: 24, height: 24)
                         }
@@ -347,26 +153,27 @@ struct RichTextSidebar: View {
 
             Divider()
 
-            // Content area - always editable
-            if let editableText = editableText {
-                TextEditor(
-                    text: Bindable(editableText).text,
-                    selection: Bindable(editableText).selection
-                )
-                .findNavigator(isPresented: $isFindNavigatorPresented)
-                .safeAreaPadding()
-                .accessibilityLabel("Page text editor")
-                .accessibilityHint("Use Actions menu to exit editor")
-                .accessibilityAction(named: "Exit text editor") {
-                    // Move focus back to the header
-                    isHeaderFocused = true
-                }
-                .accessibilityAction(named: "Go to next page") {
-                    navigationState.nextPage()
-                }
-                .accessibilityAction(named: "Go to previous page") {
-                    navigationState.previousPage()
-                }
+            // Content area - always editable (TextKit 2 text view)
+            if let textController = textController {
+                // ⚠️ VoiceOver — not yet verified on device since the TextKit 2 migration:
+                // these SwiftUI accessibility labels/actions are attached to a representable,
+                // and custom actions don't always surface on the wrapped text view's
+                // accessibility element the way they did on TextEditor. If they're missing
+                // from the VoiceOver rotor/actions menu, reattach them as
+                // `accessibilityCustomActions` on PageTextView itself.
+                PageTextEditor(controller: textController)
+                    .accessibilityLabel("Page text editor")
+                    .accessibilityHint("Use Actions menu to exit editor")
+                    .accessibilityAction(named: "Exit text editor") {
+                        // Move focus back to the header
+                        isHeaderFocused = true
+                    }
+                    .accessibilityAction(named: "Go to next page") {
+                        navigationState.nextPage()
+                    }
+                    .accessibilityAction(named: "Go to previous page") {
+                        navigationState.previousPage()
+                    }
             } else {
                 // No page selected placeholder
                 ContentUnavailableView(
@@ -377,7 +184,7 @@ struct RichTextSidebar: View {
             }
 
             // Statistics pane
-            if !hideBottomPanels, showStatisticsPane, let page = currentPage {
+            if !hideBottomPanels, showStatisticsPane, let textController = textController {
                 Divider()
 
                 VStack(alignment: .leading, spacing: 8) {
@@ -386,12 +193,10 @@ struct RichTextSidebar: View {
                         .fontWeight(.semibold)
 
                     HStack {
-                        let wordCount = page.plainText.split(separator: " ").count
-                        let charCount = page.plainText.count
-                        Label("\(wordCount) words", systemImage: "textformat")
+                        Label("\(textController.wordCount) words", systemImage: "textformat")
                             .font(.caption)
                         Spacer()
-                        Label("\(charCount) characters", systemImage: "character")
+                        Label("\(textController.charCount) characters", systemImage: "character")
                             .font(.caption)
                     }
                     .foregroundStyle(.secondary)
@@ -410,8 +215,8 @@ struct RichTextSidebar: View {
 
                     #if os(iOS)
                     // On iOS the header has no formatting toolbar, so Remove Line Breaks lives here
-                    if let editableText = editableText {
-                        Button(action: { editableText.removeLineBreaks() }) {
+                    if let textController = textController {
+                        Button(action: { textController.removeLineBreaks() }) {
                             Label("Remove Line Breaks", systemImage: "line.3.horizontal")
                                 .font(.caption)
                         }
@@ -450,10 +255,17 @@ struct RichTextSidebar: View {
                 .padding()
             }
         }
-        .focusedValue(\.editableText, editableText)
+        .focusedValue(\.pageTextController, textController)
         .focusedValue(\.showFindNavigator, $isFindNavigatorPresented)
+        .onChange(of: isFindNavigatorPresented) { _, presented in
+            // The Find menu command flips this binding; forward it to the text view.
+            if presented {
+                textController?.presentFindNavigator()
+                isFindNavigatorPresented = false
+            }
+        }
         .onAppear {
-            initializeEditableText()
+            initializeTextController()
             // Set VoiceOver focus to the header when view appears
             Task {
                 try? await Task.sleep(for: .milliseconds(500))
@@ -462,37 +274,33 @@ struct RichTextSidebar: View {
         }
         .onDisappear {
             // Save any pending changes when view disappears
-            editableText?.saveNow()
+            textController?.detach()
         }
         #if os(macOS)
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
             // Emergency save on app quit - catches the case where user quits mid-debounce
-            editableText?.saveNow()
+            textController?.saveNow()
             // Force immediate disk write before termination
             try? modelContext.save()
         }
         #else
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willTerminateNotification)) { _ in
             // Emergency save on app termination - catches the case where the app exits mid-debounce
-            editableText?.saveNow()
+            textController?.saveNow()
             // Force immediate disk write before termination
             try? modelContext.save()
         }
         #endif
         .onChange(of: currentPage) { _, newPage in
-            // Save current page before switching
-            editableText?.saveNow()
+            // Save the outgoing page and sever its view link so a late debounce
+            // can never read the new page's storage
+            textController?.detach()
 
-            #if os(iOS)
-            // Clear undo history from the previous page
-            undoManager?.removeAllActions()
-            #endif
-
-            // Initialize editable text for new page
+            // Initialize the controller for the new page
             if let page = newPage {
-                editableText = makeEditableText(for: page)
+                textController = PageTextController(page: page)
             } else {
-                editableText = nil
+                textController = nil
             }
 
             // Re-schedule Smart Cleanup analysis for the new page
@@ -505,18 +313,40 @@ struct RichTextSidebar: View {
 
     // MARK: - Private Methods
 
-    private func initializeEditableText() {
+    private func initializeTextController() {
         guard let page = currentPage else { return }
-        editableText = makeEditableText(for: page)
+        textController = PageTextController(page: page)
     }
 
-    /// Creates the editable text model, wiring up undo support on iOS.
-    private func makeEditableText(for page: Page) -> EditablePageText {
-        let editable = EditablePageText(page: page)
-        #if os(iOS)
-        editable.undoManager = undoManager
+    /// Copies the current page's text (RTF + plain text) to the pasteboard.
+    /// Uses the live editor content so unsaved edits are included.
+    private func copyCurrentPageText(_ page: Page) {
+        let exportText = textController?.attributedTextForExport ?? page.attributedText
+        let rtfData = RichTextArchiver.rtfData(from: exportText)
+
+        #if os(macOS)
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        // Copy both RTF (for rich text apps) and plain text (as fallback)
+        if let rtfData {
+            pasteboard.setData(rtfData, forType: .rtf)
+        }
+        pasteboard.setString(exportText.string, forType: .string)
+        #else
+        let pasteboard = UIPasteboard.general
+        // Copy both RTF (for rich text apps) and plain text (as fallback)
+        if let rtfData {
+            pasteboard.setData(rtfData, forPasteboardType: UTType.rtf.identifier)
+        }
+        pasteboard.string = exportText.string
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
         #endif
-        return editable
+
+        showCopyConfirmation = true
+        Task {
+            try? await Task.sleep(for: .seconds(3))
+            showCopyConfirmation = false
+        }
     }
 
     /// Padding above the header. The compact layout presents this view as a sheet,
@@ -559,7 +389,7 @@ struct RichTextSidebar: View {
 
         cleanupAnalysisTask = Task { @MainActor in
             // Save any pending edits so the cache reflects latest text
-            editableText?.saveNow()
+            textController?.saveNow()
             await runCleanupAnalysisAsync()
         }
     }
@@ -590,28 +420,73 @@ struct RichTextSidebar: View {
     private func executeCleanupOption(_ option: TextManipulationService.CleanupOption) {
         switch option {
         case .removePageNumber(let detection):
-            removePageNumberTokenFromPage(numberText: detection.numberText, pageNumber: detection.pageNumber)
+            if detection.pageNumber == currentPage?.pageNumber, let textController {
+                textController.removePageNumberTokens(
+                    [detection.numberText],
+                    actionName: String(localized: "Remove Page Number")
+                )
+            } else {
+                applyEdit(toPage: detection.pageNumber) { text in
+                    TextManipulationService.removePageNumberToken(detection.numberText, in: text)
+                }
+            }
 
         case .removeSectionHeaderFromPage(let header, let pageNumber):
-            removeSingleLine(normalizedLine: header.headerText, fromPageNumber: pageNumber, stripNumbers: true)
+            if pageNumber == currentPage?.pageNumber, let textController {
+                textController.removeLine(
+                    matching: header.headerText,
+                    stripNumbers: true,
+                    actionName: String(localized: "Remove Header")
+                )
+            } else {
+                applyEdit(toPage: pageNumber) { text in
+                    TextManipulationService.removeLine(matching: header.headerText, in: text, stripNumbers: true)
+                }
+            }
 
         case .removeSectionHeaderFromRange(let header):
-            executeBatchLineRemoval(
-                pageNumbers: header.affectedPages,
-                normalizedLine: header.headerText,
-                stripNumbers: true
-            )
+            applyBatchEdit(toPages: header.affectedPages) { text, _ in
+                TextManipulationService.removeLine(matching: header.headerText, in: text, stripNumbers: true)
+            }
 
         case .removeConsecutiveNumbers(let group, let pageNumber):
-            executeConsecutiveNumberRemoval(group: group, pageNumber: pageNumber)
+            let numberTexts = group.pageMapping[pageNumber] ?? []
+            guard !numberTexts.isEmpty else { break }
+            if pageNumber == currentPage?.pageNumber, let textController {
+                textController.removePageNumberTokens(
+                    numberTexts,
+                    actionName: String(localized: "Remove Numbers")
+                )
+            } else {
+                applyEdit(toPage: pageNumber) { text in
+                    for numberText in numberTexts {
+                        TextManipulationService.removePageNumberToken(numberText, in: text)
+                    }
+                }
+            }
 
         case .removeConsecutiveNumbersFromRange(let group):
-            executeBatchConsecutiveRemoval(group: group)
+            applyBatchEdit(toPages: group.pageMapping.keys.sorted()) { text, pageNumber in
+                for numberText in group.pageMapping[pageNumber] ?? [] {
+                    TextManipulationService.removePageNumberToken(numberText, in: text)
+                }
+            }
 
         case .removeAllPageNumbers(let detections, let consecutiveGroups):
-            executeBatchPageNumberRemoval(detections: detections)
+            // Collect every token to remove, per page, then apply in one batch pass
+            var tokensByPage: [Int: [String]] = [:]
+            for detection in detections {
+                tokensByPage[detection.pageNumber, default: []].append(detection.numberText)
+            }
             for group in consecutiveGroups {
-                executeBatchConsecutiveRemoval(group: group)
+                for (pageNumber, numberTexts) in group.pageMapping {
+                    tokensByPage[pageNumber, default: []].append(contentsOf: numberTexts)
+                }
+            }
+            applyBatchEdit(toPages: tokensByPage.keys.sorted()) { text, pageNumber in
+                for numberText in tokensByPage[pageNumber] ?? [] {
+                    TextManipulationService.removePageNumberToken(numberText, in: text)
+                }
             }
         }
 
@@ -619,113 +494,56 @@ struct RichTextSidebar: View {
         runCleanupAnalysisImmediately()
     }
 
-    // MARK: - Page Number Token Removal
+    // MARK: - Model-Side Edits (pages other than the one in the editor)
 
-    /// Removes a single page number token from a single page's text.
-    private func removePageNumberTokenFromPage(numberText: String, pageNumber: Int) {
-        if pageNumber == currentPage?.pageNumber, let editableText = editableText {
-            let cleaned = TextManipulationService.removePageNumberToken(numberText, from: editableText.text)
-            editableText.replaceText(with: cleaned, actionName: "Remove Page Number")
-            editableText.saveNow()
-        } else {
-            guard let cache = TextExportCacheService.loadCache(from: document),
-                  let entry = cache.pages.first(where: { $0.pageNumber == pageNumber }) else { return }
+    /// Applies an edit to a single non-current page, reading from the cache entry
+    /// (no page external-storage load) and writing back to both page and cache.
+    private func applyEdit(toPage pageNumber: Int, _ transform: (NSMutableAttributedString) -> Void) {
+        guard let cache = TextExportCacheService.loadCache(from: document),
+              let entry = cache.pages.first(where: { $0.pageNumber == pageNumber }),
+              let decoded = entry.decodedText() else { return }
 
-            let cleaned = TextManipulationService.removePageNumberToken(numberText, from: entry.richText)
+        let working = NSMutableAttributedString(attributedString: decoded)
+        transform(working)
+        guard !working.isEqual(to: decoded) else { return }
 
-            if let page = document.unwrappedPages.first(where: { $0.pageNumber == pageNumber }) {
-                page.richText = cleaned
-                TextExportCacheService.updateEntry(pageNumber: pageNumber, richText: cleaned, in: document)
-            }
+        let cleaned = NSAttributedString(attributedString: working)
+        if let page = document.unwrappedPages.first(where: { $0.pageNumber == pageNumber }) {
+            page.attributedText = cleaned
+            TextExportCacheService.updateEntry(pageNumber: pageNumber, attributedText: cleaned, in: document)
         }
     }
 
-    /// Removes consecutive numbers from a single page.
-    private func executeConsecutiveNumberRemoval(group: TextManipulationService.ConsecutiveNumberGroup, pageNumber: Int) {
-        guard let numberTexts = group.pageMapping[pageNumber], !numberTexts.isEmpty else { return }
-
-        if pageNumber == currentPage?.pageNumber, let editableText = editableText {
-            var text = editableText.text
-            for numberText in numberTexts {
-                text = TextManipulationService.removePageNumberToken(numberText, from: text)
-            }
-            editableText.replaceText(with: text, actionName: "Remove Numbers")
-            editableText.saveNow()
-        } else {
-            guard let cache = TextExportCacheService.loadCache(from: document),
-                  let entry = cache.pages.first(where: { $0.pageNumber == pageNumber }) else { return }
-
-            var text = entry.richText
-            for numberText in numberTexts {
-                text = TextManipulationService.removePageNumberToken(numberText, from: text)
-            }
-
-            if let page = document.unwrappedPages.first(where: { $0.pageNumber == pageNumber }) {
-                page.richText = text
-                TextExportCacheService.updateEntry(pageNumber: pageNumber, richText: text, in: document)
-            }
-        }
-    }
-
-    /// Batch removes page number tokens (each page may have a different number to remove).
-    private func executeBatchPageNumberRemoval(detections: [TextManipulationService.PageNumberDetection]) {
-        editableText?.saveNow()
-
-        guard var cache = TextExportCacheService.loadCache(from: document) else { return }
-
-        for detection in detections {
-            guard let entryIndex = cache.pages.firstIndex(where: { $0.pageNumber == detection.pageNumber }) else { continue }
-
-            let cleaned = TextManipulationService.removePageNumberToken(
-                detection.numberText,
-                from: cache.pages[entryIndex].richText
-            )
-
-            if let page = document.unwrappedPages.first(where: { $0.pageNumber == detection.pageNumber }) {
-                page.richText = cleaned
-            }
-
-            cache.pages[entryIndex] = PageCacheEntry(
-                pageNumber: detection.pageNumber,
-                fileName: cache.pages[entryIndex].fileName,
-                richText: cleaned
-            )
-        }
-
-        TextExportCacheService.saveCache(cache, to: document)
-
-        let modifiedPageNumbers = Set(detections.map { $0.pageNumber })
-        if let currentPageNum = currentPage?.pageNumber,
-           modifiedPageNumbers.contains(currentPageNum),
-           let page = currentPage {
-            editableText = makeEditableText(for: page)
-        }
-    }
-
-    /// Batch removes all numbers in a consecutive group from all affected pages.
-    private func executeBatchConsecutiveRemoval(group: TextManipulationService.ConsecutiveNumberGroup) {
-        editableText?.saveNow()
+    /// Applies edits to multiple pages efficiently: loads the cache once, modifies all
+    /// entries in memory, writes each page's text, and saves the cache once.
+    /// Re-initializes the editor if the current page was modified.
+    private func applyBatchEdit(
+        toPages pageNumbers: [Int],
+        _ transform: (NSMutableAttributedString, Int) -> Void
+    ) {
+        textController?.saveNow()
 
         guard var cache = TextExportCacheService.loadCache(from: document) else { return }
 
         var modifiedPages: Set<Int> = []
 
-        for (pageNumber, numberTexts) in group.pageMapping {
-            guard let entryIndex = cache.pages.firstIndex(where: { $0.pageNumber == pageNumber }) else { continue }
+        for pageNumber in pageNumbers {
+            guard let entryIndex = cache.pages.firstIndex(where: { $0.pageNumber == pageNumber }),
+                  let decoded = cache.pages[entryIndex].decodedText() else { continue }
 
-            var text = cache.pages[entryIndex].richText
-            for numberText in numberTexts {
-                text = TextManipulationService.removePageNumberToken(numberText, from: text)
-            }
+            let working = NSMutableAttributedString(attributedString: decoded)
+            transform(working, pageNumber)
+            guard !working.isEqual(to: decoded) else { continue }
 
+            let cleaned = NSAttributedString(attributedString: working)
             if let page = document.unwrappedPages.first(where: { $0.pageNumber == pageNumber }) {
-                page.richText = text
+                page.attributedText = cleaned
             }
 
             cache.pages[entryIndex] = PageCacheEntry(
                 pageNumber: pageNumber,
                 fileName: cache.pages[entryIndex].fileName,
-                richText: text
+                attributedText: cleaned
             )
             modifiedPages.insert(pageNumber)
         }
@@ -735,72 +553,8 @@ struct RichTextSidebar: View {
         if let currentPageNum = currentPage?.pageNumber,
            modifiedPages.contains(currentPageNum),
            let page = currentPage {
-            editableText = makeEditableText(for: page)
-        }
-    }
-
-    // MARK: - Section Header Line Removal
-
-    /// Removes a single line from a single page's text (used for section headers).
-    /// - Parameter stripNumbers: When true, strips trailing/leading numbers before matching
-    private func removeSingleLine(normalizedLine: String, fromPageNumber pageNumber: Int, stripNumbers: Bool) {
-        if pageNumber == currentPage?.pageNumber, let editableText = editableText {
-            let cleaned = TextManipulationService.removeLine(
-                matching: normalizedLine,
-                from: editableText.text,
-                stripNumbers: stripNumbers
-            )
-            editableText.replaceText(with: cleaned, actionName: "Remove Header")
-            editableText.saveNow()
-        } else {
-            guard let cache = TextExportCacheService.loadCache(from: document),
-                  let entry = cache.pages.first(where: { $0.pageNumber == pageNumber }) else { return }
-
-            let cleaned = TextManipulationService.removeLine(
-                matching: normalizedLine,
-                from: entry.richText,
-                stripNumbers: stripNumbers
-            )
-
-            if let page = document.unwrappedPages.first(where: { $0.pageNumber == pageNumber }) {
-                page.richText = cleaned
-                TextExportCacheService.updateEntry(pageNumber: pageNumber, richText: cleaned, in: document)
-            }
-        }
-    }
-
-    /// Batch removes a single normalized line from multiple pages efficiently (used for section headers).
-    private func executeBatchLineRemoval(pageNumbers: [Int], normalizedLine: String, stripNumbers: Bool) {
-        editableText?.saveNow()
-
-        guard var cache = TextExportCacheService.loadCache(from: document) else { return }
-
-        for pageNumber in pageNumbers {
-            guard let entryIndex = cache.pages.firstIndex(where: { $0.pageNumber == pageNumber }) else { continue }
-
-            let cleaned = TextManipulationService.removeLine(
-                matching: normalizedLine,
-                from: cache.pages[entryIndex].richText,
-                stripNumbers: stripNumbers
-            )
-
-            if let page = document.unwrappedPages.first(where: { $0.pageNumber == pageNumber }) {
-                page.richText = cleaned
-            }
-
-            cache.pages[entryIndex] = PageCacheEntry(
-                pageNumber: pageNumber,
-                fileName: cache.pages[entryIndex].fileName,
-                richText: cleaned
-            )
-        }
-
-        TextExportCacheService.saveCache(cache, to: document)
-
-        if let currentPageNum = currentPage?.pageNumber,
-           pageNumbers.contains(currentPageNum),
-           let page = currentPage {
-            editableText = makeEditableText(for: page)
+            textController?.detach()
+            textController = PageTextController(page: page)
         }
     }
 }

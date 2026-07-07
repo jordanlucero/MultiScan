@@ -2,27 +2,50 @@
 //  TextExporter.swift
 //  MultiScan
 //
-//  Handles building combined AttributedString for export with configurable separators.
+//  Builds the combined NSAttributedString for export with configurable separators.
 //
 //  ## Performance Architecture
 //  This exporter supports two modes:
 //
 //  1. **Cache-based (preferred)**: Uses `TextExportCacheService` to load pre-computed
-//     page data from a single cached file.
+//     page data (RTF + statistics) from a single cached file.
 //
-//  2. **Direct page access (fallback)**: Loads each page's richText from SwiftData
-//     external storage. This triggers N disk reads. Only used when cache is unavailable or invalid.
+//  2. **Direct page access (fallback)**: Reads each page's raw text data from SwiftData
+//     external storage. This triggers N disk reads. Only used when the cache is
+//     unavailable or invalid.
+//
+//  In both modes the expensive work — decoding page RTF and appending into the combined
+//  string — happens off the main actor. `NSMutableAttributedString.append` is O(n) per
+//  page (unlike the old SwiftUI `AttributedString.append`, which was O(n²) overall).
 //
 //  ## Usage
-//  Prefer initializing with a Document to enable cache-based export:
 //  ```swift
 //  let exporter = TextExporter(document: document, settings: settings)
 //  let result = await exporter.buildCombinedTextAsync()
+//  // result.attributedText → preview, result.rtfData/plainText → RichText for sharing
 //  ```
 //
 
 import SwiftUI
 import SwiftData
+
+/// The finished export: attributed text for preview plus pre-encoded share payloads.
+///
+/// `NSAttributedString` is not Sendable, but the instance here is built fresh inside
+/// the export task and never mutated afterward — immutable NSAttributedStrings are
+/// safe to read from any thread once ownership is transferred.
+struct TextExportResult: @unchecked Sendable {
+    let attributedText: NSAttributedString
+    let rtfData: Data?
+    let plainText: String
+
+    static let empty = TextExportResult(attributedText: NSAttributedString(), rtfData: nil, plainText: "")
+
+    /// Sendable share wrapper for ShareLink.
+    var richText: RichText {
+        RichText(rtfData: rtfData, plainText: plainText)
+    }
+}
 
 struct TextExporter {
     /// Document to export from (enables cache-based export)
@@ -55,83 +78,140 @@ struct TextExporter {
         self.settings = settings
     }
 
-    // MARK: - Async Export (for large documents)
+    // MARK: - Page Snapshot
 
-    /// Chunk size for cooperative multitasking — yields to UI after this many pages
-    private static let chunkSize = 50
+    /// Sendable snapshot of one page's export inputs, gathered on the main actor.
+    private struct PageSnapshot: Sendable {
+        let pageNumber: Int
+        let fileName: String?
+        /// Raw persisted bytes — RTF (current) or legacy JSON; decoded off-main.
+        let textData: Data?
+        /// Pre-computed statistics when coming from the cache; computed after decode otherwise.
+        let wordCount: Int?
+        let charCount: Int?
+    }
 
-    /// Builds combined AttributedString from all pages.
+    // MARK: - Async Export
+
+    /// Builds the combined export result from all pages.
     ///
-    /// Uses cache when available (fast single-file load), falls back to direct
-    /// page access if cache is unavailable (slow N-file load).
+    /// Uses the cache when available (fast single-file load), falls back to direct
+    /// page access if the cache is unavailable (slow N-file load).
     @MainActor
-    func buildCombinedTextAsync() async -> AttributedString {
-        // Try cache-based export first (preferred - single file load)
+    func buildCombinedTextAsync() async -> TextExportResult {
+        let snapshots: [PageSnapshot]
+
         if let document = document,
            let cache = TextExportCacheService.loadCache(from: document),
            cache.pages.count == document.unwrappedPages.count {
-            return await buildFromCacheAsync(cache: cache)
+            // Cache path: one external-storage read for the whole document
+            snapshots = cache.pages
+                .sorted { $0.pageNumber < $1.pageNumber }
+                .map {
+                    PageSnapshot(
+                        pageNumber: $0.pageNumber,
+                        fileName: $0.fileName,
+                        textData: $0.rtfData,
+                        wordCount: $0.wordCount,
+                        charCount: $0.charCount
+                    )
+                }
+        } else {
+            // Fallback path: N external-storage reads (raw Data only — decode happens off-main)
+            snapshots = pages
+                .sorted { $0.pageNumber < $1.pageNumber }
+                .map {
+                    PageSnapshot(
+                        pageNumber: $0.pageNumber,
+                        fileName: $0.originalFileName,
+                        textData: $0.richTextData,
+                        wordCount: nil,
+                        charCount: nil
+                    )
+                }
         }
 
-        // Fall back to direct page access (triggers N external storage loads)
-        return await buildFromPagesAsync()
-    }
+        guard !snapshots.isEmpty else { return .empty }
 
-    /// Builds combined text from cached page data (fast path).
-    ///
-    /// This avoids loading individual page external storage files by using
-    /// pre-computed cache data. All work after cache load happens on background thread.
-    @MainActor
-    private func buildFromCacheAsync(cache: TextExportCache) async -> AttributedString {
-        let sortedEntries = cache.pages.sorted { $0.pageNumber < $1.pageNumber }
-        let totalPages = sortedEntries.count
-        guard totalPages > 0 else { return AttributedString() }
-
-        // Capture settings on main actor for background use
+        // Capture settings on the main actor for background use
         let createVisualSeparation = settings.createVisualSeparation
         let separatorStyle = settings.separatorStyle
         let includePageNumber = settings.includePageNumber
         let includeFilename = settings.includeFilename
         let includeStatistics = settings.includeStatistics
 
-        // Build combined string on background thread
-        let result = await Task.detached(priority: .userInitiated) {
-            var combined = AttributedString()
-
-            for (index, entry) in sortedEntries.enumerated() {
-                // Check for cancellation periodically
-                if index > 0 && index % 50 == 0 && Task.isCancelled {
-                    return AttributedString()
-                }
-
-                // Add separator
-                if index > 0 || createVisualSeparation {
-                    let separator = Self.buildSeparatorFromCacheEntry(
-                        entry: entry,
-                        totalPages: totalPages,
-                        isFirstPage: index == 0,
-                        createVisualSeparation: createVisualSeparation,
-                        separatorStyle: separatorStyle,
-                        includePageNumber: includePageNumber,
-                        includeFilename: includeFilename,
-                        includeStatistics: includeStatistics
-                    )
-                    combined.append(separator)
-                }
-
-                // Add page content
-                combined.append(entry.richText)
-            }
-
-            return combined
+        // Decode, combine, and encode on a background thread
+        return await Task.detached(priority: .userInitiated) {
+            Self.buildResult(
+                from: snapshots,
+                createVisualSeparation: createVisualSeparation,
+                separatorStyle: separatorStyle,
+                includePageNumber: includePageNumber,
+                includeFilename: includeFilename,
+                includeStatistics: includeStatistics
+            )
         }.value
-
-        return result
     }
 
-    /// Builds separator from a cache entry (uses pre-computed word/char counts).
-    private static func buildSeparatorFromCacheEntry(
-        entry: PageCacheEntry,
+    // MARK: - Combining (background thread)
+
+    private static func buildResult(
+        from snapshots: [PageSnapshot],
+        createVisualSeparation: Bool,
+        separatorStyle: SeparatorStyle,
+        includePageNumber: Bool,
+        includeFilename: Bool,
+        includeStatistics: Bool
+    ) -> TextExportResult {
+        let combined = NSMutableAttributedString()
+        let separatorAttributes: [NSAttributedString.Key: Any] = [.font: PageTextStyle.storageFont]
+        let totalPages = snapshots.count
+
+        for (index, snapshot) in snapshots.enumerated() {
+            if index > 0 && index % 50 == 0 && Task.isCancelled {
+                return .empty
+            }
+
+            let pageText = RichTextArchiver.attributedString(from: snapshot.textData)
+
+            // Add separator
+            if index > 0 || createVisualSeparation {
+                let separator = separatorString(
+                    pageNumber: snapshot.pageNumber,
+                    fileName: snapshot.fileName,
+                    wordCount: snapshot.wordCount ?? TextStatistics.wordCount(of: pageText.string),
+                    charCount: snapshot.charCount ?? pageText.string.count,
+                    totalPages: totalPages,
+                    isFirstPage: index == 0,
+                    createVisualSeparation: createVisualSeparation,
+                    separatorStyle: separatorStyle,
+                    includePageNumber: includePageNumber,
+                    includeFilename: includeFilename,
+                    includeStatistics: includeStatistics
+                )
+                if !separator.isEmpty {
+                    combined.append(NSAttributedString(string: separator, attributes: separatorAttributes))
+                }
+            }
+
+            // Add page content
+            combined.append(pageText)
+        }
+
+        let attributedText = NSAttributedString(attributedString: combined)
+        return TextExportResult(
+            attributedText: attributedText,
+            rtfData: RichTextArchiver.rtfData(from: attributedText),
+            plainText: attributedText.string
+        )
+    }
+
+    /// Builds the separator text between pages (empty string = no separator).
+    private static func separatorString(
+        pageNumber: Int,
+        fileName: String?,
+        wordCount: Int,
+        charCount: Int,
         totalPages: Int,
         isFirstPage: Bool,
         createVisualSeparation: Bool,
@@ -139,28 +219,27 @@ struct TextExporter {
         includePageNumber: Bool,
         includeFilename: Bool,
         includeStatistics: Bool
-    ) -> AttributedString {
+    ) -> String {
         guard createVisualSeparation else {
-            return AttributedString(" ")
+            return " "
         }
 
         var components: [String] = []
 
         if includePageNumber {
-            components.append(String(localized: "Page \(entry.pageNumber) of \(totalPages)", comment: "Page number indicator in export separator"))
+            components.append(String(localized: "Page \(pageNumber) of \(totalPages)", comment: "Page number indicator in export separator"))
         }
 
-        if includeFilename, let filename = entry.fileName {
+        if includeFilename, let filename = fileName {
             components.append(filename)
         }
 
         if includeStatistics {
-            // Use pre-computed counts from cache entry
-            components.append(String(localized: "\(entry.wordCount) words, \(entry.charCount) characters", comment: "Word and character count in export separator"))
+            components.append(String(localized: "\(wordCount) words, \(charCount) characters", comment: "Word and character count in export separator"))
         }
 
         if isFirstPage && separatorStyle == .lineBreak && components.isEmpty {
-            return AttributedString()
+            return ""
         }
 
         var separator = isFirstPage ? "" : "\n\n"
@@ -180,122 +259,6 @@ struct TextExporter {
         }
 
         separator += "\n"
-        return AttributedString(separator)
-    }
-
-    /// Builds combined text by loading each page's richText (slow fallback).
-    ///
-    /// **Warning**: This triggers N external storage file loads on the main thread,
-    /// which can freeze the UI for large documents. Cache-based export is preferred.
-    @MainActor
-    private func buildFromPagesAsync() async -> AttributedString {
-        let sortedPages = pages.sorted { $0.pageNumber < $1.pageNumber }
-        let totalPages = sortedPages.count
-        guard totalPages > 0 else { return AttributedString() }
-
-        // Step 1: Extract all data on main actor (SwiftData requirement)
-        // WARNING: This triggers N external storage loads - can be slow for large documents
-        let pageData: [(text: AttributedString, number: Int, fileName: String?, plainText: String)] =
-            sortedPages.map { ($0.richText, $0.pageNumber, $0.originalFileName, $0.plainText) }
-
-        // Capture settings for background use
-        let createVisualSeparation = settings.createVisualSeparation
-        let separatorStyle = settings.separatorStyle
-        let includePageNumber = settings.includePageNumber
-        let includeFilename = settings.includeFilename
-        let includeStatistics = settings.includeStatistics
-
-        // Step 2: Build combined string on background thread (expensive O(n²) work)
-        let result = await Task.detached(priority: .userInitiated) {
-            var combined = AttributedString()
-
-            for (index, data) in pageData.enumerated() {
-                // Check for cancellation periodically
-                if index > 0 && index % 50 == 0 && Task.isCancelled {
-                    return AttributedString()
-                }
-
-                // Add separator
-                if index > 0 || createVisualSeparation {
-                    let separator = Self.buildSeparatorStatic(
-                        pageNumber: data.number,
-                        fileName: data.fileName,
-                        plainText: data.plainText,
-                        totalPages: totalPages,
-                        isFirstPage: index == 0,
-                        createVisualSeparation: createVisualSeparation,
-                        separatorStyle: separatorStyle,
-                        includePageNumber: includePageNumber,
-                        includeFilename: includeFilename,
-                        includeStatistics: includeStatistics
-                    )
-                    combined.append(separator)
-                }
-
-                // Add page content
-                combined.append(data.text)
-            }
-
-            return combined
-        }.value
-
-        return result
-    }
-
-    /// Static separator builder for background thread use
-    private static func buildSeparatorStatic(
-        pageNumber: Int,
-        fileName: String?,
-        plainText: String,
-        totalPages: Int,
-        isFirstPage: Bool,
-        createVisualSeparation: Bool,
-        separatorStyle: SeparatorStyle,
-        includePageNumber: Bool,
-        includeFilename: Bool,
-        includeStatistics: Bool
-    ) -> AttributedString {
-        guard createVisualSeparation else {
-            return AttributedString(" ")
-        }
-
-        var components: [String] = []
-
-        if includePageNumber {
-            components.append(String(localized: "Page \(pageNumber) of \(totalPages)", comment: "Page number indicator in export separator"))
-        }
-
-        if includeFilename, let filename = fileName {
-            components.append(filename)
-        }
-
-        if includeStatistics {
-            let words = plainText.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
-            let chars = plainText.count
-            components.append(String(localized: "\(words) words, \(chars) characters", comment: "Word and character count in export separator"))
-        }
-
-        if isFirstPage && separatorStyle == .lineBreak && components.isEmpty {
-            return AttributedString()
-        }
-
-        var separator = isFirstPage ? "" : "\n"
-
-        switch separatorStyle {
-        case .lineBreak:
-            if !components.isEmpty {
-                separator += "[\(components.joined(separator: " | "))]"
-            }
-
-        case .hyphenatedDivider:
-            separator += String(repeating: "-", count: 40)
-            if !components.isEmpty {
-                separator += "\n"
-                separator += components.joined(separator: " | ")
-            }
-        }
-
-        separator += "\n"
-        return AttributedString(separator)
+        return separator
     }
 }

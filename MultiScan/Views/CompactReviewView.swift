@@ -143,9 +143,9 @@ struct CompactReviewView: View {
     /// Removes line breaks from the current page's text, modifying the model directly.
     private func removeLineBreaksFromCurrentPage() {
         guard let page = navigationState.currentPage else { return }
-        let cleaned = TextManipulationService.removingLineBreaks(from: page.richText)
-        page.richText = cleaned
-        TextExportCacheService.updateEntry(pageNumber: page.pageNumber, richText: cleaned, in: document)
+        let cleaned = TextManipulationService.removingLineBreaks(from: page.attributedText)
+        page.attributedText = cleaned
+        TextExportCacheService.updateEntry(pageNumber: page.pageNumber, attributedText: cleaned, in: document)
         refreshTextSheet()
     }
 
@@ -201,25 +201,27 @@ struct CompactReviewView: View {
 
     private func removeToken(_ numberText: String, fromPage pageNumber: Int) {
         guard let cache = TextExportCacheService.loadCache(from: document),
-              let entry = cache.pages.first(where: { $0.pageNumber == pageNumber }) else { return }
-        let cleaned = TextManipulationService.removePageNumberToken(numberText, from: entry.richText)
+              let entry = cache.pages.first(where: { $0.pageNumber == pageNumber }),
+              let decoded = entry.decodedText() else { return }
+        let cleaned = TextManipulationService.removingPageNumberToken(numberText, from: decoded)
         if let page = document.unwrappedPages.first(where: { $0.pageNumber == pageNumber }) {
-            page.richText = cleaned
-            TextExportCacheService.updateEntry(pageNumber: pageNumber, richText: cleaned, in: document)
+            page.attributedText = cleaned
+            TextExportCacheService.updateEntry(pageNumber: pageNumber, attributedText: cleaned, in: document)
         }
     }
 
     private func removeLine(_ normalizedLine: String, fromPage pageNumber: Int, stripNumbers: Bool) {
         guard let cache = TextExportCacheService.loadCache(from: document),
-              let entry = cache.pages.first(where: { $0.pageNumber == pageNumber }) else { return }
-        let cleaned = TextManipulationService.removeLine(matching: normalizedLine, from: entry.richText, stripNumbers: stripNumbers)
+              let entry = cache.pages.first(where: { $0.pageNumber == pageNumber }),
+              let decoded = entry.decodedText() else { return }
+        let cleaned = TextManipulationService.removingLine(matching: normalizedLine, from: decoded, stripNumbers: stripNumbers)
         if let page = document.unwrappedPages.first(where: { $0.pageNumber == pageNumber }) {
-            page.richText = cleaned
-            TextExportCacheService.updateEntry(pageNumber: pageNumber, richText: cleaned, in: document)
+            page.attributedText = cleaned
+            TextExportCacheService.updateEntry(pageNumber: pageNumber, attributedText: cleaned, in: document)
         }
     }
 
-    /// Forces the RichTextSidebar sheet to reinitialize its EditablePageText
+    /// Forces the RichTextSidebar sheet to reinitialize its PageTextController
     private func refreshTextSheet() {
         textSheetRefreshID = UUID()
     }

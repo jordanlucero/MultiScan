@@ -23,6 +23,7 @@ MultiScan is a multiplatform SwiftUI application (macOS, iOS, iPadOS) that uses 
 3. **ReviewView.swift**: Main document editing UI with NavigationSplitView (macOS + iPad regular size class)
 4. **CompactReviewView.swift**: iPhone document editing UI (iOS-only file)
 5. **Models.swift**: SwiftData models (`Document`, `Page`)
+6. **Views/TextKit/**: The TextKit 2 text engine — platform text views, SwiftUI representables, and the page editing controller (see "TextKit 2 Text Engine")
 
 ### Data Models
 - **Document**: Container for pages with metadata (name, emoji, storage size). Uses optional `pages` relationship with `unwrappedPages` accessor for CloudKit compatibility.
@@ -101,11 +102,11 @@ CompactReviewView presents the text sheet with `interactiveDismissDisabled()` an
 
 ### ⚠️ Text Formatting on iOS — Do Not "Fix"
 
-The iOS text panel header intentionally has **no Bold/Italic/Underline/Strikethrough buttons**. This is not apparent from the code: on iOS/iPadOS, SwiftUI's `TextEditor` bound to an `AttributedString` surfaces formatting controls **in the system keyboard itself** (and the Format menu commands work for iPad hardware keyboards). Do not add in-app formatting buttons on iOS.
+The iOS text panel header intentionally has **no Bold/Italic/Underline/Strikethrough buttons**. This is not apparent from the code: the editor's `UITextView` has `allowsEditingTextAttributes = true`, so the **system provides formatting controls in the edit menu / keyboard bar** (and the Format menu commands work for iPad hardware keyboards via `FocusedValues.pageTextController`). Do not add in-app formatting buttons on iOS.
 
-### Undo (iOS only)
+### Undo
 
-`EditablePageText` has a weak `undoManager` reference that is only wired on iOS (via `makeEditableText(for:)` in RichTextSidebar). Formatting operations and Smart Cleanup removals register undo actions, enabling shake-to-undo and three-finger-swipe gestures. On macOS the reference stays nil so undo registration is a no-op — Mac behavior is unchanged. Undo history is cleared when switching pages.
+Typing undo is native to the platform text views on **both** platforms (macOS `allowsUndo`; iOS automatic, including shake-to-undo and three-finger swipe). Programmatic edits (formatting, Remove Line Breaks, Smart Cleanup) register snapshot undo through `PageTextController.performEdit`, joining the same undo stack. Undo history is cleared when a page loads into the editor.
 
 ### Insert Pages at Position (iOS only)
 
@@ -287,6 +288,7 @@ Critical issues require user action:
 | Version | App Version | Changes |
 |---------|-------------|---------|
 | 1 | 1.5.1+ | Initial tracked version. Document, Page, SchemaMetadata models. |
+| 2 | 2.0 | `Page.richTextData` **format** changed from JSON-encoded `AttributedString` to RTF (TextKit 2 engine). Property name/type unchanged, so the SwiftData/CloudKit schema is identical — but v1 apps decode the blob as JSON and would see (and could save back) empty text, so they must be gated. Migration is lazy: reads accept both formats, writes produce RTF. `SchemaMetadata.recordSuccessfulLoad()` raises the stored version so other devices' gates fire via CloudKit. |
 
 ### When to Bump Schema Version
 
@@ -298,6 +300,7 @@ Critical issues require user action:
 - Removing a property
 - Renaming a property
 - Changing a property type
+- Changing the **encoding format inside a `Data` blob** that older versions decode (this is what v2 did)
 
 After bumping:
 1. Increment `SchemaVersioning.currentVersion`
@@ -320,55 +323,90 @@ When extending functionality:
 4. Access `modelContext` from environment for CRUD operations
 5. Follow SwiftUI view composition patterns
 
+## TextKit 2 Text Engine (2.0)
+
+Text handling is built directly on **TextKit 2** with `NSAttributedString` as the canonical text model end-to-end. SwiftUI remains the app framework, but text editing/rendering is real AppKit/UIKit hosted via representables. SwiftUI `AttributedString` and `TextEditor` are gone from the pipeline (the only remaining `AttributedString` use is decoding the legacy storage format).
+
+### File Map
+| File | Role |
+|------|------|
+| `Services/RichTextArchiver.swift` | Persistence format (RTF), legacy migration, font normalization, `PageTextStyle` fonts |
+| `Services/RichTextSupport.swift` | `RichText` Transferable wrapper (Sendable, pre-encoded RTF + plain text) |
+| `Views/TextKit/PageTextView.swift` | `NSTextView`/`UITextView` subclasses on an explicit TextKit 2 stack |
+| `Views/TextKit/PageTextEditor.swift` | `NSViewRepresentable`/`UIViewRepresentable` hosting the editor |
+| `Views/TextKit/PageTextController.swift` | `@Observable` editing controller (load/save/format/cleanup/find/statistics) + `TextStatistics` |
+| `Views/TextKit/RichTextPreview.swift` | Read-only TextKit 2 view for large-document preview |
+
+### The TextKit 2 Stack
+The macOS editor constructs the stack explicitly; iOS uses `UITextView(usingTextLayoutManager: true)`, which assembles the same layers:
+
+```
+NSTextContentStorage   (storage layer — attributed string → NSTextParagraphs)
+        │
+NSTextLayoutManager    (layout layer — produces NSTextLayoutFragments)
+        │
+NSTextContainer        (geometry the viewport lays out into)
+        │
+PageTextView           (view layer — NSTextView / UITextView subclass)
+```
+
+Viewport-based layout means only the fragments intersecting the visible viewport are laid out and rendered, so huge documents stay responsive (this is what allowed removing the export preview's 50k character cap).
+
+**⚠️ Never touch `layoutManager` (macOS) on these views** — reading the TextKit 1 property silently downgrades the view to the compatibility text engine.
+
+**Future extension points** (per the "Elevate your app's text experience" session): the framework text views conform to `NSTextViewportLayoutControllerDelegate`, so `PageTextView` subclass overrides can add line numbers, collapsible ranges, or attachment view-provider reuse. Inline table support will use `NSTextTableBlock`, which flows through the RTF storage format with no schema change.
+
 ## Rich Text Storage Architecture
 
-The app stores rich text as **JSON-encoded `Data` with `@Attribute(.externalStorage)`**, exposed via a computed `richText: AttributedString` property. CloudKit doesn't natively support `AttributedString`, so encoding to `Data` is required for sync.
+Page text is persisted as **RTF `Data` with `@Attribute(.externalStorage)`**, exposed via a computed `attributedText: NSAttributedString` property. RTF is `NSAttributedString`'s native document format: encode/decode is one framework call, and it round-trips fonts, B/I/U/S, paragraph styles, and (macOS) `NSTextTable`/`NSTextTableBlock`. It's still a plain `Data` blob, so CloudKit external storage (CKAsset) and the SwiftData schema are unchanged.
 
 ### Page Model (`Models.swift`)
 ```swift
 @Model
 final class Page {
-    /// Rich text content stored as JSON-encoded Data for CloudKit compatibility.
+    /// RTF data (current) or legacy JSON-encoded AttributedString (pre-2.0)
     @Attribute(.externalStorage)
     var richTextData: Data?
 
-    /// Computed accessor that encodes/decodes from `richTextData`.
-    var richText: AttributedString {
-        get {
-            guard let data = richTextData else { return AttributedString() }
-            return (try? JSONDecoder().decode(AttributedString.self, from: data)) ?? AttributedString()
-        }
+    var attributedText: NSAttributedString {
+        get { RichTextArchiver.attributedString(from: richTextData) }
         set {
-            richTextData = try? JSONEncoder().encode(newValue)
+            richTextData = RichTextArchiver.rtfData(from: newValue)
             lastModified = Date()
         }
     }
 
-    /// Plain text accessor for search/statistics (computed from richText)
+    /// Plain text accessor for search/statistics
     var plainText: String {
-        String(richText.characters)
+        RichTextArchiver.plainText(from: richTextData)
     }
 }
 ```
 
 **Key points:**
-- Stored property is `richTextData: Data?` — CloudKit-friendly type, externally stored as a CKAsset.
-- `richText` is a computed property; encode/decode happens on every set/get. Callers (e.g. `EditablePageText`) snapshot it once per page rather than reading it repeatedly.
-- `lastModified` updates in the `richText` setter, so it only fires on local writes — remote CloudKit sync writes directly to `richTextData` and won't bump the timestamp.
-- During `init`, encode the `AttributedString` directly into `richTextData` rather than going through the `richText` setter, to avoid touching `lastModified` on creation.
-- `plainText` is computed on-the-fly for search/filter (independent of storage).
+- Stored property is still `richTextData: Data?` — same name/type as 1.x, so the SwiftData/CloudKit schema did not change. The **format** inside the blob changed, which is why `SchemaVersioning.currentVersion` is 2.
+- `lastModified` updates in the `attributedText` setter, so it only fires on local writes — remote CloudKit sync writes directly to `richTextData` and won't bump the timestamp. `init` encodes directly into `richTextData` for the same reason.
+- Callers snapshot `attributedText` once per page (`PageTextController` does this) rather than reading it repeatedly — decode happens on every get.
 
-### RichTextSupport (`Services/RichTextSupport.swift`)
-Provides formatting helpers and RTF export:
-- `toggleBold(in:)`, `toggleItalic(in:)` — formatting mutations
-- `isBold(at:)`, `isItalic(at:)` — formatting queries
-- `RichText` struct — Transferable wrapper for ShareLink export
+### RichTextArchiver (`Services/RichTextArchiver.swift`)
+The single owner of the persistence format:
+- `rtfData(from:)` — encode via `NSAttributedString.data(from:documentAttributes:)`
+- `attributedString(from:)` — **format-sniffing decode**: RTF data always starts with `{\rtf`; anything else goes through the legacy JSON path
+- `decodeLegacyJSON(_:)` — decodes pre-2.0 Codable `AttributedString` and maps old SwiftUI attributes (`inlinePresentationIntent`, SwiftUI `Font` bold/italic, underline/strikethrough) onto platform fonts/attributes
+- `normalizedForStorage(_:)` / `normalizedForDisplay(_:)` — font normalization (below)
 
-**Note:** RTF export bridges to `NSAttributedString` via CoreText (no AppKit). Uses Helvetica Neue 13pt as base font for word processor compatibility.
+### Legacy Migration (pre-2.0 JSON → RTF)
+Migration is **lazy**: reads accept both formats forever; every write produces RTF. No migration pass runs at startup. Because old app builds decode `richTextData` as JSON and would see empty text (and could overwrite it), the schema version gate (v2) blocks old builds from using new data — see Schema Versioning System.
+
+### Font Normalization
+Fonts are normalized at the pipeline boundaries so content is portable and each platform's editor feels native:
+- **Storage/export font**: Helvetica Neue 13pt (`PageTextStyle.storageFont`) — resolvable by every word processor; system fonts would encode as private names (".SFNS") other apps can't resolve.
+- **Display font**: platform body font (`PageTextStyle.displayFont`), applied when loading text into the editor.
+- `RichTextArchiver.normalizing(_:to:)` swaps each run's font for the base font carrying that run's bold/italic traits, strips display-only colors (pasted content!), and passes every other attribute through untouched.
 
 ## Share Sheet / Transferable Architecture
 
-The `RichText` struct conforms to `Transferable` with multiple representations for maximum app compatibility.
+`RichText` (`Services/RichTextSupport.swift`) conforms to `Transferable`. It is a **Sendable value**: RTF is encoded eagerly at init (`RichText(_: NSAttributedString)`) or supplied pre-encoded (`RichText(rtfData:plainText:)`), so the wrapper can cross actor boundaries and export from Transferable's async closures without touching a live `NSAttributedString`.
 
 ### Transfer Representations (Priority Order)
 ```swift
@@ -381,7 +419,7 @@ static var transferRepresentation: some TransferRepresentation {
     DataRepresentation(exportedContentType: .rtf) { ... }
 
     // 3. Plain text fallback - works everywhere
-    ProxyRepresentation { String($0.attributedString.characters) }
+    ProxyRepresentation { $0.plainText }
 }
 ```
 
@@ -390,13 +428,6 @@ static var transferRepresentation: some TransferRepresentation {
 - **DataRepresentation**: Powers clipboard Copy operations.
 - **ProxyRepresentation**: Universal fallback for apps that only accept plain text (e.g., Messages).
 
-### RTF Conversion Pipeline
-1. SwiftUI `AttributedString` → Check `inlinePresentationIntent` for bold/italic
-2. Fallback: Check `.font` attribute and resolve via `EnvironmentValues().fontResolutionContext`
-3. Apply `CTFontSymbolicTraits` (.boldTrait, .italicTrait) via CoreText
-4. Convert to `NSAttributedString` with `.underlineStyle` and `.strikethroughStyle`
-5. Export via `NSAttributedString.data(documentAttributes: [.documentType: .rtf])`
-
 ### Error Handling
 ```swift
 enum RichTextExportError: LocalizedError {
@@ -404,13 +435,12 @@ enum RichTextExportError: LocalizedError {
     case emptyContent         // Nothing to export
 }
 ```
-
-The `toRTFDataOrThrow()` method throws proper errors instead of returning empty data silently.
+`rtfDataOrThrow()` throws at share time if encoding failed; the plain text fallback still works.
 
 ### ShareLink Usage Locations
-- `ReviewView.swift` — Toolbar button for single page sharing
-- `ExportPanelView.swift` — "Share…" button for full document export
-- `MultiScanApp.swift` — Menu bar command (⌘⇧C)
+- `ThumbnailSidebar.swift` — Context menu single-page export
+- `ExportPanelView.swift` — "Export…"/share button for full document export (uses `TextExportResult.richText`)
+- `MultiScanApp.swift` — File menu "Export Page Text…"
 
 ### App Compatibility
 | App | Behavior |
@@ -423,13 +453,21 @@ The `toRTFDataOrThrow()` method throws proper errors instead of returning empty 
 
 ## Rich Text Editing Architecture
 
-The app uses an always-editable text model with debounced auto-save to balance responsiveness with storage efficiency.
+The app uses an always-editable text model with debounced auto-save. The editor is a TextKit 2 `PageTextView` hosted by `PageTextEditor`, driven by a `PageTextController`.
 
-### EditablePageText (View Model)
-Located in `RichTextSidebar.swift`, this `@Observable` class wraps a Page's rich text for editing:
-- Initialized when a page is selected, disposed when switching pages
-- Applies display-only foreground color (stripped before saving)
-- Tracks `hasUnsavedChanges` flag to prevent unnecessary writes
+### PageTextController (`Views/TextKit/PageTextController.swift`)
+`@MainActor @Observable` controller, one per selected page (created on page switch by `RichTextSidebar`):
+- `init(page:)` decodes the page text once and normalizes it to the display font
+- `attach(_:)` loads content into the platform text view (called by the representable; the view instance is reused across page switches, only the controller changes)
+- `textDidChange()` (from the view delegate) refreshes the authoritative snapshot + live `wordCount`/`charCount`, schedules the debounced save
+- `detach()` saves and severs the view link — **a late debounce can never read another page's storage**
+- Formatting (`toggleBold/Italic/Underline/Strikethrough`): empty selection flips `typingAttributes`; otherwise applies platform font traits over the selected range
+- `saveNow()` normalizes to the storage font, writes `page.attributedText`, and syncs the export cache entry
+- `presentFindNavigator()` — find bar (macOS `performTextFinderAction`) / find navigator (iOS `UIFindInteraction`); the Edit ▸ Find… command reaches it through the `showFindNavigator` focused binding
+- Exposed to menu commands via `FocusedValues.pageTextController`
+
+### Undo
+Typing undo is **native** to NSTextView/UITextView on both platforms (`allowsUndo` on macOS; automatic on iOS including shake-to-undo and three-finger swipe). Programmatic edits (formatting, Remove Line Breaks, Smart Cleanup) register snapshot-based undo on the view's UndoManager via `performEdit(actionName:_:)`, so they join the same stack. Undo history is cleared when a page loads (`attach`). macOS gained full undo in 2.0 (it had none before).
 
 ### Debounced Auto-Save (1 second)
 Text changes trigger a debounced save via `scheduleDebouncedSave()`:
@@ -442,29 +480,28 @@ Changes are saved in these scenarios:
 | Event | Trigger |
 |-------|---------|
 | User stops typing | Debounce timer (1s) |
-| User switches pages | `onChange(of: currentPage)` |
-| User navigates away | `onDisappear` |
-| User opens export panel | `editableText?.saveNow()` before panel opens |
+| User switches pages | `onChange(of: currentPage)` → `detach()` |
+| User navigates away | `onDisappear` → `detach()` |
+| User opens export panel | `pageTextController?.saveNow()` before panel opens |
 | User quits app (⌘Q) | `willTerminateNotification` + `modelContext.save()` |
 
 All save calls check `hasUnsavedChanges` first — no-op if no edits were made.
 
 ### Persistence Flow (Simplified)
-1. `saveNow()` strips foreground color and assigns to `page.richText`
-2. The `richText` setter JSON-encodes to `richTextData` and updates `lastModified`
+1. `saveNow()` normalizes the snapshot to the storage font (strips display colors) and assigns to `page.attributedText`
+2. The setter RTF-encodes to `richTextData` and updates `lastModified`
 3. SwiftData persists `richTextData` to external storage (and CKAsset, if iCloud sync is enabled)
+4. `TextExportCacheService.updateEntry(pageNumber:attributedText:in:)` keeps the export cache in sync
 
 ### Important Notes
 - No separate "view mode" vs "edit mode" — always editable
-- Click outside TextEditor to unfocus (removes cursor)
-- Formatting toolbar always visible in header when page selected (macOS only — iOS uses the system keyboard's formatting controls; see Multiplatform Architecture)
+- **Colors are display-only, never stored.** Platform text views render runs *without* a `.foregroundColor` attribute in default black regardless of appearance (view-level `textColor` only covers text present when it's set, plus typing attributes). So every display path stamps the dynamic label color via `RichTextArchiver.applyingDisplayColor(_:)` — `normalizedForDisplay` does it for the editor, `RichTextPreview` does it for the export preview — and `normalizedForStorage` strips it on save
+- Formatting toolbar always visible in header when page selected (macOS only — iOS uses the system-provided controls; see Multiplatform Architecture)
 - `modelContext.save()` on app quit ensures synchronous disk write before termination (`NSApplication`/`UIApplication` `willTerminateNotification` per platform; iPhone also saves on `scenePhase == .background`)
 
 ## Full Document Text Cache
 
-The `NavigationState` class maintains a cached copy of the full document text:
-- `fullDocumentPlainText: String` - Plain text for search/TTS
-- `fullDocumentAttributedText: AttributedString` - Rich text with formatting
+The `NavigationState` class maintains `fullDocumentPlainText: String` (for TTS/search/FocusedValues). It is built from the text export cache when valid (one external-storage read) and falls back to per-page decodes otherwise. The old `fullDocumentAttributedText` was removed — nothing consumed it.
 
 ### Cache Invalidation
 The cache is rebuilt when:
@@ -473,14 +510,15 @@ The cache is rebuilt when:
 
 ### Accessibility Integration
 - `fullDocumentPlainText` available via `FocusedValues` for app-level access
-- Text selection enabled in `RichTextSidebar` via `.textSelection(.enabled)`
-- Note: macOS Edit > Speech menu requires NSTextView in responder chain (not currently implemented to avoid AppKit dependency)
+- The TextKit 2 editor is a real NSTextView/UITextView, so system text accessibility (VoiceOver text navigation, macOS Edit ▸ Speech, dictation, Voice Control) works natively
+- **Dynamic Type (iOS)**: attributed strings carry explicit fonts, so they don't rescale automatically. `PageTextView` registers for `UITraitPreferredContentSizeCategory` changes and `PageTextController.dynamicTypeDidChange()` re-normalizes the live content to the new body size (display-only — storage strips sizes, so this never dirties the document)
+- **⚠️ Pending on-device verification**: the SwiftUI accessibility custom actions on `PageTextEditor` ("Exit text editor", next/previous page) haven't been VoiceOver-tested since the TextKit 2 migration — actions attached to a representable may not surface on the wrapped text view's accessibility element. Fallback if missing: `accessibilityCustomActions` on `PageTextView`
 
 ### Future: Search Implementation
 To implement document search:
-1. Use `fullDocumentPlainText` for search queries
-2. Use `String.range(of:)` for matching (AVOID `NSRegularExpression` TO AVOID APPKIT)
-3. Map character positions back to page numbers for navigation
+1. Use `fullDocumentPlainText` (or per-entry `plainText` in the export cache) for queries
+2. Map character positions back to page numbers for navigation
+3. In-page find is already native: `PageTextController.presentFindNavigator()`
 4. Consider adding a search index for large documents (100+ pages)
 
 ## Image Display & Transformation Architecture
@@ -582,6 +620,7 @@ Right-click on any thumbnail in `ThumbnailSidebar` shows context menu with:
 
 ### FocusedValues for Menu Bar
 - `currentPage: Page?` - Exposed from ReviewView for menu commands
+- `pageTextController: PageTextController?` - Exposed from RichTextSidebar; Format menu (B/I/U/S) and save-before-export go through it
 - Menu commands use `focusedNavigationState` for move/delete operations
 
 ## Text Export Architecture
@@ -590,7 +629,7 @@ The export system combines all page text into a single document with configurabl
 
 ### Performance: Text Export Cache
 
-**Problem**: SwiftData's `@Attribute(.externalStorage)` stores each page's `richText` in a separate external file. Loading N pages for export means N sequential disk reads on the main thread, freezing the UI for large documents (500+ pages can take minutes).
+**Problem**: SwiftData's `@Attribute(.externalStorage)` stores each page's text in a separate external file. Loading N pages for export means N sequential disk reads on the main thread, freezing the UI for large documents (500+ pages can take minutes).
 
 **Solution**: A pre-computed cache stores all pages' text data in a single file. Export loads one file instead of N.
 
@@ -598,22 +637,25 @@ The export system combines all page text into a single document with configurabl
 
 Manages a cached copy of all page text data on the Document model.
 
-#### Cache Structure
+#### Cache Structure (version 2)
 ```swift
-// Stored on Document.textExportCache as JSON-encoded Data
-struct TextExportCache: Codable {
-    var version: Int  // For future migrations
+// Stored on Document.textExportCache as binary-plist-encoded Data
+struct TextExportCache: Codable, Sendable {
+    var version: Int  // currentVersion = 2
     var pages: [PageCacheEntry]
 }
 
-struct PageCacheEntry: Codable {
+struct PageCacheEntry: Codable, Sendable {
     let pageNumber: Int
     let fileName: String?
-    let richText: AttributedString
-    let wordCount: Int   // Pre-computed for separator metadata
+    let rtfData: Data     // Same RTF format as Page.richTextData — for export
+    let plainText: String // Pre-extracted — Smart Cleanup analyzes this, no decoding
+    let wordCount: Int    // Pre-computed for separator metadata
     let charCount: Int
 }
 ```
+
+Each entry stores the text **twice on purpose**: export needs formatting (`rtfData`), Smart Cleanup analysis needs only plain text (`plainText`) — so analysis never decodes an attributed string at all. Version 1 caches (JSON AttributedString entries) fail plist decoding → `decodeCache` returns nil → rebuilt from source pages once.
 
 #### Sync Points
 The cache is updated whenever page data changes:
@@ -621,7 +663,7 @@ The cache is updated whenever page data changes:
 | Event | Cache Action | Location |
 |-------|--------------|----------|
 | Document created (after OCR) | `buildInitialCache()` | `HomeView.updateDocument()` |
-| Page text saved | `updateEntry()` | `EditablePageText.saveNow()` |
+| Page text saved | `updateEntry()` | `PageTextController.saveNow()` |
 | Page added to document | `addEntries()` | `ReviewView.addPagesToDocument()` |
 | Page deleted | `removeEntry()` | `NavigationState.deleteCurrentPage()`, `ThumbnailSidebar.deletePage()` |
 | Page reordered | `swapPageNumbers()` | `NavigationState.moveCurrentPageUp/Down()`, `ThumbnailSidebar.movePageUp/Down()` |
@@ -632,7 +674,7 @@ The cache is updated whenever page data changes:
 static func buildInitialCache(for document: Document, from pages: [Page])
 
 // Update single page entry (call after page text edit)
-static func updateEntry(pageNumber: Int, richText: AttributedString, in document: Document)
+static func updateEntry(pageNumber: Int, attributedText: NSAttributedString, in document: Document)
 
 // Add new page entries (call after adding pages to existing document)
 static func addEntries(for pages: [Page], to document: Document)
@@ -647,8 +689,10 @@ static func swapPageNumbers(_ pageNumber1: Int, _ pageNumber2: Int, in document:
 static func loadCache(from document: Document) -> TextExportCache?
 ```
 
+Renumbering operations (`insertEntries`, `removeEntry`, `swapPageNumbers`) use `PageCacheEntry.renumbered(to:)`, which copies raw fields — no decode/encode. `PageCacheEntry.decodedText()` decodes an entry's RTF for removal operations.
+
 #### Cache Resilience
-- **Version checking**: Cache includes version number for future migrations
+- **Version checking**: Cache includes version number; mismatches (including v1 caches) trigger automatic rebuild
 - **Fallback**: If cache is invalid or missing, TextExporter falls back to direct page loading
 - **Recovery**: `rebuildCache(for:)` regenerates cache from source data (triggers N loads, use sparingly)
 
@@ -665,7 +709,7 @@ var includeStatistics: Bool
 **Important**: Uses manual UserDefaults sync with `didSet` (not `@AppStorage`) to ensure `@Observable` reactivity works correctly.
 
 ### TextExporter (`Services/TextExporter.swift`)
-Builds combined `AttributedString` from all pages. Supports two modes:
+Builds a combined `NSAttributedString` from all pages, returning a `TextExportResult` (`attributedText` for preview + pre-encoded `rtfData`/`plainText` for sharing, exposed as `.richText`). Supports two modes:
 
 1. **Cache-based (preferred)**: Initialize with Document to enable fast single-file load
 2. **Direct page access (fallback)**: Triggers N external storage loads (slow for large docs)
@@ -681,14 +725,17 @@ let exporter = TextExporter(pages: pages, settings: settings)
 ### Export Pipeline (with cache)
 ```
 1. Load document.textExportCache (single file read — fast!)
-   → Decode to TextExportCache with all page entries
+   → Sendable PageSnapshots (raw RTF bytes + pre-computed stats)
 
-2. Build combined string on background thread (Task.detached)
-   → Uses pre-computed wordCount/charCount from cache entries
-   → Appends separators and page content using AttributedString.append()
+2. Build on background thread (Task.detached)
+   → Decode each page's RTF, append into NSMutableAttributedString — O(n),
+     the old SwiftUI AttributedString.append() O(n²) issue is gone
+   → RTF-encode the combined result there too
 
-3. Return result to main actor for display
+3. Return TextExportResult to main actor for display/sharing
 ```
+
+In the fallback mode only the raw `richTextData` bytes are read on the main actor; decoding still happens on the background thread (and handles legacy-format pages via `RichTextArchiver`).
 
 ### Performance Comparison
 
@@ -698,16 +745,14 @@ let exporter = TextExporter(pages: pages, settings: settings)
 | Medium (50-200 pages) | 2-5 seconds | < 1 second |
 | Large (500+ pages) | 2-5 minutes (UI freeze) | 1-3 seconds |
 
-**Note**: The O(n²) `AttributedString.append()` issue still exists, but it runs on a background thread and is much faster than N sequential disk reads.
-
 ### ExportPanelView (`Views/ExportPanelView.swift`)
 Print-panel-style sheet with live preview:
 - Accepts `Document` (not pages array) to enable cache-based export
-- Left pane: Scrollable preview of exported text (AttributedString in SwiftUI Text)
-- Right pane: Options (visual separation toggle, separator style, mods)
+- Preview pane: **`RichTextPreview`** — a read-only TextKit 2 view. Viewport-based layout means the **full document displays without truncation** (the old 50,000-character SwiftUI Text cap is gone)
+- Options pane: visual separation toggle, separator style, mods
 - Shows spinner during async export
 - Debounces setting changes by 300ms
-- **Preview truncation**: Displays max 50,000 characters to avoid SwiftUI rendering freeze on large documents. Full text is still exported via ShareLink.
+- ShareLink uses the pre-encoded `TextExportResult.richText` (no re-encoding at share time)
 
 ### Separator Logic
 - **Inline** (createVisualSeparation = false): Single space between pages
@@ -793,7 +838,7 @@ Detects repeated OCR artifacts (physical page numbers and section/chapter header
 
 ### How It Works
 
-Smart Cleanup analyzes all pages via the `TextExportCache` (single file read, no N disk loads) to detect three types of artifacts:
+Smart Cleanup analyzes all pages via the `TextExportCache` (single file read, no N disk loads). Analysis operates purely on the cache entries' pre-extracted `plainText` — no attributed string is ever decoded during analysis. It detects three types of artifacts:
 
 1. **Page numbers (first/last line)**: Numerals at the first or last non-empty line of each page. Matches standalone numbers (`42`), `Page X`, `p. X`, `- X -` patterns, and comma-formatted numbers (`1,234`). Also detects page numbers embedded in mixed lines (e.g., `"Chapter 1    42"`) via `decomposeHeaderLine()`. Numbers must be ≤ 5 characters (digits + commas). No adjacent-page verification required.
 2. **Section headers**: Any non-empty line (anywhere in the page text) that repeats across 2+ near-contiguous pages. Lines must be at least 3 characters after normalization to avoid false positives on short OCR artifacts. Strips trailing/leading page numbers before comparing. Allows gaps of up to 5 pages between occurrences. Uses **OCR-aware fuzzy matching**: applies `ocrNormalize()` (maps `1`→`l`, `0`→`o`) then merges groups within Levenshtein edit distance ≤ 2 (≤ 1 for strings < 5 chars). Displays the most common text variant in the UI, so OCR errors like "Rile in the Rain" merge with "Rite in the Rain" and the correct spelling is shown. Removal also uses fuzzy matching so the correct line is found regardless of per-page OCR variation. Full-text scanning enables detection of headers from two-page book spreads scanned as a single image, where headers appear in the middle of the OCR text.
@@ -803,7 +848,8 @@ All matching uses **normalized comparison** (case-insensitive, whitespace-collap
 
 ### Key Files
 - `Services/TextManipulationService.swift`: Analysis algorithms, data types, removal logic
-- `Views/RichTextSidebar.swift`: Smart Cleanup pane UI, state management, cleanup execution
+- `Views/RichTextSidebar.swift`: Smart Cleanup pane UI, state management, cleanup execution (`applyEdit(toPage:)` / `applyBatchEdit(toPages:)` for non-current pages)
+- `Views/TextKit/PageTextController.swift`: Current-page removal with undo (`removePageNumberTokens`, `removeLine`)
 
 ### Data Types (in `TextManipulationService`)
 - **`PageNumberDetection`**: Detected page number with page, detected numeral, `numberText` (exact text for token removal), line text, position (first/last line)
@@ -862,11 +908,12 @@ Note: Document-wide section header removal was removed (too many false positives
 - Removes the entire line containing the header text (including newline)
 - Supports `stripNumbers: true` for matching mixed header+number lines
 
-Both use `AttributedString.removeSubrange()` to preserve formatting on surrounding text.
+Both compute a removal range on plain text (`removalRange(forPageNumberToken:in:)` / `lineRemovalRange(matching:in:stripNumbers:)`) and delete it from an `NSMutableAttributedString` — formatting on surrounding text is preserved automatically. In-place (`removePageNumberToken(_:in:)`) and non-mutating (`removingPageNumberToken(_:from:)`) variants exist for each.
 
-- **Single-page**: Modifies `editableText.text` directly (triggers auto-save)
-- **Batch (range/document-wide)**: Loads cache once, modifies all entries in memory, writes each page's `richText`, saves cache once (avoids O(N^2) decode/encode)
-- After batch modification of current page, re-initializes `EditablePageText` to refresh the editor
+- **Current page**: Goes through `PageTextController.performEdit` — applied in the live editor **with undo**, then saved
+- **Other single page**: `RichTextSidebar.applyEdit(toPage:)` decodes the cache entry (no page external-storage load), writes page + cache entry
+- **Batch (range/document-wide)**: `applyBatchEdit(toPages:)` loads the cache once, modifies all entries in memory, writes each page's `attributedText`, saves the cache once
+- After batch modification of the current page, re-initializes `PageTextController` to refresh the editor
 
 ### Number Parsing (`parseNumericToken`)
 Handles digits and thousands-separator commas with a 5-character limit:

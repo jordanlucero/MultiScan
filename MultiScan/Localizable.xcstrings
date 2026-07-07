@@ -1588,6 +1588,9 @@
         }
       }
     },
+    "Remove Header" : {
+
+    },
     "Remove Line Breaks" : {
       "localizations" : {
         "es-419" : {
@@ -1597,6 +1600,12 @@
           }
         }
       }
+    },
+    "Remove Numbers" : {
+
+    },
+    "Remove Page Number" : {
+
     },
     "Remove page number (%lld) from this page" : {
       "localizations" : {

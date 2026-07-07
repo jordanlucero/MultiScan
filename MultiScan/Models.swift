@@ -39,36 +39,27 @@ final class Page {
     @Attribute(.externalStorage)
     var imageData: Data?
 
-    /// Rich text content stored as JSON-encoded Data for CloudKit compatibility.
-    /// Use the `richText` computed property for convenient access.
+    /// Rich text content stored as RTF data for CloudKit compatibility.
+    /// Pre-2.0 data is JSON-encoded AttributedString; `RichTextArchiver` sniffs the
+    /// format on read and migrates lazily (every write produces RTF).
+    /// Use the `attributedText` computed property for convenient access.
     @Attribute(.externalStorage)
     var richTextData: Data?
 
-    /// Rich text accessor that encodes/decodes from `richTextData`.
-    /// CloudKit doesn't support AttributedString directly, so we store as Data.
-    var richText: AttributedString {
+    /// Rich text accessor that encodes/decodes `richTextData` via RichTextArchiver.
+    var attributedText: NSAttributedString {
         get {
-            guard let data = richTextData else { return AttributedString() }
-            do {
-                return try JSONDecoder().decode(AttributedString.self, from: data)
-            } catch {
-                print("⚠️ Failed to decode richText: \(error)")
-                return AttributedString()
-            }
+            RichTextArchiver.attributedString(from: richTextData)
         }
         set {
-            do {
-                richTextData = try JSONEncoder().encode(newValue)
-                lastModified = Date()
-            } catch {
-                print("⚠️ Failed to encode richText: \(error)")
-            }
+            richTextData = RichTextArchiver.rtfData(from: newValue)
+            lastModified = Date()
         }
     }
 
     /// Plain text accessor for convenience (e.g., statistics, search)
     var plainText: String {
-        String(richText.characters)
+        RichTextArchiver.plainText(from: richTextData)
     }
 
     init(pageNumber: Int, text: String, imageData: Data?, originalFileName: String? = nil, boundingBoxesData: Data? = nil) {
@@ -80,8 +71,10 @@ final class Page {
         self.thumbnailData = nil
         self.boundingBoxesData = boundingBoxesData
         self.lastModified = Date()
-        // Encode AttributedString directly to avoid computed property access during init
-        self.richTextData = try? JSONEncoder().encode(AttributedString(text))
+        // Encode directly to avoid touching lastModified via the computed setter during init
+        self.richTextData = RichTextArchiver.rtfData(
+            from: NSAttributedString(string: text, attributes: [.font: PageTextStyle.storageFont])
+        )
     }
 
     /// Decode stored bounding boxes

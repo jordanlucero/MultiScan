@@ -27,8 +27,8 @@ struct FocusedNavigationStateKey: FocusedValueKey {
     typealias Value = NavigationState
 }
 
-struct FocusedEditableTextKey: FocusedValueKey {
-    typealias Value = EditablePageText
+struct FocusedPageTextControllerKey: FocusedValueKey {
+    typealias Value = PageTextController
 }
 
 struct FocusedShowExportPanelKey: FocusedValueKey {
@@ -70,9 +70,9 @@ extension FocusedValues {
         set { self[FocusedNavigationStateKey.self] = newValue }
     }
 
-    var editableText: EditablePageText? {
-        get { self[FocusedEditableTextKey.self] }
-        set { self[FocusedEditableTextKey.self] = newValue }
+    var pageTextController: PageTextController? {
+        get { self[FocusedPageTextControllerKey.self] }
+        set { self[FocusedPageTextControllerKey.self] = newValue }
     }
 
     var showExportPanel: Binding<Bool>? {
@@ -239,7 +239,7 @@ struct MultiScanApp: App {
 
     @FocusedValue(\.document) private var focusedDocument: Document?
     @FocusedValue(\.navigationState) private var focusedNavigationState: NavigationState?
-    @FocusedValue(\.editableText) private var focusedEditableText: EditablePageText?
+    @FocusedValue(\.pageTextController) private var focusedTextController: PageTextController?
     @FocusedValue(\.currentPage) private var focusedCurrentPage: Page?
     @FocusedBinding(\.isRandomized) private var isRandomized
     @FocusedValue(\.showExportPanel) private var showExportPanelBinding: Binding<Bool>?
@@ -546,7 +546,7 @@ struct MultiScanApp: App {
                 // programtically makes single page export available due to ShareLink possibly not respecting .disabled()
                 if let page = focusedCurrentPage {
                     ShareLink("Export Page Text…",
-                              item: RichText(page.richText),
+                              item: RichText(focusedTextController?.attributedTextForExport ?? page.attributedText),
                               preview: SharePreview(String(localized: "Page \(page.pageNumber) Text")))
                 } else {
                     Button("Export Page Text…", systemImage: "square.and.arrow.up") {}
@@ -554,7 +554,7 @@ struct MultiScanApp: App {
                 }
 
                 Button("Export Project Text…") {
-                    focusedEditableText?.saveNow()
+                    focusedTextController?.saveNow()
                     showExportPanelBinding?.wrappedValue = true
                 }
                 .keyboardShortcut("C", modifiers: [.command, .option])
@@ -604,28 +604,28 @@ struct MultiScanApp: App {
             // Format Menu Commands
             CommandMenu("Format") {
                 Button("Bold", systemImage: "bold") {
-                    focusedEditableText?.applyBold()
+                    focusedTextController?.toggleBold()
                 }
                 .keyboardShortcut("B", modifiers: [.command])
-                .disabled(focusedEditableText == nil || focusedEditableText?.hasSelection != true)
+                .disabled(focusedTextController == nil)
 
                 Button("Italic", systemImage: "italic") {
-                    focusedEditableText?.applyItalic()
+                    focusedTextController?.toggleItalic()
                 }
                 .keyboardShortcut("I", modifiers: [.command])
-                .disabled(focusedEditableText == nil || focusedEditableText?.hasSelection != true)
+                .disabled(focusedTextController == nil)
 
                 Button("Underline", systemImage: "underline") {
-                    focusedEditableText?.applyUnderline()
+                    focusedTextController?.toggleUnderline()
                 }
                 .keyboardShortcut("U", modifiers: [.command])
-                .disabled(focusedEditableText == nil || focusedEditableText?.hasSelection != true)
+                .disabled(focusedTextController == nil)
 
                 Button("Strikethrough", systemImage: "strikethrough") {
-                    focusedEditableText?.applyStrikethrough()
+                    focusedTextController?.toggleStrikethrough()
                 }
                 .keyboardShortcut("X", modifiers: [.command, .shift])
-                .disabled(focusedEditableText == nil || focusedEditableText?.hasSelection != true)
+                .disabled(focusedTextController == nil)
             }
 
             // Image Menu Commands

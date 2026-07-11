@@ -561,16 +561,26 @@ Platform-native zoom/pan built on scroll-view **subclasses** (`MacZoomableScroll
 Pages are ordered by their `pageNumber: Int` property (NOT array indices). All views sort dynamically by pageNumber.
 
 ### Reordering Mechanism
-- **Move Up**: Swap pageNumbers with page at `pageNumber - 1`
-- **Move Down**: Swap pageNumbers with page at `pageNumber + 1`
-- Filter-safe: Operations work on actual document order, not filtered view order
+All order changes flow through one private core, `NavigationState.setPageOrder(_:actionName:)`, which renumbers pages 1…N to match a given array, syncs the export cache in a single write (`TextExportCacheService.renumberEntries`, raw-field copies — no decode/encode), remaps the shuffled visit history, refreshes navigation, and registers undo:
+- **Move Up/Down** (context menus, Edit menu ⌘⌥↑/⌘⌥↓): `movePage(_:by:)` swaps one slot — kept as the accessible non-drag path
+- **Drag & drop**: thumbnails are draggable via SwiftUI `.reorderable()` + `.reorderContainer(for: Page.self, isEnabled:move:)` in `ThumbnailSidebar` (macOS + iPad) and `SlideGridView` (iPhone); the `ReorderDifference` (sources + before/end destination) is applied by `applyReorder(of:before:)`
+- Reordering is disabled while a filter or search is active (`isEnabled:`); Move Up/Down remain filter-safe (operate on actual document order)
+- **Selection follows the page, not the slot**: after any reorder the current page keeps showing at its new number. This also keeps `currentPage` identity stable so the text editor never re-attaches (which would clear the undo stack)
+
+### Undo (⌘Z / ⇧⌘Z)
+- ReviewView/CompactReviewView wire the environment `\.undoManager` into `NavigationState.undoManager` (weak)
+- `setPageOrder` registers an inverse action capturing only `PersistentIdentifier`s (Sendable); undo/redo resolve pages by ID at fire time and no-op if pages were added/deleted since
+- Action names: "Move Page Up/Down", "Reorder Pages" (localized)
+- macOS caveat: the window undo manager is shared with the text editor, and `PageTextController.attach()` clears it on page switch — so reorder undo history survives reorders (current page identity is stable) but not manual page navigation
 
 ### NavigationState Methods
 ```swift
 var canMoveCurrentPageUp: Bool
 var canMoveCurrentPageDown: Bool
-func moveCurrentPageUp()
-func moveCurrentPageDown()
+func moveCurrentPageUp()                 // -> movePage(currentPage, by: -1)
+func moveCurrentPageDown()               // -> movePage(currentPage, by: 1)
+func movePage(_ page: Page, by offset: Int)
+func applyReorder(of pageIDs: [PersistentIdentifier], before targetID: PersistentIdentifier?)
 func refreshPageOrder()  // Call after any reorder to update internal arrays
 ```
 

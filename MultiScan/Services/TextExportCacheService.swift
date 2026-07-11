@@ -335,6 +335,26 @@ enum TextExportCacheService {
         saveCache(cache, to: document)
     }
 
+    /// Renumbers entries after a drag reorder using an old → new page number mapping.
+    ///
+    /// Call this after reassigning `pageNumber` on the Page models. Entries are
+    /// renumbered with raw-field copies (no decode/encode) in a single cache write.
+    ///
+    /// - Parameters:
+    ///   - newNumbers: Mapping of old page number to new page number
+    ///   - document: The document containing the cache
+    static func renumberEntries(_ newNumbers: [Int: Int], in document: Document) {
+        guard var cache = loadCache(from: document) else { return }
+
+        cache.pages = cache.pages.map { entry in
+            guard let newNumber = newNumbers[entry.pageNumber], newNumber != entry.pageNumber else { return entry }
+            return entry.renumbered(to: newNumber)
+        }
+        cache.pages.sort { $0.pageNumber < $1.pageNumber }
+
+        saveCache(cache, to: document)
+    }
+
     // MARK: - Cache Access
 
     /// Loads the cache from the document.

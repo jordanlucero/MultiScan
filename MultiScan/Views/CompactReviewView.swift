@@ -16,6 +16,7 @@ struct CompactReviewView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.undoManager) private var undoManager
     @StateObject private var navigationState = NavigationState()
     @StateObject private var ocrService = OCRService()
     private let importService = ImageImportService()
@@ -83,6 +84,7 @@ struct CompactReviewView: View {
             }
             .onAppear {
                 navigationState.setupNavigation(for: document)
+                navigationState.undoManager = undoManager
                 if let firstPage = navigationState.currentPage {
                     selectedPageNumber = firstPage.pageNumber
                 }
@@ -91,6 +93,9 @@ struct CompactReviewView: View {
             .onChange(of: navigationState.currentPageNumber) { _, newPageNumber in
                 selectedPageNumber = newPageNumber
                 scheduleCleanupAnalysis()
+            }
+            .onChange(of: undoManager) { _, newValue in
+                navigationState.undoManager = newValue
             }
         }
     }

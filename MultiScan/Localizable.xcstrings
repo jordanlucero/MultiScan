@@ -2006,6 +2006,16 @@
         }
       }
     },
+    "Reorder Pages" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reordenar páginas"
+          }
+        }
+      }
+    },
     "Replace line breaks with spaces" : {
       "localizations" : {
         "es-419" : {

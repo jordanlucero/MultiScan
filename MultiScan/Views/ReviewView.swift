@@ -8,6 +8,7 @@ struct ReviewView: View {
     var onDismiss: () -> Void
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.undoManager) private var undoManager
     @StateObject private var navigationState = NavigationState()
     @StateObject private var ocrService = OCRService()
     private let importService = ImageImportService()
@@ -69,6 +70,7 @@ struct ReviewView: View {
             }
             .onAppear {
                 navigationState.setupNavigation(for: document)
+                navigationState.undoManager = undoManager
                 if let firstPage = navigationState.currentPage {
                     selectedPageNumber = firstPage.pageNumber
                 }
@@ -82,6 +84,9 @@ struct ReviewView: View {
             }
             .onChange(of: navigationState.currentPageNumber) { _, newPageNumber in
                 selectedPageNumber = newPageNumber
+            }
+            .onChange(of: undoManager) { _, newValue in
+                navigationState.undoManager = newValue
             }
             .onChange(of: showThumbnails) { _, newValue in
                 columnVisibility = newValue ? .all : .detailOnly

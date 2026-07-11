@@ -165,9 +165,18 @@ struct ThumbnailSidebar: View {
                         .id(page.persistentModelID)  // Use stable model ID for animation
                         #endif
                     }
+                    .reorderable()
                 }
                 .padding()
                 .animation(.easeInOut(duration: 0.3), value: navigationState.pageOrderVersion)
+                .reorderContainer(for: Page.self, isEnabled: !isAnyFilterActive) { difference in
+                    let targetID: PersistentIdentifier?
+                    switch difference.destination.position {
+                    case .before(let id): targetID = id
+                    case .end: targetID = nil
+                    }
+                    navigationState.applyReorder(of: difference.sources, before: targetID)
+                }
             }
             .onChange(of: selectedPageNumber) { _, newValue in
                 // Scroll to page by finding its stable ID
@@ -289,40 +298,14 @@ struct ThumbnailView: View {
         document.unwrappedPages.contains { $0.pageNumber == page.pageNumber + 1 }
     }
 
-    /// Move this page up by swapping pageNumbers with adjacent page
+    /// Move this page up one slot (undoable, goes through NavigationState)
     private func movePageUp() {
-        guard let adjacent = document.unwrappedPages.first(where: { $0.pageNumber == page.pageNumber - 1 }) else { return }
-
-        // Capture original page numbers for cache update
-        let originalPageNumber = page.pageNumber
-        let adjacentPageNumber = adjacent.pageNumber
-
-        let temp = page.pageNumber
-        page.pageNumber = adjacent.pageNumber
-        adjacent.pageNumber = temp
-
-        // Update export cache with swapped page numbers
-        TextExportCacheService.swapPageNumbers(originalPageNumber, adjacentPageNumber, in: document)
-
-        navigationState?.refreshPageOrder()
+        navigationState?.movePage(page, by: -1)
     }
 
-    /// Move this page down by swapping pageNumbers with adjacent page
+    /// Move this page down one slot (undoable, goes through NavigationState)
     private func movePageDown() {
-        guard let adjacent = document.unwrappedPages.first(where: { $0.pageNumber == page.pageNumber + 1 }) else { return }
-
-        // Capture original page numbers for cache update
-        let originalPageNumber = page.pageNumber
-        let adjacentPageNumber = adjacent.pageNumber
-
-        let temp = page.pageNumber
-        page.pageNumber = adjacent.pageNumber
-        adjacent.pageNumber = temp
-
-        // Update export cache with swapped page numbers
-        TextExportCacheService.swapPageNumbers(originalPageNumber, adjacentPageNumber, in: document)
-
-        navigationState?.refreshPageOrder()
+        navigationState?.movePage(page, by: 1)
     }
 
     /// Delete this page from the document

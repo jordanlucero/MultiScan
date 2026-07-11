@@ -72,8 +72,17 @@ struct SlideGridView: View {
                         .buttonStyle(.plain)
                         .contextMenu { contextMenu(for: page) }
                     }
+                    .reorderable()
                 }
                 .padding()
+                .reorderContainer(for: Page.self, isEnabled: searchText.isEmpty) { difference in
+                    let targetID: PersistentIdentifier?
+                    switch difference.destination.position {
+                    case .before(let id): targetID = id
+                    case .end: targetID = nil
+                    }
+                    navigationState.applyReorder(of: difference.sources, before: targetID)
+                }
             }
             .searchable(text: $searchText, prompt: "Search pages")
             .navigationTitle("Pages")
@@ -219,31 +228,11 @@ struct SlideGridView: View {
     // MARK: - Page Reordering
 
     private func movePageUp(_ page: Page) {
-        guard let adjacent = document.unwrappedPages.first(where: { $0.pageNumber == page.pageNumber - 1 }) else { return }
-
-        let originalPageNumber = page.pageNumber
-        let adjacentPageNumber = adjacent.pageNumber
-
-        let temp = page.pageNumber
-        page.pageNumber = adjacent.pageNumber
-        adjacent.pageNumber = temp
-
-        TextExportCacheService.swapPageNumbers(originalPageNumber, adjacentPageNumber, in: document)
-        navigationState.refreshPageOrder()
+        navigationState.movePage(page, by: -1)
     }
 
     private func movePageDown(_ page: Page) {
-        guard let adjacent = document.unwrappedPages.first(where: { $0.pageNumber == page.pageNumber + 1 }) else { return }
-
-        let originalPageNumber = page.pageNumber
-        let adjacentPageNumber = adjacent.pageNumber
-
-        let temp = page.pageNumber
-        page.pageNumber = adjacent.pageNumber
-        adjacent.pageNumber = temp
-
-        TextExportCacheService.swapPageNumbers(originalPageNumber, adjacentPageNumber, in: document)
-        navigationState.refreshPageOrder()
+        navigationState.movePage(page, by: 1)
     }
 
     // MARK: - Page Deletion

@@ -110,7 +110,7 @@ struct HomeView: View {
             // Announce when progress crosses 50%
             if !hasAnnouncedHalfway && oldValue < 0.5 && newValue >= 0.5 {
                 hasAnnouncedHalfway = true
-                AccessibilityNotification.Announcement("Processing is 50% done.").post()
+                AccessibilityNotification.Announcement(String(localized: "Processing is \(50.formatted(.percent)) done.", comment: "VoiceOver announcement when OCR progress passes the halfway point")).post()
             }
         }
         // to fix inconsistent window corner radius :(
@@ -246,10 +246,12 @@ struct HomeView: View {
     private func documentAccessibilityLabel(for document: Document) -> String {
         let emoji = document.emoji ?? ""
         let emojiPrefix = emoji.isEmpty ? "" : "\(emoji), "
-        let pageWord = document.totalPages == 1 ? "page" : "pages"
+        let pageCount = document.totalPages == 1
+            ? String(localized: "1 page")
+            : String(localized: "\(document.totalPages) pages")
         let dateString = document.lastModifiedDate.formatted(date: .abbreviated, time: .shortened)
 
-        return "\(emojiPrefix)\(document.name), \(document.totalPages) \(pageWord), \(document.completionPercentage)% reviewed, last modified \(dateString)"
+        return String(localized: "\(emojiPrefix)\(document.name), \(pageCount), \(document.completionPercentage.formatted(.percent)) reviewed, last modified \(dateString)", comment: "VoiceOver label for a project card: emoji, name, page count, percent reviewed, last-modified date")
     }
 
     // MARK: - Document Actions
@@ -338,8 +340,7 @@ struct HomeView: View {
         if estimatedPageCount > 0 {
             hasAnnouncedHalfway = false
             processingPageCount = estimatedPageCount
-            let pageWord = estimatedPageCount == 1 ? "page" : "pages"
-            AccessibilityNotification.Announcement("Processing \(estimatedPageCount) \(pageWord). This will take a few moments.").post()
+            AccessibilityNotification.Announcement(String(localized: "Processing \(estimatedPageCount) pages. This will take a few moments.")).post()
         }
 
         var allImages = result.images
@@ -373,7 +374,7 @@ struct HomeView: View {
         // Spinner will be replaced by document card's progress indicator
         isPreparingImport = false
 
-        let documentName = result.suggestedName ?? "Import \(Date().formatted(date: .abbreviated, time: .shortened))"
+        let documentName = result.suggestedName ?? String(localized: "Import \(Date().formatted(date: .abbreviated, time: .shortened))", comment: "Default project name; placeholder is the current date")
         await startOCRProcessing(images: allImages, documentName: documentName)
     }
 
@@ -396,10 +397,9 @@ struct HomeView: View {
         // Announce processing start before document card appears
         hasAnnouncedHalfway = false
         processingPageCount = images.count
-        let pageWord = images.count == 1 ? "page" : "pages"
-        AccessibilityNotification.Announcement("Processing \(images.count) \(pageWord). This will take a few moments.").post()
+        AccessibilityNotification.Announcement(String(localized: "Processing \(images.count) pages. This will take a few moments.")).post()
 
-        let documentName = "Import \(Date().formatted(date: .abbreviated, time: .shortened))"
+        let documentName = String(localized: "Import \(Date().formatted(date: .abbreviated, time: .shortened))", comment: "Default project name; placeholder is the current date")
         await startOCRProcessing(images: images, documentName: documentName)
         selectedPhotos = []
     }
@@ -489,8 +489,7 @@ struct HomeView: View {
 
         // Announce completion
         let pageCount = results.count
-        let pageWord = pageCount == 1 ? "page" : "pages"
-        AccessibilityNotification.Announcement("Scan complete. \(pageCount) \(pageWord) ready for review.").post()
+        AccessibilityNotification.Announcement(String(localized: "Scan complete. \(pageCount) pages ready for review.")).post()
     }
 
     @MainActor

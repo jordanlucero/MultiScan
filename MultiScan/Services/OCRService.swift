@@ -169,11 +169,11 @@ enum OCRError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .folderAccessError:
-            return "Could not access the selected folder"
+            return String(localized: "Could not access the selected folder")
         case .imageLoadError:
-            return "Could not load image file"
+            return String(localized: "Could not load image file")
         case .imageConversionError:
-            return "Could not convert image for processing"
+            return String(localized: "Could not convert image for processing")
         }
     }
 }

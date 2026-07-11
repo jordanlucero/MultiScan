@@ -36,10 +36,7 @@ struct CompactReviewView: View {
 
     var body: some View {
         NavigationStack {
-            ImageViewer(
-                document: document,
-                navigationState: navigationState
-            )
+            ImageViewer(navigationState: navigationState)
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarRole(.editor)
@@ -274,10 +271,7 @@ struct CompactReviewView: View {
                                 }
                             }
                         } label: {
-                            Label(
-                                "\(cleanupOptions.count) \(cleanupOptions.count == 1 ? "suggestion" : "suggestions")",
-                                systemImage: "sparkles"
-                            )
+                            Label("\(cleanupOptions.count) suggestions", systemImage: "sparkles")
                         }
                     }
                 }

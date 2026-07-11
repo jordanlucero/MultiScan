@@ -243,7 +243,7 @@ struct RichTextSidebar: View {
                                 Text("No suggestions")
                                     .font(.caption)
                             } else {
-                                Text("\(cleanupOptions.count) \(cleanupOptions.count == 1 ? "suggestion" : "suggestions")")
+                                Text("\(cleanupOptions.count) suggestions")
                                     .font(.caption)
                             }
                         }

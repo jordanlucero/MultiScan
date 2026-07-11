@@ -141,7 +141,7 @@ struct DocumentCard: View {
                     VStack(spacing: 8) {
                         ProgressView()
                             .controlSize(.regular)
-                        Text("\(Int(ocrProgress * 100))%")
+                        Text(Int(ocrProgress * 100), format: .percent)
                             .font(.body)
                             .foregroundStyle(Color.primary)
                     }
@@ -343,7 +343,7 @@ struct DocumentCard: View {
                 .foregroundStyle(Color.secondary)
 
             // Completion status
-            Text("\(document.unwrappedPages.filter { $0.isDone }.count) of \(document.totalPages) pages reviewed (\(document.completionPercentage)%)")
+            Text("\(document.unwrappedPages.filter { $0.isDone }.count) of \(document.totalPages) pages reviewed (\(document.completionPercentage, format: .percent))")
                 .font(.caption)
                 .foregroundStyle(Color.secondary)
         }

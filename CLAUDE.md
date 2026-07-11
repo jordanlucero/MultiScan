@@ -528,23 +528,33 @@ Images are stored as `Data` with `@Attribute(.externalStorage)` in the Page mode
 ### Page Image Properties
 ```swift
 var rotation: Int = 0              // Degrees: 0, 90, 180, 270
-var increaseContrast: Bool = false // Applies .contrast(1.3) modifier
-var increaseBlackPoint: Bool = false // Applies .brightness(-0.1) modifier
+var increaseContrast: Bool = false // CIColorControls contrast 1.3 (viewer) / .contrast(1.3) (thumbnails)
+var increaseBlackPoint: Bool = false // CIColorControls brightness -0.1 (viewer) / .brightness(-0.1) (thumbnails)
 ```
 
 ### PlatformImage Helper (`Services/PlatformImage.swift`)
 Cross-platform image loading that combines EXIF orientation with user rotation:
-- `from(data:userRotation:)` - Creates SwiftUI Image with combined orientation
+- `from(data:userRotation:)` - Creates SwiftUI Image with combined orientation (thumbnails)
+- `processedCGImage(from:userRotation:increaseContrast:increaseBlackPoint:)` - CGImage with rotation + adjustments baked in via CIFilter (main viewer)
 - `dimensions(of:userRotation:)` - Returns apparent dimensions accounting for rotation
 - `combinedOrientation(exif:userRotation:)` - Lookup table merging EXIF + user rotation
 
-### Display Pipeline
-1. `PlatformImage.from(data:userRotation:)` creates rotated SwiftUI Image
-2. `.contrast()` and `.brightness()` modifiers applied based on Page properties
-3. Same transforms applied to both `ImageViewer` (main view) and `ThumbnailView` (sidebar)
+### Main Viewer Pipeline (`ImageViewer` → `ZoomableImageView`)
+1. `ImageViewer` builds an `ImageRequest` (page persistentModelID + rotation + adjustments) from `navigationState.currentPage`; `.task(id: imageRequest)` decodes off the main actor via `PlatformImage.processedCGImage` and auto-cancels stale loads
+2. The result is a `ProcessedPageImage` (CGImage + `ContentID`). The `ContentID` (pageID + rotation) tells the platform view when to reset zoom: page switch/rotation → re-fit; contrast/black point tweak → swap pixels in place, zoom and scroll preserved
+3. Thumbnails (`ThumbnailSidebar`, `SlideGridView`) still use `PlatformImage.from` + SwiftUI `.contrast()`/`.brightness()` modifiers
 
-### Rotation Change Detection
-`ImageViewer` observes `navigationState.currentPage?.rotation` via `.onChange()` and reloads the image when rotation changes.
+## Zoomable Image Viewer (`Views/ZoomableImageView.swift`)
+
+Platform-native zoom/pan built on scroll-view **subclasses** (`MacZoomableScrollView: NSScrollView`, `IOSZoomableScrollView: UIScrollView`), hosted by thin representables. Design rules:
+
+- **All fit-to-window logic runs synchronously in the platform layout pass** (`setFrameSize`/`layout` on macOS, `layoutSubviews` on iOS). Sidebar/inspector/window resizes re-fit frame-by-frame during the animation — no NotificationCenter frame observers, no async races. The fit invariant: at fit → stay at fit through resizes; zoomed in → preserve absolute zoom, re-clamp to new limits. Nothing ever touches magnification mid-gesture (gestures don't change the viewport).
+- **Zoom commands flow through `ImageZoomController`** (`@Observable`, one per `ImageViewer`): the scroll view registers as its `ImageZoomTarget`; on-screen buttons and accessibility actions call it directly; menu bar/⌘+/⌘−/⌘0 reach it via `FocusedValues.imageZoomController` (scene-scoped, so multiple windows don't cross-zoom). The old global zoom notifications are gone.
+- **Zoom level reporting** goes controller-ward (`reportZoomLevel`, relative to fit, 1.0 = fit) — never through a SwiftUI `Binding`, which previously re-entered `updateNSView` and caused zoom resets.
+- **Bounce/elasticity**: iOS `bouncesZoom` + `alwaysBounceVertical/Horizontal`; macOS scroll elasticity `.allowed`, `usesPredominantAxisScrolling = false` (free 2D pan), native pinch rubber-banding (no mid-gesture clamps).
+- **Conventions**: double-tap (iOS) / double-click (macOS) toggles fit ↔ 2.5× fit at the pointer; ⌘+scroll wheel zooms at the cursor (macOS); smart magnify is native NSScrollView behavior. `maximumZoomScale = max(fit × 10, 1.0)`.
+- **Safe-area insets** from SwiftUI (`GeometryReader` + `.ignoresSafeArea()`) are applied as content insets so the image renders behind the glass toolbar panels but fits/centers within the visible area. macOS `CenteringClipView` converts point-space insets into document space (divide by magnification) before centering — don't "simplify" that division away.
+- **HDR is fully system-managed**: `PlatformImage.processedCGImage` decodes with `kCGImageSourceDecodeToHDR` (gain-map iPhone photos would otherwise decode SDR-only; the CI adjustment path renders `.RGBAh` into the source color space when the decode came back >8 bits per component to keep the headroom). Display is toggled purely via `preferredImageDynamicRange` (`.high` ↔ `.standard`, the system does the tone mapping) on the platform image views — `@AppStorage("viewerShowsHDR")`, Image ▸ Show HDR. Toggling never re-decodes. No custom HDR pipeline — keep it that way.
 
 ## Page Reordering
 
@@ -610,6 +620,7 @@ Right-click on any thumbnail in `ThumbnailSidebar` shows context menu with:
 | Rotate Counterclockwise | ⌘⇧R |
 | Increase Contrast | (toggle) |
 | Increase Black Point | (toggle) |
+| Show HDR | (toggle, app-wide viewer preference — not a page edit; macOS + iPadOS menu bar only, iPhone always uses the stored value, default ON) |
 
 ### Edit Menu (page operations)
 | Command | Shortcut |

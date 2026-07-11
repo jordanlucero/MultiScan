@@ -45,7 +45,7 @@ struct SlideGridView: View {
         guard !searchText.isEmpty else { return sortedPages }
         let query = searchText.lowercased()
         return sortedPages.filter { page in
-            let numberMatch = "page \(page.pageNumber)".contains(query)
+            let numberMatch = String(localized: "Page \(page.pageNumber)").lowercased().contains(query)
                 || "\(page.pageNumber)".contains(query)
             let fileMatch = page.originalFileName?.lowercased().contains(query) ?? false
             let textMatch = page.plainText.lowercased().contains(query)

@@ -270,11 +270,11 @@ extension ContainerLoadError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .containerCreationFailed(let message):
-            return "Failed to load data: \(message)"
+            return String(localized: "Failed to load data: \(message)")
         case .criticalIntegrityIssues(let issues):
-            return "Data integrity issues: \(issues.joined(separator: ", "))"
+            return String(localized: "Data integrity issues: \(issues.joined(separator: ", "))")
         case .databaseCorrupted(let message):
-            return "Database corrupted: \(message)"
+            return String(localized: "Database corrupted: \(message)")
         }
     }
 }

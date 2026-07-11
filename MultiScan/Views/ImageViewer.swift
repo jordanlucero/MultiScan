@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 /// Background color options for the image viewer
 enum ViewerBackground: String, CaseIterable {
@@ -36,31 +37,46 @@ enum ViewerBackground: String, CaseIterable {
 }
 
 struct ImageViewer: View {
-    let document: Document
     @ObservedObject var navigationState: NavigationState
 
     // Settings
     @AppStorage("viewerBackground") private var viewerBackgroundRaw = ViewerBackground.system.rawValue
+    /// Show HDR photos with full headroom; when off, the system tone-maps them to SDR.
+    /// Toggled from the Image menu (macOS + iPadOS menu bar).
+    @AppStorage("viewerShowsHDR") private var viewerShowsHDR = true
 
     private var viewerBackground: ViewerBackground {
         ViewerBackground(rawValue: viewerBackgroundRaw) ?? .system
     }
 
-    // Processed image ready for display (rotated + adjusted)
-    @State private var processedImage: CGImage?
-    // Identity of the current page — changes trigger zoom reset in ZoomableImageView
-    @State private var imageIdentity: String = ""
-    // Zoom scale reported back from platform scroll view (1.0 = fit-to-window)
-    @State private var currentScale: CGFloat = 1.0
+    /// Zoom command/state bridge shared with the platform scroll view and menu commands
+    @State private var zoomController = ImageZoomController()
+    /// Processed image ready for display (rotation + adjustments baked in)
+    @State private var displayImage: ProcessedPageImage?
     @State private var isHovering: Bool = false
     @FocusState private var focusedButton: ZoomButton?
 
-    // Task management for cleanup on view dismissal
-    @State private var imageLoadingTask: Task<Void, Never>?
-    @State private var isViewActive: Bool = true
-
     enum ZoomButton {
         case fit, zoomIn, zoomOut
+    }
+
+    /// Everything that requires re-decoding the display image. Drives `.task(id:)`,
+    /// which cancels any in-flight decode when the page or its settings change.
+    private struct ImageRequest: Equatable {
+        var pageID: PersistentIdentifier?
+        var rotation: Int
+        var increaseContrast: Bool
+        var increaseBlackPoint: Bool
+    }
+
+    private var imageRequest: ImageRequest {
+        let page = navigationState.currentPage
+        return ImageRequest(
+            pageID: page?.persistentModelID,
+            rotation: page?.rotation ?? 0,
+            increaseContrast: page?.increaseContrast ?? false,
+            increaseBlackPoint: page?.increaseBlackPoint ?? false
+        )
     }
 
     var body: some View {
@@ -71,26 +87,26 @@ struct ImageViewer: View {
                     .backgroundExtensionEffect()
             }
 
-            if let cgImage = processedImage {
+            if let displayImage {
                 GeometryReader { geometry in
                     ZoomableImageView(
-                        cgImage: cgImage,
-                        imageIdentity: imageIdentity,
-                        currentScale: $currentScale,
+                        image: displayImage,
+                        controller: zoomController,
+                        displaysHDR: viewerShowsHDR,
                         safeAreaInsets: geometry.safeAreaInsets
                     )
                     .ignoresSafeArea()
                 }
                 .accessibilityLabel("Page image")
-                .accessibilityValue("Zoom \(Int(currentScale * 100)) percent")
+                .accessibilityValue("Zoom \(Int(zoomController.zoomLevel * 100)) percent")
                 .accessibilityAction(named: "Zoom In") {
-                    NotificationCenter.default.post(name: .zoomIn, object: nil)
+                    zoomController.zoomIn()
                 }
                 .accessibilityAction(named: "Zoom Out") {
-                    NotificationCenter.default.post(name: .zoomOut, object: nil)
+                    zoomController.zoomOut()
                 }
                 .accessibilityAction(named: "Fit to Window") {
-                    NotificationCenter.default.post(name: .zoomActualSize, object: nil)
+                    zoomController.zoomToFit()
                 }
             } else {
                 ProgressView("Loading image…")
@@ -103,53 +119,30 @@ struct ImageViewer: View {
         .onHover { hovering in
             isHovering = hovering
         }
-        .onChange(of: navigationState.currentPage) { _, newPage in
-            processImage(for: newPage, isNewPage: true)
+        .task(id: imageRequest) {
+            await loadImage(for: imageRequest)
         }
-        .onChange(of: navigationState.currentPage?.rotation) { _, _ in
-            processImage(for: navigationState.currentPage, isNewPage: true)
-        }
-        .onChange(of: navigationState.currentPage?.increaseContrast) { _, _ in
-            processImage(for: navigationState.currentPage, isNewPage: false)
-        }
-        .onChange(of: navigationState.currentPage?.increaseBlackPoint) { _, _ in
-            processImage(for: navigationState.currentPage, isNewPage: false)
-        }
-        .onAppear {
-            isViewActive = true
-            processImage(for: navigationState.currentPage, isNewPage: true)
-        }
-        .onDisappear {
-            isViewActive = false
-            imageLoadingTask?.cancel()
-            imageLoadingTask = nil
-        }
+        .focusedSceneValue(\.imageZoomController, zoomController)
     }
 
     @ViewBuilder
     private var zoomControls: some View {
         HStack {
-            Button(action: {
-                NotificationCenter.default.post(name: .zoomActualSize, object: nil)
-            }) {
+            Button(action: { zoomController.zoomToFit() }) {
                 Image(systemName: "arrow.up.left.and.arrow.down.right")
             }
             .accessibilityLabel("Fit to Window")
             .help("Fit to Window")
             .focused($focusedButton, equals: .fit)
 
-            Button(action: {
-                NotificationCenter.default.post(name: .zoomIn, object: nil)
-            }) {
+            Button(action: { zoomController.zoomIn() }) {
                 Image(systemName: "plus.magnifyingglass")
             }
             .accessibilityLabel("Zoom In")
             .help("Zoom In")
             .focused($focusedButton, equals: .zoomIn)
 
-            Button(action: {
-                NotificationCenter.default.post(name: .zoomOut, object: nil)
-            }) {
+            Button(action: { zoomController.zoomOut() }) {
                 Image(systemName: "minus.magnifyingglass")
             }
             .accessibilityLabel("Zoom Out")
@@ -169,40 +162,33 @@ struct ImageViewer: View {
 
     // MARK: - Image Processing
 
-    private func processImage(for page: Page?, isNewPage: Bool) {
-        imageLoadingTask?.cancel()
-        imageLoadingTask = nil
-
-        guard let page = page,
+    private func loadImage(for request: ImageRequest) async {
+        guard let page = navigationState.currentPage,
+              page.persistentModelID == request.pageID,
               let imageData = page.imageData else {
-            processedImage = nil
+            displayImage = nil
             return
         }
 
-        let rotation = page.rotation
-        let contrast = page.increaseContrast
-        let blackPoint = page.increaseBlackPoint
-        let identity = "\(page.pageNumber)-\(rotation)"
-
-        imageLoadingTask = Task {
-            guard !Task.isCancelled else { return }
-
-            let cgImage = PlatformImage.processedCGImage(
+        // Decode + rotate + adjust off the main actor
+        let cgImage = await Task.detached(priority: .userInitiated) {
+            PlatformImage.processedCGImage(
                 from: imageData,
-                userRotation: rotation,
-                increaseContrast: contrast,
-                increaseBlackPoint: blackPoint
+                userRotation: request.rotation,
+                increaseContrast: request.increaseContrast,
+                increaseBlackPoint: request.increaseBlackPoint
             )
+        }.value
 
-            guard !Task.isCancelled else { return }
+        guard !Task.isCancelled else { return }
 
-            await MainActor.run {
-                guard self.isViewActive else { return }
-                if isNewPage {
-                    self.imageIdentity = identity
-                }
-                self.processedImage = cgImage
-            }
+        if let cgImage {
+            displayImage = ProcessedPageImage(
+                cgImage: cgImage,
+                contentID: .init(pageID: request.pageID, rotation: request.rotation)
+            )
+        } else {
+            displayImage = nil
         }
     }
 }

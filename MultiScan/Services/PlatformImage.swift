@@ -145,8 +145,18 @@ enum PlatformImage {
         increaseContrast: Bool = false,
         increaseBlackPoint: Bool = false
     ) -> CGImage? {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-              let rawCGImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
+            return nil
+        }
+
+        // Decode HDR content when present (iPhone photos store HDR as a gain map that a
+        // plain decode drops). Best-effort: SDR sources decode normally under this request,
+        // and the nil-options decode is a fallback for any decoder that rejects it.
+        // Whether HDR actually *displays* is controlled at the view layer via
+        // preferredImageDynamicRange (see ZoomableImageView).
+        let hdrOptions = [kCGImageSourceDecodeRequest: kCGImageSourceDecodeToHDR] as CFDictionary
+        guard let rawCGImage = CGImageSourceCreateImageAtIndex(source, 0, hdrOptions)
+                ?? CGImageSourceCreateImageAtIndex(source, 0, nil) else {
             return nil
         }
 
@@ -181,6 +191,11 @@ enum PlatformImage {
             }
         }
 
+        // More than 8 bits per component means the source decoded to HDR — render
+        // half-float into the source color space so the headroom survives the filter chain.
+        if rawCGImage.bitsPerComponent > 8, let colorSpace = rawCGImage.colorSpace {
+            return ciContext.createCGImage(ciImage, from: ciImage.extent, format: .RGBAh, colorSpace: colorSpace)
+        }
         return ciContext.createCGImage(ciImage, from: ciImage.extent)
     }
 

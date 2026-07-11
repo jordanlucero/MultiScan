@@ -77,7 +77,7 @@ struct ReviewView: View {
                 // Announce document opening for VoiceOver users
                 Task {
                     try? await Task.sleep(for: .milliseconds(300))
-                    AccessibilityNotification.Announcement("\(document.name) opened. \(document.totalPages) pages.").post()
+                    AccessibilityNotification.Announcement(String(localized: "\(document.name) opened. \(document.totalPages) pages.")).post()
                 }
             }
             .onChange(of: navigationState.currentPageNumber) { _, newPageNumber in
@@ -155,10 +155,7 @@ struct ReviewView: View {
             .navigationSplitViewColumnWidth(min: 150, ideal: 200, max: 400)
             #endif
         } detail: {
-            ImageViewer(
-                document: document,
-                navigationState: navigationState
-            )
+            ImageViewer(navigationState: navigationState)
         }
         .inspector(isPresented: $showTextPanel) {
             RichTextSidebar(
@@ -385,7 +382,7 @@ struct ReviewView: View {
                 .font(.headline)
 
             if isAddingPages {
-                ProgressView("Processing \(Int(ocrService.progress * 100))%")
+                ProgressView("Processing \(Int(ocrService.progress * 100), format: .percent)")
                     .progressViewStyle(.linear)
             } else {
                 PhotosPicker(

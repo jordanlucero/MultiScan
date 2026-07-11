@@ -65,18 +65,19 @@ struct ThumbnailSidebar: View {
         var parts: [String] = []
 
         if isFilterActive {
-            parts.append("status: \(String(localized: filterOption.label))")
+            parts.append(String(localized: "status: \(String(localized: filterOption.label))", comment: "Part of a VoiceOver filter announcement"))
         }
 
         if !searchText.isEmpty {
-            parts.append("text: \"\(searchText)\"")
+            parts.append(String(localized: "text: \"\(searchText)\"", comment: "Part of a VoiceOver filter announcement"))
         }
 
         if parts.isEmpty {
-            return "No filter active"
+            return String(localized: "No filter active")
         }
 
-        return "Filtered by \(parts.joined(separator: " and "))"
+        let separator = String(localized: " and ", comment: "Separator joining parts of the filter announcement")
+        return String(localized: "Filtered by \(parts.joined(separator: separator))")
     }
 
     /// Announces filter changes to VoiceOver users
@@ -85,10 +86,10 @@ struct ThumbnailSidebar: View {
         let total = totalPageCount
 
         if !isAnyFilterActive {
-            AccessibilityNotification.Announcement("Filter cleared. Showing all \(total) pages.").post()
+            AccessibilityNotification.Announcement(String(localized: "Filter cleared. Showing all \(total) pages.")).post()
         } else {
             let description = filterDescription
-            AccessibilityNotification.Announcement("\(description). Showing \(visible) of \(total) pages.").post()
+            AccessibilityNotification.Announcement(String(localized: "\(description). Showing \(visible) of \(total) pages.")).post()
         }
     }
 

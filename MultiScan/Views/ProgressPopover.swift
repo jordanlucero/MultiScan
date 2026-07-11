@@ -17,7 +17,7 @@ struct ProgressPopover: View {
                     
                     Spacer()
                     
-                    Text("\(Int(navigationState.progress * 100))%")
+                    Text(Int(navigationState.progress * 100), format: .percent)
                         .font(.caption)
                         .foregroundStyle(Color.secondary)
                 }

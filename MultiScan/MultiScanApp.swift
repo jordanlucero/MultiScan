@@ -9,14 +9,6 @@ import SwiftUI
 import SwiftData
 import CloudKit
 
-// MARK: - Notification Names
-
-extension Notification.Name {
-    static let zoomIn = Notification.Name("zoomIn")
-    static let zoomOut = Notification.Name("zoomOut")
-    static let zoomActualSize = Notification.Name("zoomActualSize")
-}
-
 // MARK: - FocusedValue Keys
 
 struct FocusedDocumentKey: FocusedValueKey {
@@ -57,6 +49,10 @@ struct FocusedShowFindNavigatorKey: FocusedValueKey {
 
 struct FocusedIsRandomizedKey: FocusedValueKey {
     typealias Value = Binding<Bool>
+}
+
+struct FocusedImageZoomControllerKey: FocusedValueKey {
+    typealias Value = ImageZoomController
 }
 
 extension FocusedValues {
@@ -108,6 +104,11 @@ extension FocusedValues {
     var isRandomized: Binding<Bool>? {
         get { self[FocusedIsRandomizedKey.self] }
         set { self[FocusedIsRandomizedKey.self] = newValue }
+    }
+
+    var imageZoomController: ImageZoomController? {
+        get { self[FocusedImageZoomControllerKey.self] }
+        set { self[FocusedImageZoomControllerKey.self] = newValue }
     }
 }
 
@@ -236,6 +237,7 @@ struct MultiScanApp: App {
     @AppStorage("filterOption") private var filterOption = "all"
     @AppStorage("optimizeImagesOnImport") private var optimizeImagesOnImport = false
     @AppStorage("viewerBackground") private var viewerBackground = ViewerBackground.system.rawValue
+    @AppStorage("viewerShowsHDR") private var viewerShowsHDR = true
 
     @FocusedValue(\.document) private var focusedDocument: Document?
     @FocusedValue(\.navigationState) private var focusedNavigationState: NavigationState?
@@ -246,6 +248,7 @@ struct MultiScanApp: App {
     @FocusedValue(\.showAddFromPhotos) private var showAddFromPhotosBinding: Binding<Bool>?
     @FocusedValue(\.showAddFromFiles) private var showAddFromFilesBinding: Binding<Bool>?
     @FocusedValue(\.showFindNavigator) private var showFindNavigatorBinding: Binding<Bool>?
+    @FocusedValue(\.imageZoomController) private var focusedZoomController: ImageZoomController?
 
     @State private var showDeletePageConfirmation = false
     @State private var navigationSettings = NavigationSettings()
@@ -663,6 +666,13 @@ struct MultiScanApp: App {
                     Label("Increase Black Point", systemImage: "")
                 }
                 .disabled(focusedCurrentPage == nil)
+
+                Divider()
+
+                // Viewer-wide display preference (not a page edit): when off, the system tone-maps HDR photos down to SDR. No effect on SDR images.
+                Toggle(isOn: $viewerShowsHDR) {
+                    Label("Show HDR", systemImage: "sun.max")
+                }
             }
 
             // View Menu Commands
@@ -721,22 +731,22 @@ struct MultiScanApp: App {
                 Divider()
                 
                 Button("Fit to Window", systemImage: "magnifyingglass") {
-                    NotificationCenter.default.post(name: .zoomActualSize, object: nil)
+                    focusedZoomController?.zoomToFit()
                 }
                 .keyboardShortcut("0", modifiers: [.command])
-                .disabled(focusedDocument == nil)
+                .disabled(focusedZoomController == nil)
 
                 Button("Zoom In") {
-                    NotificationCenter.default.post(name: .zoomIn, object: nil)
+                    focusedZoomController?.zoomIn()
                 }
                 .keyboardShortcut("+", modifiers: [.command])
-                .disabled(focusedDocument == nil)
+                .disabled(focusedZoomController == nil)
 
                 Button("Zoom Out") {
-                    NotificationCenter.default.post(name: .zoomOut, object: nil)
+                    focusedZoomController?.zoomOut()
                 }
                 .keyboardShortcut("-", modifiers: [.command])
-                .disabled(focusedDocument == nil)
+                .disabled(focusedZoomController == nil)
             }
 
             #if os(macOS)

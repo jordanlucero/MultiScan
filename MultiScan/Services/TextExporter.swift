@@ -80,8 +80,9 @@ struct TextExporter {
 
     // MARK: - Page Snapshot
 
-    /// Sendable snapshot of one page's export inputs, gathered on the main actor.
-    private struct PageSnapshot: Sendable {
+    /// Sendable snapshot of one page's export inputs, gathered on the main actor
+    /// (or on `ProjectStore` for App Intents / Transferable exports).
+    struct PageSnapshot: Sendable {
         let pageNumber: Int
         let fileName: String?
         /// Raw persisted bytes — RTF (current) or legacy JSON; decoded off-main.
@@ -155,7 +156,7 @@ struct TextExporter {
 
     // MARK: - Combining (background thread)
 
-    private static func buildResult(
+    static func buildResult(
         from snapshots: [PageSnapshot],
         createVisualSeparation: Bool,
         separatorStyle: SeparatorStyle,

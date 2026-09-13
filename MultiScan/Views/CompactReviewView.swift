@@ -9,6 +9,7 @@
 import SwiftUI
 import SwiftData
 import PhotosUI
+import AppIntents
 
 struct CompactReviewView: View {
     let document: Document
@@ -17,6 +18,7 @@ struct CompactReviewView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.undoManager) private var undoManager
+    @Environment(AppRouter.self) private var router
     @StateObject private var navigationState = NavigationState()
     @StateObject private var ocrService = OCRService()
     private let importService = ImageImportService()
@@ -38,6 +40,8 @@ struct CompactReviewView: View {
     var body: some View {
         NavigationStack {
             ImageViewer(navigationState: navigationState)
+            // Onscreen awareness: lets Siri/Apple Intelligence refer to "this page".
+            .appEntityIdentifier(navigationState.currentPage?.uuid.map { EntityIdentifier(for: PageEntity.self, identifier: $0) })
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarRole(.editor)
@@ -88,11 +92,15 @@ struct CompactReviewView: View {
                 if let firstPage = navigationState.currentPage {
                     selectedPageNumber = firstPage.pageNumber
                 }
+                fulfillOpenRequest()
                 scheduleCleanupAnalysis()
             }
             .onChange(of: navigationState.currentPageNumber) { _, newPageNumber in
                 selectedPageNumber = newPageNumber
                 scheduleCleanupAnalysis()
+            }
+            .onChange(of: router.openRequest) { _, _ in
+                fulfillOpenRequest()
             }
             .onChange(of: undoManager) { _, newValue in
                 navigationState.undoManager = newValue
@@ -102,6 +110,16 @@ struct CompactReviewView: View {
 
     private func restoreTextSheet() {
         showTextSheet = true
+    }
+
+    /// Jumps to the page requested by a deep link (Spotlight page result, Open Page intent, search hit).
+    private func fulfillOpenRequest() {
+        guard let request = router.openRequest, request.projectUUID == document.uuid else { return }
+        if let pageNumber = request.pageNumber, navigationState.currentPageNumber != pageNumber {
+            navigationState.goToPage(pageNumber: pageNumber)
+            selectedPageNumber = pageNumber
+        }
+        router.consumeOpenRequest()
     }
 
     // MARK: - Smart Cleanup

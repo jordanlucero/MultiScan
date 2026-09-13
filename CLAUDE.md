@@ -24,16 +24,19 @@ MultiScan is a multiplatform SwiftUI application (macOS, iOS, iPadOS) that uses 
 4. **CompactReviewView.swift**: iPhone document editing UI (iOS-only file)
 5. **Models.swift**: SwiftData models (`Document`, `Page`)
 6. **Views/TextKit/**: The TextKit 2 text engine — platform text views, SwiftUI representables, and the page editing controller (see "TextKit 2 Text Engine")
+7. **AppIntents/**: App Intents entities, queries, intents, and App Shortcuts (see "App Intents & Spotlight")
+8. **Services/AppModelContainer.swift / ProjectStore.swift / SpotlightIndexer.swift / AppRouter.swift / ProjectImportPipeline.swift**: process-wide container, read-side model actor, Spotlight reconciler, deep-link router, shared import→OCR pipeline
 
 ### Data Models
 - **Document**: Container for pages with metadata (name, emoji, storage size). Uses optional `pages` relationship with `unwrappedPages` accessor for CloudKit compatibility.
 - **Page**: Individual page with image, rich text, thumbnails, and display settings. All properties have default values for CloudKit sync.
+- **2.x additive fields** (no schema-version bump): `Document.uuid`, `Document.lastModified`, `Page.uuid`, `Page.plainText` (stored mirror of the RTF, replaces the old computed decode), `Page.plainTextUpdatedAt`. See "Storage additions (2.x)".
 
 ### Data Flow
 - SwiftData `@Model` classes for persistence
 - `@Query` property wrapper for reactive data fetching
 - `modelContext` from environment for CRUD operations
-- `NavigationState` (`@Observable`) for UI state management
+- `NavigationState` (`ObservableObject`, one per review view) for page navigation state; `AppRouter` (`@Observable`, one per process) for app-level navigation requests (deep links, search)
 
 ## Development Commands
 
@@ -267,8 +270,14 @@ The app tracks schema versions to gracefully handle data incompatibilities and p
 3. Post-load validation (.task {})
    ├─ Check SchemaMetadata for CloudKit sync from newer version
    ├─ Run integrity validation (totalPages, pageNumbers, orphans)
-   └─ Self-heal minor issues automatically
+   ├─ Self-heal minor issues automatically
+   ├─ ProjectMaintenance.backfillIdentityAndPlainText (assign missing uuids, refresh stale plainText)
+   └─ SpotlightIndexer.scheduleReconcile (bring the Spotlight index up to date)
 ```
+
+The container itself lives in `AppModelContainer.shared` (`@MainActor` static) so App Intents, entity
+queries, and the indexer reach it outside the SwiftUI environment; `MultiScanApp.init()` forces its
+creation first, then registers `AppRouter.shared` / `ProjectStore.shared` with `AppDependencyManager`.
 
 ### Integrity Validation & Self-Healing
 
@@ -289,6 +298,7 @@ Critical issues require user action:
 |---------|-------------|---------|
 | 1 | 1.5.1+ | Initial tracked version. Document, Page, SchemaMetadata models. |
 | 2 | 2.0 | `Page.richTextData` **format** changed from JSON-encoded `AttributedString` to RTF (TextKit 2 engine). Property name/type unchanged, so the SwiftData/CloudKit schema is identical — but v1 apps decode the blob as JSON and would see (and could save back) empty text, so they must be gated. Migration is lazy: reads accept both formats, writes produce RTF. `SchemaMetadata.recordSuccessfulLoad()` raises the stored version so other devices' gates fire via CloudKit. |
+| 2 (unchanged) | 2.x | Additive fields only — `Document.uuid`, `Document.lastModified`, `Page.uuid`, `Page.plainText`, `Page.plainTextUpdatedAt` — with lazy backfill at launch. No bump: builds without these columns keep working, and stale `plainText` is detected via `plainTextUpdatedAt < lastModified`. CloudKit production schema must be re-promoted once for the new fields.
 
 ### When to Bump Schema Version
 
@@ -487,6 +497,8 @@ Changes are saved in these scenarios:
 
 All save calls check `hasUnsavedChanges` first — no-op if no edits were made.
 
+Every save also updates `Page.plainText`/`plainTextUpdatedAt` and `Document.lastModified` (via the `attributedText` setter) and, through `ModelContext.didSave`, schedules a Spotlight reconcile.
+
 ### Persistence Flow (Simplified)
 1. `saveNow()` normalizes the snapshot to the storage font (strips display colors) and assigns to `page.attributedText`
 2. The setter RTF-encodes to `richTextData` and updates `lastModified`
@@ -498,6 +510,65 @@ All save calls check `hasUnsavedChanges` first — no-op if no edits were made.
 - **Colors are display-only, never stored.** Platform text views render runs *without* a `.foregroundColor` attribute in default black regardless of appearance (view-level `textColor` only covers text present when it's set, plus typing attributes). So every display path stamps the dynamic label color via `RichTextArchiver.applyingDisplayColor(_:)` — `normalizedForDisplay` does it for the editor, `RichTextPreview` does it for the export preview — and `normalizedForStorage` strips it on save
 - Formatting toolbar always visible in header when page selected (macOS only — iOS uses the system-provided controls; see Multiplatform Architecture)
 - `modelContext.save()` on app quit ensures synchronous disk write before termination (`NSApplication`/`UIApplication` `willTerminateNotification` per platform; iPhone also saves on `scenePhase == .background`)
+
+## Storage additions (2.x, additive)
+
+| Field | Purpose |
+|-------|---------|
+| `Document.uuid: UUID?`, `Page.uuid: UUID?` | Stable, device-independent identity for App Intents entities, Spotlight, `SyncableEntity`, and deep links. **Optional on purpose**: a non-optional `UUID()` default can stamp the same value on every existing row during lightweight migration. Backfilled by `ProjectMaintenance.backfillIdentityAndPlainText` (main context) after schema self-healing. `#Index` on both. |
+| `Page.plainText: String` | Stored mirror of the RTF, set by the `attributedText` setter and `init`. Replaces the old computed property (which decoded RTF on every call), so the per-document page filters, `#Predicate` full-text search (`localizedStandardContains`), and Spotlight `textContent` never touch external storage. |
+| `Page.plainTextUpdatedAt: Date?` | Staleness guard: if `nil` or older than `lastModified` (a build without the column wrote the RTF), the backfill re-derives `plainText` — from the export cache when it matches, otherwise one RTF decode. |
+| `Document.lastModified: Date?` | Bumped on rename/emoji (`DocumentCard`) and by every page text write (`Page.attributedText` setter). `lastModifiedDate` is the max of this, page dates, and `createdAt`. |
+
+Backfill runs per document, decoding `textExportCache` once (no per-page external reads), saving per document with `Task.yield()` between. Two 2.x devices may assign different UUIDs to the same pre-existing row when iCloud sync is on; CloudKit converges (last writer wins) and the Spotlight reconcile self-heals.
+
+## App Intents & Spotlight
+
+Everything lives in `MultiScan/AppIntents/` plus the services listed below. All intents run in-process (`allowedExecutionTargets = .main`); there is no App Intents extension.
+
+### Entities (`AppIntents/Entities/`)
+- **`ProjectEntity`** (`IndexedEntity, SyncableEntity, Transferable`): `id` = `Document.uuid`; `@Property`s with Spotlight `indexingKey`s (`name → displayName`, `createdAt`, `lastModified`, `summary → contentDescription`); 200 px JPEG cover for the display representation; `attributeSet` adds keywords + `domainIdentifier = "project.<uuid>"`. Transferable exports RTF file / RTF data / UTF-8 text, fetched lazily via `ProjectStore.projectText` (the entity carries only metadata).
+- **`PageEntity`** (same conformances): `id` = `Page.uuid`; `text → textContent` (from the stored column), 128 px thumbnail; Transferable exports RTF, plain text, and a JPEG of the page (rotation/adjustments applied via `PlatformImage.processedCGImage`).
+- **Queries** (`EntityQueries.swift`): `EntityQuery + EntityStringQuery + IndexedEntityQuery` for both; `@Dependency var store: ProjectStore`. Reindex callbacks route to `SpotlightIndexer.reindex(...)` / `reindexAll()`.
+- Entities are Sendable value snapshots built inside `ProjectStore` (a `@ModelActor`); `@Model` objects never leave it.
+
+### Intents (`AppIntents/Intents/`)
+| Intent | Schema / protocol | Notes |
+|--------|-------------------|-------|
+| `SearchProjectsIntent` | `@AppIntent(schema: .system.searchInApp)`, `ShowInAppSearchResultsIntent` | `router.showSearch(term)` → Home with the search field presented. (`.system.search` is deprecated in 27.) |
+| `OpenProjectIntent` | `@AppIntent(schema: .system.open)`, `OpenIntent` | Spotlight uses it to open project results. |
+| `OpenPageIntent` | `OpenIntent` | Opens the project at a page; Spotlight uses it for page results. |
+| `CreateProjectIntent` | `LongRunningIntent, CancellableIntent` | "Scan New Project": `[IntentFile]` (images/PDF) → `ProjectImportPipeline` → returns `ProjectEntity`; reports per-page `progress`. |
+| `GetProjectTextIntent` | `AppIntent` | Plain text via `ProjectStore.projectText` (RTF comes from Transferable). |
+| `DeleteProjectIntent` | `DeleteIntent` | `requestConfirmation` then `ProjectMaintenance.deleteProjects` on the main context. |
+
+`MultiScanShortcuts` (`AppShortcutsProvider`) exposes Search / Open / Scan phrases; phrases are localized in `AppShortcuts.xcstrings`. Call `MultiScanShortcuts.updateAppShortcutParameters()` after creating, renaming, or deleting projects (already done in the pipeline, `DocumentCard`, `HomeView`, `DeleteProjectIntent`).
+
+The `.system` domain has **no entity schemas**, so the entities are plain `AppEntity` types. `@AssistantIntent`/`@AssistantEntity` are deprecated — use `@AppIntent(schema:)` / `@AppEntity(schema:)`.
+
+### Onscreen awareness
+`DocumentCard` annotates itself with `.appEntityIdentifier(ProjectEntity)`, and both review views annotate the viewer with the current `PageEntity`, so Siri / Apple Intelligence can resolve "this project" / "this page".
+
+### Deep links: `AppRouter` (`Services/AppRouter.swift`)
+`@MainActor @Observable`, one per process, injected via `.environment(AppRouter.shared)` and registered with `AppDependencyManager`. `open(project:page:)` sets an `OpenRequest`; `ContentView` switches `selectedDocument` by uuid; `ReviewView`/`CompactReviewView` consume the page number (`goToPage`) once they show that project. `showSearch(term)` sets `wantsHome` + `searchText` + `isSearchPresented`. macOS multi-window: every window observes the router; the one showing the target navigates (accepted limitation).
+
+### Spotlight indexing: `SpotlightIndexer` (`Services/SpotlightIndexer.swift`)
+- Named index `CSSearchableIndex(name: "MultiScan")`; entities donated with `indexAppEntities`, removed with `deleteAppEntities(identifiedBy:ofType:)`.
+- **Reconcile, don't hook**: no write site calls the indexer. A local manifest (`Application Support/MultiScan/spotlight-manifest.plist`, uuid → fingerprint string) is diffed against `ProjectStore.fingerprints()`; changed rows are re-donated (projects in one batch, pages in batches of 200, manifest saved after each batch), missing rows deleted first. Page fingerprints include the project name (page results show it as subtitle).
+- Triggers: `ModelContext.didSave`, `.NSPersistentStoreRemoteChange`, `scenePhase == .active`, and post-launch backfill — all debounced 2 s; one pass at a time with a "run again" flag. The remote-change observer is the indexer's only Core Data API (SwiftData has no public equivalent) — intentional, keep it.
+- No in-app on/off setting: users control MultiScan in Spotlight through the system's own Settings (Siri & Search / Spotlight). Don't add one.
+- `ProjectStore` builds entities off the main actor; page thumbnails are downscaled to 128 px JPEG at index time (project cover 200 px) to keep the index small.
+
+### App-wide search UI (`HomeView` + `Views/SearchResultsView.swift`)
+- `.searchable(text:isPresented:)` bound to the router. Placement via `DefaultToolbarItem(kind: .search, placement:)`: `.primaryAction` declared *before* the `+` item on macOS and iPad (search sits to its left); `.bottomBar` on iPhone (compact width).
+- While a query is present, `SearchResultsView` replaces the grid: `ProjectStore.search(term:)` (debounced 250 ms; `#Predicate` on `Document.name` and `Page.plainText`) returns Sendable hits with ±60-char snippets; matches are bolded; tapping routes through `AppRouter.open(project:page:)`.
+- The per-document filters in `ThumbnailSidebar`, `SlideGridView`, and `NavigationState` still use `page.plainText` — now the stored column, so they no longer decode RTF per keystroke.
+
+### Import pipeline (`Services/ProjectImportPipeline.swift`)
+`@MainActor @Observable` singleton owning the `OCRService`/`ImageImportService` and the in-flight state (`processingDocumentIDs`, `progress`). `prepare(urls:optimizeImages:onEstimate:)` scans files/folders and renders PDFs; `createProject(named:images:onPageProgress:)` inserts the `Document`, runs OCR, fills pages, builds the export cache, and returns the project `uuid` (deleting the document on failure). `HomeView` and `CreateProjectIntent` both use it, so intent-driven imports show the same progress card.
+
+### Debug aid
+Launching a DEBUG build with `-seedSampleProject` inserts a text-only sample project when the store is empty and logs a search self-test (`DebugSampleData`).
 
 ## Full Document Text Cache
 
@@ -514,12 +585,8 @@ The cache is rebuilt when:
 - **Dynamic Type (iOS)**: attributed strings carry explicit fonts, so they don't rescale automatically. `PageTextView` registers for `UITraitPreferredContentSizeCategory` changes and `PageTextController.dynamicTypeDidChange()` re-normalizes the live content to the new body size (display-only — storage strips sizes, so this never dirties the document)
 - **⚠️ Pending on-device verification**: the SwiftUI accessibility custom actions on `PageTextEditor` ("Exit text editor", next/previous page) haven't been VoiceOver-tested since the TextKit 2 migration — actions attached to a representable may not surface on the wrapped text view's accessibility element. Fallback if missing: `accessibilityCustomActions` on `PageTextView`
 
-### Future: Search Implementation
-To implement document search:
-1. Use `fullDocumentPlainText` (or per-entry `plainText` in the export cache) for queries
-2. Map character positions back to page numbers for navigation
-3. In-page find is already native: `PageTextController.presentFindNavigator()`
-4. Consider adding a search index for large documents (100+ pages)
+### Search
+App-wide search is implemented (see "App-wide search UI"): `ProjectStore.search(term:)` queries the stored `Page.plainText` column with `#Predicate`. In-page find is native: `PageTextController.presentFindNavigator()`.
 
 ## Image Display & Transformation Architecture
 

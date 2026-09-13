@@ -29,6 +29,9 @@ final class OCRService: ObservableObject {
     @Published var currentFile: String = ""
     @Published var error: Error?
 
+    /// Called on the main actor whenever `progress`/`currentFile` change (for `@Observable` owners).
+    var progressHandler: (@MainActor (Double, String) -> Void)?
+
     /// Process multiple images from Data
     /// - Parameters:
     ///   - images: Array of tuples containing image data and filename
@@ -52,6 +55,7 @@ final class OCRService: ObservableObject {
 
             currentFile = image.fileName
             progress = Double(index) / Double(imageCount)
+            progressHandler?(progress, currentFile)
 
             let processed = try await Task.detached(priority: .utility) {
                 try await self.processImageData(image.data, fileName: image.fileName, pageNumber: startingPageNumber + index)
@@ -59,10 +63,12 @@ final class OCRService: ObservableObject {
             results.append(processed)
 
             progress = Double(index + 1) / Double(imageCount)
+            progressHandler?(progress, currentFile)
         }
 
         progress = 1.0
         currentFile = ""
+        progressHandler?(progress, currentFile)
 
         return results
     }

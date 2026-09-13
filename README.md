@@ -6,7 +6,7 @@ Built with Swift 6, SwiftUI (with targeted usage of AppKit and UIKit), SwiftData
 
 <img width="3352" height="2217" alt="MultiScan running with a project open on an iMac" src="https://github.com/user-attachments/assets/d0e1cb25-168a-4d55-8947-620cad5f78b8" />
 <br></br>
-Built with Claude Code running Claude Sonnet (4, 4.5, 4.6), Claude Opus (4, 4.1, 4.5, 4.6, 4.7), and Claude Fable (5). MultiScan is appropriately sandboxed.
+Built with Claude Code running Claude Sonnet (4, 4.5, 4.6), Claude Opus (4, 4.1, 4.5, 4.6, 4.7, 5), and Claude Fable (5, 5.1). MultiScan is appropriately sandboxed.
 
 # Features
 

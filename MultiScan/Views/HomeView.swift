@@ -7,13 +7,15 @@ struct HomeView: View {
     var onDocumentSelected: (Document) -> Void
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(AppRouter.self) private var router
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     #endif
     @Query private var documents: [Document]
-    @StateObject private var ocrService = OCRService()
-    private let importService = ImageImportService()
+
+    /// Shared import → OCR → project pipeline (also driven by the "Scan New Project" intent).
+    private let pipeline = ProjectImportPipeline.shared
 
     // Import state
     @State private var showingFilePicker = false
@@ -22,9 +24,9 @@ struct HomeView: View {
 
     // UI state
     @State private var showingError = false
+    @State private var importError: Error?
     @State private var documentToDelete: Document?
     @State private var showingDeleteConfirmation = false
-    @State private var processingDocumentIDs: Set<PersistentIdentifier> = []
     @State private var isDragOver = false
     @State private var isOptimizing = false
     @State private var optimizingDocumentID: PersistentIdentifier?
@@ -58,9 +60,18 @@ struct HomeView: View {
         #endif
     }
 
+    /// Whether the app-wide search results replace the project grid.
+    private var isShowingSearchResults: Bool {
+        router.isSearchPresented && !router.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private var homeContent: some View {
-        Group {
-            if documents.isEmpty && !isPreparingImport {
+        @Bindable var router = router
+
+        return Group {
+            if isShowingSearchResults {
+                SearchResultsView(term: router.searchText.trimmingCharacters(in: .whitespacesAndNewlines))
+            } else if documents.isEmpty && !isPreparingImport {
                 emptyState
             } else {
                 documentsGrid
@@ -82,7 +93,7 @@ struct HomeView: View {
         ) { result in
             handleFileImport(result)
         }
-        .alert("Error", isPresented: $showingError, presenting: ocrService.error) { _ in
+        .alert("Error", isPresented: $showingError, presenting: importError) { _ in
             Button("OK") { }
         } message: { error in
             Text(error.localizedDescription)
@@ -106,14 +117,19 @@ struct HomeView: View {
         .onChange(of: selectedPhotos) { _, items in
             Task { await processSelectedPhotos(items) }
         }
-        .onChange(of: ocrService.progress) { oldValue, newValue in
+        .onChange(of: pipeline.progress) { oldValue, newValue in
             // Announce when progress crosses 50%
             if !hasAnnouncedHalfway && oldValue < 0.5 && newValue >= 0.5 {
                 hasAnnouncedHalfway = true
                 AccessibilityNotification.Announcement(String(localized: "Processing is \(50.formatted(.percent)) done.", comment: "VoiceOver announcement when OCR progress passes the halfway point")).post()
             }
         }
-        // to fix inconsistent window corner radius :(
+        // App-wide search: projects by name, pages by recognized text. The system `searchInApp` intent lands here with the field presented and populated.
+        .searchable(
+            text: $router.searchText,
+            isPresented: $router.isSearchPresented,
+            prompt: Text("Search")
+        )
         .toolbar { toolbarContent }
     }
 
@@ -177,6 +193,8 @@ struct HomeView: View {
 
     // MARK: - Toolbar Content
 
+    /// The system search field is positioned explicitly: left of the "+" button in the trailing
+    /// toolbar on macOS and iPad, and in the bottom bar on iPhone (compact width).
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         #if os(iOS)
@@ -189,6 +207,14 @@ struct HomeView: View {
             }
             .accessibilityLabel("Settings")
         }
+
+        if horizontalSizeClass == .compact {
+            DefaultToolbarItem(kind: .search, placement: .bottomBar)
+        } else {
+            DefaultToolbarItem(kind: .search)
+        }
+        #else
+        DefaultToolbarItem(kind: .search)
         #endif
 
         ToolbarItem(placement: .primaryAction) {
@@ -216,12 +242,12 @@ struct HomeView: View {
     }
 
     private func documentLink(for document: Document) -> some View {
-        let isProcessing = processingDocumentIDs.contains(document.persistentModelID)
+        let isProcessing = pipeline.processingDocumentIDs.contains(document.persistentModelID)
 
         return DocumentCard(
             document: document,
             isProcessing: isProcessing,
-            ocrProgress: ocrService.progress,
+            ocrProgress: pipeline.progress,
             onOpen: {
                 onDocumentSelected(document)
             },
@@ -260,6 +286,7 @@ struct HomeView: View {
         modelContext.delete(document)
         do {
             try modelContext.save()
+            MultiScanShortcuts.updateAppShortcutParameters()
         } catch {
             print("Failed to delete document: \(error)")
         }
@@ -317,8 +344,7 @@ struct HomeView: View {
             }
         case .failure(let error):
             print("File import error: \(error)")
-            ocrService.error = error
-            showingError = true
+            presentError(error)
         }
     }
 
@@ -326,46 +352,24 @@ struct HomeView: View {
     private func processFileURLs(_ urls: [URL]) async {
         isPreparingImport = true
 
-        let result = await importService.processFileURLs(urls, optimizeImages: optimizeImagesOnImport)
-
-        // Quick page count for immediate announcement (images + PDF pages)
-        var estimatedPageCount = result.images.count
-        for pdfURL in result.pdfURLs {
-            let accessed = pdfURL.startAccessingSecurityScopedResource()
-            estimatedPageCount += PDFImportService.pageCount(for: pdfURL)
-            if accessed { pdfURL.stopAccessingSecurityScopedResource() }
-        }
-
-        // Announce immediately if we have content to process
-        if estimatedPageCount > 0 {
-            hasAnnouncedHalfway = false
-            processingPageCount = estimatedPageCount
-            AccessibilityNotification.Announcement(String(localized: "Processing \(estimatedPageCount) pages. This will take a few moments.")).post()
-        }
-
-        var allImages = result.images
-
-        // Process any PDFs by rendering pages to images
-        if !result.pdfURLs.isEmpty {
-            let pdfService = PDFImportService()
-            for pdfURL in result.pdfURLs {
-                let accessed = pdfURL.startAccessingSecurityScopedResource()
-                defer { if accessed { pdfURL.stopAccessingSecurityScopedResource() } }
-
-                do {
-                    let pdfImages = try await pdfService.renderPDF(at: pdfURL)
-                    allImages.append(contentsOf: pdfImages)
-                } catch {
-                    print("PDF import error: \(error)")
-                    ocrService.error = error
-                    showingError = true
-                    isPreparingImport = false
-                    return
+        let prepared: ProjectImportPipeline.PreparedImport
+        do {
+            prepared = try await pipeline.prepare(urls: urls, optimizeImages: optimizeImagesOnImport) { estimatedPageCount in
+                // Announce immediately if we have content to process
+                if estimatedPageCount > 0 {
+                    hasAnnouncedHalfway = false
+                    processingPageCount = estimatedPageCount
+                    AccessibilityNotification.Announcement(String(localized: "Processing \(estimatedPageCount) pages. This will take a few moments.")).post()
                 }
             }
+        } catch {
+            print("Import error: \(error)")
+            isPreparingImport = false
+            presentError(error)
+            return
         }
 
-        guard !allImages.isEmpty else {
+        guard !prepared.images.isEmpty else {
             print("No valid images found")
             isPreparingImport = false
             return
@@ -374,8 +378,8 @@ struct HomeView: View {
         // Spinner will be replaced by document card's progress indicator
         isPreparingImport = false
 
-        let documentName = result.suggestedName ?? String(localized: "Import \(Date().formatted(date: .abbreviated, time: .shortened))", comment: "Default project name; placeholder is the current date")
-        await startOCRProcessing(images: allImages, documentName: documentName)
+        let documentName = prepared.suggestedName ?? ProjectImportPipeline.defaultProjectName()
+        await startOCRProcessing(images: prepared.images, documentName: documentName)
     }
 
     // MARK: - Photos Import Handling
@@ -385,7 +389,7 @@ struct HomeView: View {
         guard !items.isEmpty else { return }
 
         isPreparingImport = true
-        let images = await importService.processSelectedPhotos(items, optimizeImages: optimizeImagesOnImport)
+        let images = await pipeline.loadPhotos(items, optimizeImages: optimizeImagesOnImport)
         isPreparingImport = false
 
         guard !images.isEmpty else {
@@ -399,8 +403,7 @@ struct HomeView: View {
         processingPageCount = images.count
         AccessibilityNotification.Announcement(String(localized: "Processing \(images.count) pages. This will take a few moments.")).post()
 
-        let documentName = String(localized: "Import \(Date().formatted(date: .abbreviated, time: .shortened))", comment: "Default project name; placeholder is the current date")
-        await startOCRProcessing(images: images, documentName: documentName)
+        await startOCRProcessing(images: images, documentName: ProjectImportPipeline.defaultProjectName())
         selectedPhotos = []
     }
 
@@ -422,99 +425,31 @@ struct HomeView: View {
 
     @MainActor
     private func startOCRProcessing(images: [(data: Data, fileName: String)], documentName: String) async {
-        // Create document
-        let document = Document(name: documentName, totalPages: 0)
-        modelContext.insert(document)
-
         do {
-            try modelContext.save()
+            try await pipeline.createProject(named: documentName, images: images)
+            AccessibilityNotification.Announcement(String(localized: "Scan complete. \(images.count) pages ready for review.")).post()
         } catch {
-            print("Failed to save document: \(error)")
-            ocrService.error = error
-            showingError = true
-            return
-        }
-
-        let documentID = document.persistentModelID
-        processingDocumentIDs.insert(documentID)
-
-        // Process images in background
-        Task.detached(priority: .userInitiated) { [ocrService, images, documentID] in
-            do {
-                let results = try await ocrService.processImages(images)
-
-                await MainActor.run {
-                    self.updateDocument(with: results, id: documentID)
-                }
-            } catch {
-                await MainActor.run {
-                    self.handleProcessingFailure(for: documentID, error: error)
-                }
-            }
+            print("Failed to create project: \(error)")
+            presentError(error)
         }
     }
 
-    @MainActor
-    private func updateDocument(with results: [ProcessedImage], id: PersistentIdentifier) {
-        guard let document = modelContext.model(for: id) as? Document else { return }
-
-        document.totalPages = results.count
-
-        for result in results {
-            let page = Page(
-                pageNumber: result.pageNumber,
-                text: result.text,
-                imageData: result.imageData,
-                originalFileName: result.originalFileName,
-                boundingBoxesData: result.boundingBoxesData
-            )
-            page.thumbnailData = result.thumbnailData
-            page.document = document
-            document.pages?.append(page)
-        }
-
-        // Calculate storage size after all pages are added
-        document.recalculateStorageSize()
-
-        // Build text export cache while page richText is still in memory
-        TextExportCacheService.buildInitialCache(for: document, from: document.unwrappedPages)
-
-        do {
-            try modelContext.save()
-        } catch {
-            print("Failed to save OCR results: \(error)")
-        }
-
-        processingDocumentIDs.remove(id)
-
-        // Announce completion
-        let pageCount = results.count
-        AccessibilityNotification.Announcement(String(localized: "Scan complete. \(pageCount) pages ready for review.")).post()
-    }
-
-    @MainActor
-    private func handleProcessingFailure(for documentID: PersistentIdentifier, error: Error) {
-        if let document = modelContext.model(for: documentID) as? Document {
-            modelContext.delete(document)
-        }
-        try? modelContext.save()
-
-        processingDocumentIDs.remove(documentID)
-
-        ocrService.error = error
+    private func presentError(_ error: Error) {
+        importError = error
         showingError = true
     }
-
 }
 
 #Preview("English") {
     HomeView(onDocumentSelected: { _ in })
         .modelContainer(previewContainer())
+        .environment(AppRouter.shared)
         .environment(\.locale, Locale(identifier: "en"))
 }
 
 #Preview("es-419") {
     HomeView(onDocumentSelected: { _ in })
         .modelContainer(previewContainer())
+        .environment(AppRouter.shared)
         .environment(\.locale, Locale(identifier: "es-419"))
 }

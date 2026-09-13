@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import AppIntents
 
 struct DocumentCard: View {
     @Bindable var document: Document
@@ -93,6 +94,8 @@ struct DocumentCard: View {
         .sheet(isPresented: $showingExportPanel) {
             ExportPanelView(document: document)
         }
+        // Onscreen awareness: lets Siri/Apple Intelligence refer to a visible project.
+        .appEntityIdentifier(document.uuid.map { EntityIdentifier(for: ProjectEntity.self, identifier: $0) })
     }
 
     // MARK: - Context Menu Content
@@ -263,6 +266,7 @@ struct DocumentCard: View {
                     // Auto-accept when user types an emoji
                     if let firstChar = newValue.first, firstChar.isEmoji {
                         document.emoji = String(firstChar)
+                        document.lastModified = Date()
                         saveDocument()
                         emojiInput = ""
                         showingEmojiPopover = false
@@ -275,6 +279,7 @@ struct DocumentCard: View {
             HStack(spacing: 8) {
                 Button("Clear") {
                     document.emoji = nil
+                    document.lastModified = Date()
                     saveDocument()
                     emojiInput = ""
                     showingEmojiPopover = false
@@ -302,6 +307,7 @@ struct DocumentCard: View {
     private func commitEmoji() {
         if let firstChar = emojiInput.first, firstChar.isEmoji {
             document.emoji = String(firstChar)
+            document.lastModified = Date()
             saveDocument()
         }
         emojiInput = ""
@@ -323,7 +329,9 @@ struct DocumentCard: View {
         let trimmed = editedName.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty {
             document.name = trimmed
+            document.lastModified = Date()
             saveDocument()
+            MultiScanShortcuts.updateAppShortcutParameters()
         }
         isEditingName = false
     }

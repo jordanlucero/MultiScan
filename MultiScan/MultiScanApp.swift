@@ -8,6 +8,7 @@
 import SwiftUI
 import SwiftData
 import CloudKit
+import AppIntents
 
 // MARK: - FocusedValue Keys
 
@@ -257,17 +258,34 @@ struct MultiScanApp: App {
 
     /// Tracks the container loading state for showing appropriate UI.
     /// Initial state is determined by checking for pre-existing errors.
-    @State private var containerLoadState: ContainerLoadState = {
-        // Check for container creation errors first
-        if let error = MultiScanApp.containerCreationError {
+    @State private var containerLoadState: ContainerLoadState = .ready
+
+    @Environment(\.scenePhase) private var scenePhase
+
+    init() {
+        // Build the container first so the load-state check sees the real outcome.
+        _ = AppModelContainer.shared
+        _containerLoadState = State(initialValue: Self.initialContainerLoadState())
+
+        // App Intents: entity queries and intents resolve these through `@Dependency`.
+        let router = AppRouter.shared
+        let store = ProjectStore.shared
+        AppDependencyManager.shared.add(dependency: router)
+        AppDependencyManager.shared.add(dependency: store)
+
+        // Spotlight: reconcile after saves / remote changes.
+        SpotlightIndexer.installTriggers()
+    }
+
+    private static func initialContainerLoadState() -> ContainerLoadState {
+        if let error = AppModelContainer.creationError {
             return .failed(.failed(error: error.localizedDescription))
         }
-        // Check for pre-load version issues
-        if case .newerThanApp(let version) = MultiScanApp.preLoadCheckResult {
+        if case .newerThanApp(let version) = AppModelContainer.preLoadCheckResult {
             return .failed(.incompatible(version: version))
         }
         return .ready
-    }()
+    }
 
     /// State for container loading and error handling.
     enum ContainerLoadState {
@@ -326,109 +344,12 @@ struct MultiScanApp: App {
     //
     // Breaking changes will cause sync failures for users on older app versions.
     // Options for handling this:
-    //   1. Only make additive changes (recommended)
+    //   1. Only make additive changes
     //   2. Add a schemaVersion field and show "please update" for old clients
     //   3. Accept that old versions break (fine for personal/specialist tools)
     //
-    /// Error captured during container creation (if any).
-    /// Using a static var because the container is created during init.
-    private static var containerCreationError: ContainerLoadError?
-
-    /// Result of pre-load version check.
-    private static var preLoadCheckResult: PreLoadCheckResult = .compatible
-
-    var sharedModelContainer: ModelContainer = {
-        // ────────────────────────────────────────────────────────────────────
-        // MARK: Pre-Load Version Check
-        // ────────────────────────────────────────────────────────────────────
-        //
-        // Check for incompatible data BEFORE attempting to load the container.
-        // This uses UserDefaults, which survives database corruption.
-        //
-        let preLoadResult = SchemaValidationService.checkPreLoadCompatibility()
-        MultiScanApp.preLoadCheckResult = preLoadResult
-
-        // If data is from a newer app version, we should warn the user
-        // but still attempt to load (they might want to see their data in read-only mode)
-        if case .newerThanApp(let version) = preLoadResult {
-            print("⚠️ Schema Warning: Data was written by schema version \(version), " +
-                  "but this app only supports version \(SchemaVersioning.currentVersion)")
-        }
-
-        // ────────────────────────────────────────────────────────────────────
-        // MARK: iCloud Sync Configuration
-        // ────────────────────────────────────────────────────────────────────
-        //
-        // Check user preference for iCloud sync.
-        // Default is OFF - users must opt-in via Settings > Import and Storage.
-        //
-        // If enabled: Uses CloudKit private database for cross-device sync
-        // If disabled: Data stays local to this device only
-        //
-        // Note: If user isn't signed into iCloud, enabling sync has no effect -
-        // data just stays local until they sign in.
-        //
-        let iCloudSyncEnabled = SchemaVersioning.isICloudSyncEnabled
-
-        if iCloudSyncEnabled {
-            print("☁️ iCloud sync ENABLED")
-        } else {
-            print("☁️ iCloud sync DISABLED")
-        }
-
-        // Create ModelConfiguration - this determines the store URL
-        let modelConfiguration = ModelConfiguration(
-            isStoredInMemoryOnly: false,
-            cloudKitDatabase: iCloudSyncEnabled
-                ? .private("iCloud.co.jservices.MultiScan")
-                : .none
-        )
-
-        do {
-            // Create the SwiftData container
-            // SwiftData handles CloudKit schema creation automatically when data is saved
-            let container = try ModelContainer(
-                for: Document.self, Page.self, SchemaMetadata.self,
-                configurations: modelConfiguration
-            )
-
-            // Record successful load for future version checks
-            SchemaValidationService.markHasLaunched()
-            SchemaValidationService.recordSuccessfulLoad()
-
-            return container
-        } catch {
-            // ────────────────────────────────────────────────────────────────────
-            // MARK: Container Creation Failed
-            // ────────────────────────────────────────────────────────────────────
-            //
-            // Instead of crashing, we capture the error and show a recovery UI.
-            // The user can then choose to:
-            // - Try again (maybe a transient issue)
-            // - Reset all data (delete and recreate the database)
-            // - Report the issue
-            //
-            // We still need to return SOMETHING for the container, so we create
-            // an in-memory container as a fallback. The app will show recovery UI
-            // instead of the normal content.
-            //
-            MultiScanApp.containerCreationError = .containerCreationFailed(error.localizedDescription)
-            print("ModelContainer creation failed: \(error)")
-
-            // Create a minimal in-memory container as fallback
-            // (the app will show recovery UI, not actual content)
-            let fallbackConfig = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
-            do {
-                return try ModelContainer(
-                    for: Document.self, Page.self, SchemaMetadata.self,
-                    configurations: fallbackConfig
-                )
-            } catch {
-                // If even the fallback fails, we have no choice but to crash
-                fatalError("Could not create a fallback ModelContainer: \(error)")
-            }
-        }
-    }()
+    /// The process-wide container (see `AppModelContainer`). Created in `init()` so the load-state check below observes the real outcome.
+    private var sharedModelContainer: ModelContainer { AppModelContainer.shared }
 
     var body: some Scene {
         WindowGroup {
@@ -524,6 +445,18 @@ struct MultiScanApp: App {
                     if !unfixable.isEmpty {
                         print("Some integrity issues could not be auto-fixed: \(unfixable.map { $0.description })")
                     }
+                }
+
+                // 2.x additive fields: assign missing UUIDs and refresh stale plain-text mirrors, then bring the Spotlight index up to date (also catches CloudKit-synced changes).
+                await ProjectMaintenance.backfillIdentityAndPlainText(context: sharedModelContainer.mainContext)
+                MultiScanShortcuts.updateAppShortcutParameters()
+                await SpotlightIndexer.shared.scheduleReconcile()
+            }
+            .environment(AppRouter.shared)
+            .onChange(of: scenePhase) { _, phase in
+                // Foregrounding is the reliable moment to pick up changes synced while inactive.
+                if phase == .active {
+                    Task { await SpotlightIndexer.shared.scheduleReconcile() }
                 }
             }
         }

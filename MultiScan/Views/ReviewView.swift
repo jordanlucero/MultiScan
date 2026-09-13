@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 import PhotosUI
 import UniformTypeIdentifiers
+import AppIntents
 
 struct ReviewView: View {
     let document: Document
@@ -9,6 +10,7 @@ struct ReviewView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.undoManager) private var undoManager
+    @Environment(AppRouter.self) private var router
     @StateObject private var navigationState = NavigationState()
     @StateObject private var ocrService = OCRService()
     private let importService = ImageImportService()
@@ -75,6 +77,7 @@ struct ReviewView: View {
                     selectedPageNumber = firstPage.pageNumber
                 }
                 columnVisibility = showThumbnails ? .all : .detailOnly
+                fulfillOpenRequest()
 
                 // Announce document opening for VoiceOver users
                 Task {
@@ -84,6 +87,9 @@ struct ReviewView: View {
             }
             .onChange(of: navigationState.currentPageNumber) { _, newPageNumber in
                 selectedPageNumber = newPageNumber
+            }
+            .onChange(of: router.openRequest) { _, _ in
+                fulfillOpenRequest()
             }
             .onChange(of: undoManager) { _, newValue in
                 navigationState.undoManager = newValue
@@ -112,6 +118,8 @@ struct ReviewView: View {
             .focusedSceneValue(\.fullDocumentText, navigationState.fullDocumentPlainText)
             .focusedSceneValue(\.showAddFromPhotos, $showAddFromPhotos)
             .focusedSceneValue(\.showAddFromFiles, $showAddFromFiles)
+            // Onscreen awareness: lets Siri/Apple Intelligence refer to "this page".
+            .appEntityIdentifier(currentPageEntityIdentifier)
             .navigationTitle(navigationTitle)
             .navigationSubtitle(Text(document.totalPages == 1 ? "1 page" : "\(document.totalPages) pages"))
             .toolbarRole(.editor)
@@ -169,6 +177,20 @@ struct ReviewView: View {
             )
             .inspectorColumnWidth(min: 250, ideal: 350, max: 500)
         }
+    }
+
+    private var currentPageEntityIdentifier: EntityIdentifier? {
+        navigationState.currentPage?.uuid.map { EntityIdentifier(for: PageEntity.self, identifier: $0) }
+    }
+
+    /// Jumps to the page requested by a deep link (Spotlight page result, Open Page intent, search hit).
+    private func fulfillOpenRequest() {
+        guard let request = router.openRequest, request.projectUUID == document.uuid else { return }
+        if let pageNumber = request.pageNumber, navigationState.currentPageNumber != pageNumber {
+            navigationState.goToPage(pageNumber: pageNumber)
+            selectedPageNumber = pageNumber
+        }
+        router.consumeOpenRequest()
     }
 
     private var navigationTitle: String {

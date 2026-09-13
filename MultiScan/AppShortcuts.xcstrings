@@ -1,0 +1,107 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "Open ${target} in ${applicationName}" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringSet" : {
+            "state" : "new",
+            "values" : [
+              "Open ${target} in ${applicationName}",
+              "Open a project in ${applicationName}"
+            ]
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Abrir ${target} en ${applicationName}"
+          }
+        }
+      }
+    },
+    "Open a project in ${applicationName}" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir un proyecto en ${applicationName}"
+          }
+        }
+      }
+    },
+    "Scan a new project in ${applicationName}" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringSet" : {
+            "state" : "new",
+            "values" : [
+              "Scan a new project in ${applicationName}",
+              "Start a new ${applicationName} project"
+            ]
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Escanear un proyecto nuevo en ${applicationName}"
+          }
+        }
+      }
+    },
+    "Search ${applicationName}" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringSet" : {
+            "state" : "new",
+            "values" : [
+              "Search ${applicationName}",
+              "Search in ${applicationName}",
+              "Search my ${applicationName} projects"
+            ]
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Buscar en ${applicationName}"
+          }
+        }
+      }
+    },
+    "Search in ${applicationName}" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buscar dentro de ${applicationName}"
+          }
+        }
+      }
+    },
+    "Search my ${applicationName} projects" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buscar mis proyectos de ${applicationName}"
+          }
+        }
+      }
+    },
+    "Start a new ${applicationName} project" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Empezar un proyecto nuevo de ${applicationName}"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

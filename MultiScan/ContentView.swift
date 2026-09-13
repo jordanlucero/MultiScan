@@ -9,6 +9,8 @@ import SwiftUI
 import SwiftData
 
 struct ContentView: View {
+    @Environment(AppRouter.self) private var router
+    @Environment(\.modelContext) private var modelContext
     @State private var selectedDocument: Document?
 
     var body: some View {
@@ -24,6 +26,30 @@ struct ContentView: View {
                 })
                 .transition(.opacity.combined(with: .scale(scale: 0.98)))
             }
+        }
+        // Deep links from Spotlight / App Intents / app-wide search results.
+        .onChange(of: router.openRequest, initial: true) { _, request in
+            handleOpenRequest(request)
+        }
+        .onChange(of: router.wantsHome) { _, wantsHome in
+            guard wantsHome else { return }
+            dismissDocument()
+            router.wantsHome = false
+        }
+    }
+
+    /// Switches to the requested project. The review view consumes the request (and page number) once it is showing that project.
+    private func handleOpenRequest(_ request: AppRouter.OpenRequest?) {
+        guard let request else { return }
+        if let current = selectedDocument, current.uuid == request.projectUUID {
+            return
+        }
+        guard let document = ProjectMaintenance.document(uuid: request.projectUUID, context: modelContext) else {
+            router.consumeOpenRequest()
+            return
+        }
+        withAnimation(.easeInOut(duration: 0.25)) {
+            selectedDocument = document
         }
     }
 
@@ -47,11 +73,13 @@ struct ContentView: View {
 #Preview("English") {
     ContentView()
         .modelContainer(previewContainer())
+        .environment(AppRouter.shared)
         .environment(\.locale, Locale(identifier: "en"))
 }
 
 #Preview("es-419") {
     ContentView()
         .modelContainer(previewContainer())
+        .environment(AppRouter.shared)
         .environment(\.locale, Locale(identifier: "es-419"))
 }

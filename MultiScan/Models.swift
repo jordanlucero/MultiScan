@@ -40,26 +40,41 @@ final class Page {
     var imageData: Data?
 
     /// Rich text content stored as RTF data for CloudKit compatibility.
-    /// Pre-2.0 data is JSON-encoded AttributedString; `RichTextArchiver` sniffs the
-    /// format on read and migrates lazily (every write produces RTF).
+    /// Pre-2.0 data is JSON-encoded AttributedString; `RichTextArchiver` sniffs the format on read and migrates lazily (every write produces RTF).
     /// Use the `attributedText` computed property for convenient access.
     @Attribute(.externalStorage)
     var richTextData: Data?
 
+    /// Stable, device-independent identity used by App Intents, Spotlight, and `SyncableEntity`.
+    /// Optional on purpose: a non-optional `UUID()` default can stamp the *same* value onto every
+    /// pre-existing row during lightweight migration. `ProjectMaintenance.backfill` assigns missing values.
+    var uuid: UUID?
+
+    /// Plain-text mirror of `richTextData`, kept in sync by the `attributedText` setter (and `init`).
+    /// Stored as a real column so `#Predicate` full-text search runs in SQLite, Spotlight gets
+    /// `textContent` without decoding RTF, and per-keystroke page filtering never touches external storage.
+    var plainText: String = ""
+
+    /// When `plainText` was last derived from `richTextData`. `nil` or older than `lastModified`
+    /// means the mirror is stale (e.g., written by a build without this column) and is re-derived on backfill.
+    var plainTextUpdatedAt: Date?
+
+    #Index<Page>([\.uuid])
+
     /// Rich text accessor that encodes/decodes `richTextData` via RichTextArchiver.
+    /// This is the single funnel for local text writes. Refreshes the plain-text mirror and timestamps.
     var attributedText: NSAttributedString {
         get {
             RichTextArchiver.attributedString(from: richTextData)
         }
         set {
             richTextData = RichTextArchiver.rtfData(from: newValue)
-            lastModified = Date()
+            plainText = newValue.string
+            let now = Date()
+            lastModified = now
+            plainTextUpdatedAt = now
+            document?.lastModified = now
         }
-    }
-
-    /// Plain text accessor for convenience (e.g., statistics, search)
-    var plainText: String {
-        RichTextArchiver.plainText(from: richTextData)
     }
 
     init(pageNumber: Int, text: String, imageData: Data?, originalFileName: String? = nil, boundingBoxesData: Data? = nil) {
@@ -70,7 +85,11 @@ final class Page {
         self.isDone = false
         self.thumbnailData = nil
         self.boundingBoxesData = boundingBoxesData
-        self.lastModified = Date()
+        let now = Date()
+        self.lastModified = now
+        self.uuid = UUID()
+        self.plainText = text
+        self.plainTextUpdatedAt = now
         // Encode directly to avoid touching lastModified via the computed setter during init
         self.richTextData = RichTextArchiver.rtfData(
             from: NSAttributedString(string: text, attributes: [.font: PageTextStyle.storageFont])
@@ -109,6 +128,15 @@ final class Document {
     @Attribute(.externalStorage)
     var textExportCache: Data?
 
+    /// Stable, device-independent identity (see `Page.uuid` for why this is optional).
+    var uuid: UUID?
+
+    /// Last local edit to the project itself or any of its pages (rename, emoji, page text).
+    /// Optional so legacy rows fall back to the derived page dates in `lastModifiedDate`.
+    var lastModified: Date?
+
+    #Index<Document>([\.uuid])
+
     init(name: String, totalPages: Int = 0) {
         self.name = name
         self.totalPages = totalPages
@@ -116,6 +144,8 @@ final class Document {
         self.pages = []
         self.emoji = nil
         self.cachedStorageBytes = 0
+        self.uuid = UUID()
+        self.lastModified = nil
     }
 
     // MARK: - Convenience Accessors
@@ -132,9 +162,9 @@ final class Document {
         unwrappedPages.max(by: { $0.lastModified < $1.lastModified })
     }
 
-    /// Returns the date of the most recent page modification
+    /// Returns the date of the most recent modification (project metadata or any page)
     var lastModifiedDate: Date {
-        lastModifiedPage?.lastModified ?? createdAt
+        [lastModifiedPage?.lastModified, lastModified, createdAt].compactMap { $0 }.max() ?? createdAt
     }
 
     /// Completion percentage as integer (0-100)

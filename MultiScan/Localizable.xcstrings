@@ -23,6 +23,23 @@
         }
       }
     },
+    "·" : {
+
+    },
+    "%@" : {
+
+    },
+    "%@ · %@ reviewed" : {
+      "comment" : "Project subtitle in App Intents/Spotlight",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · %2$@ reviewed"
+          }
+        }
+      }
+    },
     "%@ opened. %lld pages." : {
       "localizations" : {
         "en" : {
@@ -160,12 +177,23 @@
       }
     },
     "%lld pages" : {
-      "comment" : "Page count in export panel",
+      "comment" : "App Intents plural type name\nProject page count in App Intents/Spotlight",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld páginas"
+          }
+        }
+      }
+    },
+    "%lld projects" : {
+      "comment" : "App Intents plural type name",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld proyectos"
           }
         }
       }
@@ -561,6 +589,36 @@
         }
       }
     },
+    "Created" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Creado"
+          }
+        }
+      }
+    },
+    "Created “%@” with %lld pages." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se creó “%1$@” con %2$lld páginas."
+          }
+        }
+      }
+    },
+    "Creates a MultiScan project from images or PDFs and recognizes their text." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Crea un proyecto de MultiScan a partir de imágenes o PDF y reconoce su texto."
+          }
+        }
+      }
+    },
     "Dark Gray" : {
       "comment" : "Viewer background option: dark gray color",
       "localizations" : {
@@ -628,6 +686,26 @@
         }
       }
     },
+    "Delete %lld projects (%@)? This cannot be undone." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Eliminar %1$lld proyectos (%2$@)? Esta acción no se puede deshacer."
+          }
+        }
+      }
+    },
+    "Delete ${entities}" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eliminar ${entities}"
+          }
+        }
+      }
+    },
     "Delete All Data" : {
       "localizations" : {
         "es-419" : {
@@ -658,12 +736,32 @@
         }
       }
     },
+    "Delete Project" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eliminar proyecto"
+          }
+        }
+      }
+    },
     "Delete…" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Eliminar…"
+          }
+        }
+      }
+    },
+    "Deleted %lld projects." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se eliminaron %lld proyectos."
           }
         }
       }
@@ -828,12 +926,32 @@
         }
       }
     },
+    "File Name" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nombre de archivo"
+          }
+        }
+      }
+    },
     "Filename" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nombre de archivo"
+          }
+        }
+      }
+    },
+    "Files" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Archivos"
           }
         }
       }
@@ -978,6 +1096,26 @@
         }
       }
     },
+    "Get Project Text" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Obtener texto del proyecto"
+          }
+        }
+      }
+    },
+    "Get text of ${project}" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Obtener texto de ${project}"
+          }
+        }
+      }
+    },
     "Go to next page" : {
       "localizations" : {
         "es-419" : {
@@ -1054,6 +1192,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Imagen"
+          }
+        }
+      }
+    },
+    "Images or PDF documents to scan." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Imágenes o documentos PDF para escanear."
           }
         }
       }
@@ -1141,6 +1289,16 @@
         }
       }
     },
+    "Insert a “Page X of Y” line between pages." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inserta una línea “Página X de Y” entre las páginas."
+          }
+        }
+      }
+    },
     "Insert Pages After" : {
       "localizations" : {
         "es-419" : {
@@ -1177,6 +1335,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Cursiva (⌘I)"
+          }
+        }
+      }
+    },
+    "Last Modified" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Última modificación"
           }
         }
       }
@@ -1357,6 +1525,16 @@
         }
       }
     },
+    "Name" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nombre"
+          }
+        }
+      }
+    },
     "Navigate only between filtered pages (Sequential)" : {
       "localizations" : {
         "es-419" : {
@@ -1417,6 +1595,19 @@
         }
       }
     },
+    "No images or PDF pages were found to scan." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se encontraron imágenes ni páginas PDF para escanear."
+          }
+        }
+      }
+    },
+    "No images or PDF pages were found." : {
+
+    },
     "No more matching pages ahead" : {
       "comment" : "AccessibilityNotification NavigationDirection",
       "localizations" : {
@@ -1455,6 +1646,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sin proyectos"
+          }
+        }
+      }
+    },
+    "No projects were selected." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se seleccionó ningún proyecto."
           }
         }
       }
@@ -1532,12 +1733,62 @@
         }
       }
     },
+    "Open Page" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir página"
+          }
+        }
+      }
+    },
+    "Open Project" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir proyecto"
+          }
+        }
+      }
+    },
+    "Opens a MultiScan project at a specific page." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre un proyecto de MultiScan en una página específica."
+          }
+        }
+      }
+    },
     "Opens menu with rename, optimize, and delete options" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Abre un menú con opciones para renombrar, optimizar y eliminar"
+          }
+        }
+      }
+    },
+    "Opens the project" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre el proyecto"
+          }
+        }
+      }
+    },
+    "Opens the project at this page" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre el proyecto en esta página"
           }
         }
       }
@@ -1573,8 +1824,19 @@
         }
       }
     },
+    "Page" : {
+      "comment" : "App Intents type name for a scanned page",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Página"
+          }
+        }
+      }
+    },
     "Page %lld" : {
-      "comment" : "Thumbnail label with page number",
+      "comment" : "Page title in App Intents/Spotlight\nThumbnail label with page number",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -1612,6 +1874,16 @@
         }
       }
     },
+    "Page Count" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Número de páginas"
+          }
+        }
+      }
+    },
     "Page image" : {
       "localizations" : {
         "es-419" : {
@@ -1623,6 +1895,16 @@
       }
     },
     "Page number" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Número de página"
+          }
+        }
+      }
+    },
+    "Page Number" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -1668,6 +1950,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "No se admiten archivos PDF protegidos con contraseña. Desbloquee el documento y guárdelo sin contraseña en Vista Previa."
+          }
+        }
+      }
+    },
+    "Permanently deletes projects and all of their pages." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elimina permanentemente los proyectos y todas sus páginas."
           }
         }
       }
@@ -1824,6 +2116,17 @@
         }
       }
     },
+    "Project" : {
+      "comment" : "App Intents type name for a MultiScan project",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proyecto"
+          }
+        }
+      }
+    },
     "Project icon" : {
       "localizations" : {
         "es-419" : {
@@ -1840,6 +2143,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nombre del proyecto"
+          }
+        }
+      }
+    },
+    "Project name. Defaults to the folder or file name." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nombre del proyecto. De forma predeterminada, el nombre de la carpeta o del archivo."
           }
         }
       }
@@ -1870,6 +2183,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Texto del proyecto"
+          }
+        }
+      }
+    },
+    "Projects" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proyectos"
           }
         }
       }
@@ -2066,6 +2389,16 @@
         }
       }
     },
+    "Returns the recognized text of a project, optionally separated by page." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Devuelve el texto reconocido de un proyecto, opcionalmente separado por página."
+          }
+        }
+      }
+    },
     "Review Status" : {
       "localizations" : {
         "es-419" : {
@@ -2098,6 +2431,16 @@
         }
       }
     },
+    "Reviewed Pages" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Páginas revisadas"
+          }
+        }
+      }
+    },
     "Rotate Clockwise" : {
       "comment" : "Rotate rightwards",
       "localizations" : {
@@ -2116,6 +2459,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Girar a la izquierda"
+          }
+        }
+      }
+    },
+    "Scan ${files} into a new project" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escanear ${files} en un proyecto nuevo"
           }
         }
       }
@@ -2160,6 +2513,19 @@
         }
       }
     },
+    "Scan New Project" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escanear proyecto nuevo"
+          }
+        }
+      }
+    },
+    "Search" : {
+
+    },
     "Search by page number, filename, or content" : {
       "localizations" : {
         "es-419" : {
@@ -2190,6 +2556,16 @@
         }
       }
     },
+    "Search Projects" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buscar proyectos"
+          }
+        }
+      }
+    },
     "Select a page from the sidebar to view and edit its text." : {
       "localizations" : {
         "es-419" : {
@@ -2206,6 +2582,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Seleccionar fotos"
+          }
+        }
+      }
+    },
+    "Separate Pages" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Separar páginas"
           }
         }
       }
@@ -2442,6 +2828,16 @@
         }
       }
     },
+    "Summary" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resumen"
+          }
+        }
+      }
+    },
     "Switch to Sequential Order" : {
       "localizations" : {
         "es-419" : {
@@ -2489,6 +2885,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sistema"
+          }
+        }
+      }
+    },
+    "Text" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Texto"
           }
         }
       }
@@ -2541,12 +2947,52 @@
         }
       }
     },
+    "That page no longer exists." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esa página ya no existe."
+          }
+        }
+      }
+    },
+    "That project no longer exists." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ese proyecto ya no existe."
+          }
+        }
+      }
+    },
     "The PDF file could not be opened." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "No se pudo abrir el archivo PDF."
+          }
+        }
+      }
+    },
+    "The project was created but could not be loaded." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El proyecto se creó, pero no se pudo cargar."
+          }
+        }
+      }
+    },
+    "This page has no image." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esta página no tiene imagen."
           }
         }
       }
@@ -2717,6 +3163,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Cuando el modo aleatorio está activado y un filtro está activo, los botones de página anterior y siguiente solo visitarán las páginas coincidentes."
+          }
+        }
+      }
+    },
+    "Which page?" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Qué página?"
+          }
+        }
+      }
+    },
+    "Which project?" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Qué proyecto?"
+          }
+        }
+      }
+    },
+    "Which projects should be deleted?" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Qué proyectos se deben eliminar?"
           }
         }
       }

@@ -2,28 +2,21 @@
 //  TextExportCacheService.swift
 //  MultiScan
 //
-//  Manages a pre-computed cache of page text data for efficient document export
-//  and Smart Cleanup analysis.
+//  Manages a pre-computed cache of page text data for efficient document export and Smart Cleanup analysis.
 //
 //  ## Purpose
-//  SwiftData's `@Attribute(.externalStorage)` stores each page's rich text in a separate
-//  external file. When exporting, loading N pages means N sequential disk reads on the
-//  main thread, which freezes the UI for large documents (500+ pages can take minutes).
+//  SwiftData's `@Attribute(.externalStorage)` stores each page's rich text in a separate external file. When exporting, loading N pages means N sequential disk reads on the main thread, which freezes the UI for large documents (500+ pages can take minutes).
 //
-//  This service maintains a single cached file containing all pages' text data. Export
-//  loads one file instead of N, dramatically improving performance.
+//  This service maintains a single cached file containing all pages' text data. Export loads one file instead of N, dramatically improving performance.
 //
 //  ## Cache Format (version 2)
 //  Each entry stores the page's text twice, for different consumers:
-//  - `rtfData`: the RTF bytes (same format as `Page.richTextData`) — used by export,
-//    which needs formatting.
-//  - `plainText`: pre-extracted plain text — used by Smart Cleanup analysis, which
-//    never needs to decode an attributed string at all.
+//  - `rtfData`: the RTF bytes (same format as `Page.richTextData`) — used by export, which needs formatting.
+//  - `plainText`: pre-extracted plain text — used by Smart Cleanup analysis, which never needs to decode an attributed string at all.
 //  Word/char counts are pre-computed for separator metadata.
 //
 //  The container is encoded as a binary property list (compact for Data blobs).
-//  Version 1 caches (JSON-encoded AttributedString entries) fail to decode and are
-//  rebuilt from source pages once.
+//  Version 1 caches (JSON-encoded AttributedString entries) fail to decode and are rebuilt from source pages once.
 //
 //  ## Sync Strategy
 //  The cache must stay in sync with page data. Updates happen at these points:
@@ -34,9 +27,7 @@
 //  - **Page reorder**: Swap pageNumbers in affected entries
 //
 //  ## Thread Safety
-//  All operations are `@MainActor` since they interact with SwiftData models.
-//  `decodeCache(from:)` is nonisolated so raw cache Data can be decoded on
-//  background threads (Smart Cleanup analysis, export building).
+//  All operations are `@MainActor` since they interact with SwiftData models. `decodeCache(from:)` is nonisolated so raw cache Data can be decoded on background threads (Smart Cleanup analysis, export building).
 //
 
 import Foundation
@@ -78,15 +69,29 @@ struct PageCacheEntry: Codable, Sendable {
     /// Pre-computed character count for separator metadata.
     let charCount: Int
 
+    /// The source page's `lastModified` at the moment this entry was written — the freshness
+    /// fingerprint checked by `TextExportCacheService.isFresh(_:against:)`.
+    ///
+    /// Optional because caches written before fingerprinting exist on disk (and sync). A `nil` fingerprint means "unverifiable", not "stale": rejecting those would force a full N-external-read rebuild of every document on upgrade. Entries gain fingerprints as pages are written, so the unverifiable window closes on its own.
+    let pageLastModified: Date?
+
     /// Creates an entry from a Page's current data.
     /// Call this when the page's text is already loaded in memory.
     @MainActor
     init(from page: Page) {
-        self.init(pageNumber: page.pageNumber, fileName: page.originalFileName, attributedText: page.attributedText)
+        self.init(
+            pageNumber: page.pageNumber,
+            fileName: page.originalFileName,
+            attributedText: page.attributedText,
+            pageLastModified: page.lastModified
+        )
     }
 
     /// Creates an entry from an attributed string that's already in memory.
-    init(pageNumber: Int, fileName: String?, attributedText: NSAttributedString) {
+    ///
+    /// - Parameter pageLastModified: the source page's `lastModified` *after* the write that
+    ///   produced `attributedText`. Pass `nil` only when no page backs this entry.
+    init(pageNumber: Int, fileName: String?, attributedText: NSAttributedString, pageLastModified: Date?) {
         self.pageNumber = pageNumber
         self.fileName = fileName
         self.rtfData = RichTextArchiver.rtfData(from: attributedText) ?? Data()
@@ -94,19 +99,22 @@ struct PageCacheEntry: Codable, Sendable {
         self.plainText = plain
         self.wordCount = TextStatistics.wordCount(of: plain)
         self.charCount = plain.count
+        self.pageLastModified = pageLastModified
     }
 
     /// Creates an entry with raw fields (renumbering operations — no decode/encode).
-    init(pageNumber: Int, fileName: String?, rtfData: Data, plainText: String, wordCount: Int, charCount: Int) {
+    init(pageNumber: Int, fileName: String?, rtfData: Data, plainText: String, wordCount: Int, charCount: Int, pageLastModified: Date?) {
         self.pageNumber = pageNumber
         self.fileName = fileName
         self.rtfData = rtfData
         self.plainText = plainText
         self.wordCount = wordCount
         self.charCount = charCount
+        self.pageLastModified = pageLastModified
     }
 
     /// Returns a copy of this entry with a different page number (no decode/encode).
+    /// Reordering doesn't touch page text, so the fingerprint carries over unchanged.
     func renumbered(to newPageNumber: Int) -> PageCacheEntry {
         PageCacheEntry(
             pageNumber: newPageNumber,
@@ -114,7 +122,8 @@ struct PageCacheEntry: Codable, Sendable {
             rtfData: rtfData,
             plainText: plainText,
             wordCount: wordCount,
-            charCount: charCount
+            charCount: charCount,
+            pageLastModified: pageLastModified
         )
     }
 
@@ -130,17 +139,13 @@ struct PageCacheEntry: Codable, Sendable {
 ///
 /// ## Usage
 /// ```swift
-/// // After OCR completes and pages are added:
-/// TextExportCacheService.buildInitialCache(for: document, from: pages)
+/// // After OCR completes and pages are added: TextExportCacheService.buildInitialCache(for: document, from: pages)
 ///
-/// // After page text is saved:
-/// TextExportCacheService.updateEntry(pageNumber: 3, attributedText: text, in: document)
+/// // After page text is saved: TextExportCacheService.updateEntry(pageNumber: 3, attributedText: text, in: document)
 ///
-/// // After page is deleted:
-/// TextExportCacheService.removeEntry(pageNumber: 5, from: document)
+/// // After page is deleted: TextExportCacheService.removeEntry(pageNumber: 5, from: document)
 ///
-/// // For export:
-/// if let cache = TextExportCacheService.loadCache(from: document) {
+/// // For export: if let cache = TextExportCacheService.loadCache(from: document) {
 ///     // Use cache.pages for export
 /// }
 /// ```
@@ -209,14 +214,16 @@ enum TextExportCacheService {
 
     /// Updates a page's entry using an attributed string that's already in memory.
     ///
-    /// Use this variant when you have the text available but don't want to
-    /// access `page.attributedText` (which might trigger an external storage load).
+    /// Use this variant when you have the text available but don't want to access `page.attributedText` (which might trigger an external storage load).
     ///
     /// - Parameters:
     ///   - pageNumber: The page number to update
     ///   - attributedText: The new rich text content
+    ///   - pageLastModified: the page's `lastModified` *after* the write that produced
+    ///     `attributedText` — the freshness fingerprint. Read it from the page (a plain stored
+    ///     column; this doesn't fault in external storage).
     ///   - document: The document containing the cache
-    static func updateEntry(pageNumber: Int, attributedText: NSAttributedString, in document: Document) {
+    static func updateEntry(pageNumber: Int, attributedText: NSAttributedString, pageLastModified: Date?, in document: Document) {
         guard var cache = loadCache(from: document) else {
             rebuildCache(for: document)
             return
@@ -228,7 +235,8 @@ enum TextExportCacheService {
             cache.pages[index] = PageCacheEntry(
                 pageNumber: pageNumber,
                 fileName: existingFileName,
-                attributedText: attributedText
+                attributedText: attributedText,
+                pageLastModified: pageLastModified
             )
             saveCache(cache, to: document)
         }
@@ -261,8 +269,7 @@ enum TextExportCacheService {
 
     /// Inserts new page entries mid-document, shifting existing entries' page numbers.
     ///
-    /// Call this after inserting pages at a specific position. Existing entries at or after
-    /// `insertStart` are renumbered by `count` to match the already-renumbered Page models.
+    /// Call this after inserting pages at a specific position. Existing entries at or after `insertStart` are renumbered by `count` to match the already-renumbered Page models.
     /// Avoids `rebuildCache(for:)`, which would load every page from external storage.
     ///
     /// - Parameters:
@@ -337,8 +344,7 @@ enum TextExportCacheService {
 
     /// Renumbers entries after a drag reorder using an old → new page number mapping.
     ///
-    /// Call this after reassigning `pageNumber` on the Page models. Entries are
-    /// renumbered with raw-field copies (no decode/encode) in a single cache write.
+    /// Call this after reassigning `pageNumber` on the Page models. Entries are renumbered with raw-field copies (no decode/encode) in a single cache write.
     ///
     /// - Parameters:
     ///   - newNumbers: Mapping of old page number to new page number
@@ -386,15 +392,55 @@ enum TextExportCacheService {
         }
     }
 
-    /// Checks if a valid cache exists for the document.
+    /// Loads the cache only if it still matches the document's pages.
     ///
-    /// Use this to decide whether to use cached export or fall back to direct loading.
+    /// **Every consumer that reads page *content* out of the cache must use this**, not `loadCache(from:)`. The mutation helpers above are the exception: they run while the pages and the cache are deliberately out of step (pages renumbered, cache not yet), so a freshness check there would reject a cache that's about to be corrected and force a needless rebuild.
+    ///
+    /// - Parameter rebuildIfStale: rebuild from the source pages (N external-storage reads) when the cache is missing or diverged, rather than returning nil. Pass `true` only where there is no cheaper fallback.
+    static func loadFreshCache(from document: Document, rebuildIfStale: Bool = false) -> TextExportCache? {
+        if let cache = loadCache(from: document), isFresh(cache, for: document) {
+            return cache
+        }
+        guard rebuildIfStale else { return nil }
+        rebuildCache(for: document)
+        return loadCache(from: document)
+    }
+
+    /// Fingerprints for a document's pages, keyed by page number.
+    /// Build this on the actor that owns the models, then hand it to `isFresh(_:against:)`. `nonisolated` so `ProjectStore`'s `@ModelActor` can build them for its own documents.
+    nonisolated static func fingerprints(of document: Document) -> [Int: Date] {
+        Dictionary(
+            document.unwrappedPages.map { ($0.pageNumber, $0.lastModified) },
+            uniquingKeysWith: { older, newer in max(older, newer) }
+        )
+    }
+
+    /// Whether every cache entry still corresponds to its page.
+    ///
+    /// The cache is a single blob on `Document`, while the text it mirrors lives on the `Page` records. Under CloudKit those are separate record types with independent last-writer-wins resolution: if two devices edit different pages of the same project, both page edits merge correctly but only one device's cache blob survives — leaving a cache that is internally well-formed, the right length, and wrong. Comparing each entry's fingerprint against its page's `lastModified` is what catches that.
+    nonisolated static func isFresh(_ cache: TextExportCache, against fingerprints: [Int: Date]) -> Bool {
+        guard cache.pages.count == fingerprints.count else { return false }
+        for entry in cache.pages {
+            guard let pageDate = fingerprints[entry.pageNumber] else { return false }
+            // nil fingerprint = written before fingerprinting existed; unverifiable, so accept.
+            guard let entryDate = entry.pageLastModified else { continue }
+            // Dates round-trip through a binary plist at sub-millisecond precision.
+            guard abs(entryDate.timeIntervalSince(pageDate)) < 0.001 else { return false }
+        }
+        return true
+    }
+
+    /// `isFresh(_:against:)` for a document on the main actor.
+    static func isFresh(_ cache: TextExportCache, for document: Document) -> Bool {
+        isFresh(cache, against: fingerprints(of: document))
+    }
+
+    /// Checks if a usable, current cache exists for the document.
     ///
     /// - Parameter document: The document to check
-    /// - Returns: True if a valid, current-version cache exists
+    /// - Returns: True if a valid, current-version cache exists that matches the pages
     static func hasValidCache(for document: Document) -> Bool {
-        guard let cache = loadCache(from: document) else { return false }
-        return cache.pages.count == document.unwrappedPages.count
+        loadFreshCache(from: document) != nil
     }
 
     // MARK: - Private Helpers

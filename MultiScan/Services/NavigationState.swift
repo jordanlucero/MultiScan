@@ -19,8 +19,8 @@ class NavigationState: ObservableObject {
 
     // MARK: - Filter State (synced from ThumbnailSidebar)
 
-    /// Current status filter option raw value (synced from ThumbnailSidebar)
-    @Published var activeStatusFilter: String = "all"
+    /// Current status filter (synced from ThumbnailSidebar)
+    @Published var activeStatusFilter: PageFilterOption = .all
 
     /// Current text search query (synced from ThumbnailSidebar)
     @Published var activeSearchText: String = ""
@@ -35,7 +35,7 @@ class NavigationState: ObservableObject {
     // Published for view observation - updated whenever navigation changes
     @Published private(set) var currentPageNumber: Int?
 
-    // MARK: - Full Document Text Cache (for TTS, accessibility, and future search)
+    // MARK: - Full Document Text Cache (for TTS, accessibility, search)
 
     /// Plain text version of the entire document for TTS and search
     @Published private(set) var fullDocumentPlainText: String = ""
@@ -55,51 +55,17 @@ class NavigationState: ObservableObject {
 
     /// Whether any filter is currently active
     var isFilterActive: Bool {
-        activeStatusFilter != "all" || !activeSearchText.isEmpty
+        activeStatusFilter != .all || !activeSearchText.isEmpty
     }
 
     /// Page numbers that match the current filter, sorted
     private var filteredPageNumbers: [Int] {
         guard let document = selectedDocument else { return [] }
-
-        let sortedPages = document.unwrappedPages.sorted { $0.pageNumber < $1.pageNumber }
-
-        // Apply status filter
-        let statusFiltered: [Page]
-        switch activeStatusFilter {
-        case "notDone":
-            statusFiltered = sortedPages.filter { !$0.isDone }
-        case "done":
-            statusFiltered = sortedPages.filter { $0.isDone }
-        default: // "all"
-            statusFiltered = sortedPages
-        }
-
-        // Apply text search
-        guard !activeSearchText.isEmpty else {
-            return statusFiltered.map { $0.pageNumber }
-        }
-
-        let query = activeSearchText.lowercased()
-        return statusFiltered.filter { page in
-            // Match page number: "1", "Page 1", "page 1"
-            let pageNum = String(page.pageNumber)
-            if pageNum.contains(query) || "page \(pageNum)".contains(query) {
-                return true
-            }
-
-            // Match filename (case-insensitive)
-            if let filename = page.originalFileName?.lowercased(), filename.contains(query) {
-                return true
-            }
-
-            // Match page content (case-insensitive)
-            if page.plainText.lowercased().contains(query) {
-                return true
-            }
-
-            return false
-        }.map { $0.pageNumber }
+        return PageFilter.apply(
+            to: document.unwrappedPages,
+            option: activeStatusFilter,
+            searchText: activeSearchText
+        ).map { $0.pageNumber }
     }
 
     /// Updates currentPageNumber based on current mode and indices
@@ -475,8 +441,7 @@ class NavigationState: ObservableObject {
             : String(localized: "Move Page Down"))
     }
 
-    /// Applies a drag reorder from a `reorderContainer` (thumbnail sidebar / page grid):
-    /// the dragged pages move in front of the page with `targetID` (nil = to the end).
+    /// Applies a drag reorder from a `reorderContainer` (thumbnail sidebar / page grid): the dragged pages move in front of the page with `targetID` (nil = to the end).
     func applyReorder(of pageIDs: [PersistentIdentifier], before targetID: PersistentIdentifier?) {
         guard let document = selectedDocument, !pageIDs.isEmpty else { return }
         var order = document.unwrappedPages.sorted { $0.pageNumber < $1.pageNumber }
@@ -491,8 +456,7 @@ class NavigationState: ObservableObject {
         setPageOrder(order, actionName: String(localized: "Reorder Pages"))
     }
 
-    /// Looks up pages by ID and restores their order. Used by undo/redo, where only
-    /// Sendable identifiers are captured; skips silently if pages were added/deleted since.
+    /// Looks up pages by ID and restores their order. Used by undo/redo, where only Sendable identifiers are captured; skips silently if pages were added/deleted since.
     private func restorePageOrder(_ orderedIDs: [PersistentIdentifier], actionName: String) {
         guard let document = selectedDocument else { return }
         let pagesByID = Dictionary(uniqueKeysWithValues: document.unwrappedPages.map { ($0.persistentModelID, $0) })
@@ -501,11 +465,7 @@ class NavigationState: ObservableObject {
         setPageOrder(ordered, actionName: actionName)
     }
 
-    /// Renumbers the document's pages to match `orderedPages`, keeping the export cache
-    /// and navigation state in sync. The current page stays selected by identity — the
-    /// viewer keeps showing the same page at its new position, which also leaves the
-    /// text editor attached so its undo stack survives the reorder. Registers an inverse
-    /// action with `undoManager` so ⌘Z/⇧⌘Z walk order changes back and forth.
+    /// Renumbers the document's pages to match `orderedPages`, keeping the export cache and navigation state in sync. The current page stays selected by identity — the viewer keeps showing the same page at its new position, which also leaves the text editor attached so its undo stack survives the reorder. Registers an inverse action with `undoManager` so ⌘Z/⇧⌘Z walk order changes back and forth.
     private func setPageOrder(_ orderedPages: [Page], actionName: String) {
         guard let document = selectedDocument else { return }
         let oldOrder = document.unwrappedPages.sorted { $0.pageNumber < $1.pageNumber }
@@ -552,10 +512,18 @@ class NavigationState: ObservableObject {
 
     /// Delete the current page from the document
     func deleteCurrentPage(modelContext: ModelContext) {
-        guard let page = currentPage,
-              let document = selectedDocument else { return }
+        guard let page = currentPage else { return }
+        deletePage(page, modelContext: modelContext)
+    }
+
+    /// Deletes a page from its document: renumbers the pages after it, syncs the export cache, removes the model, and refreshes navigation. When the deleted page was the current one, navigation moves to the page that took its number (or the new last page).
+    ///
+    /// The single owner of page deletion — the thumbnail context menu and the vertical size class page grid both route here rather than repeating the renumber/cache bookkeeping.
+    func deletePage(_ page: Page, modelContext: ModelContext) {
+        guard let document = page.document ?? selectedDocument else { return }
 
         let deletedPageNumber = page.pageNumber
+        let wasCurrentPage = currentPageNumber == deletedPageNumber
 
         // Remove page entry from export cache (also renumbers subsequent pages)
         TextExportCacheService.removeEntry(pageNumber: deletedPageNumber, from: document)
@@ -575,6 +543,8 @@ class NavigationState: ObservableObject {
 
         // Refresh navigation state
         refreshPageOrder()
+
+        guard wasCurrentPage else { return }
 
         // Navigate to an adjacent page
         let newPageNumber = min(deletedPageNumber, document.totalPages)
@@ -611,8 +581,7 @@ class NavigationState: ObservableObject {
 
         // Build plain text version (for TTS, search, accessibility).
         // Prefer the export cache (one external-storage read) over decoding N pages.
-        if let cache = TextExportCacheService.loadCache(from: document),
-           cache.pages.count == sortedPages.count {
+        if let cache = TextExportCacheService.loadFreshCache(from: document) {
             fullDocumentPlainText = cache.pages
                 .sorted { $0.pageNumber < $1.pageNumber }
                 .map { $0.plainText }

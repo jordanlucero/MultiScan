@@ -19,27 +19,12 @@ struct ThumbnailSidebar: View {
     var onInsertFromFiles: ((Int) -> Void)?
     #endif
 
-    enum FilterOption: String, CaseIterable {
-        case all
-        case done
-        case notDone
-
-        var label: LocalizedStringResource {
-            switch self {
-            case .all: "All"
-            case .done: "Reviewed"
-            case .notDone: "Not Reviewed"
-            }
-        }
-    }
-
     @AppStorage("filterOption") private var filterOptionString = "all"
     @State private var searchText = ""
     @State private var textFilterAnnounceTask: Task<Void, Never>?
 
-    private var filterOption: FilterOption {
-        get { FilterOption(rawValue: filterOptionString) ?? .all }
-        set { filterOptionString = newValue.rawValue }
+    private var filterOption: PageFilterOption {
+        PageFilterOption(rawValue: filterOptionString) ?? .all
     }
 
     private var isFilterActive: Bool {
@@ -96,42 +81,7 @@ struct ThumbnailSidebar: View {
     var filteredPages: [Page] {
         // Reference pageOrderVersion to trigger re-computation when page order changes
         _ = navigationState.pageOrderVersion
-        let sortedPages = document.unwrappedPages.sorted(by: { $0.pageNumber < $1.pageNumber })
-
-        // Apply filter option first
-        let filtered: [Page]
-        switch filterOption {
-        case .all:
-            filtered = sortedPages
-        case .notDone:
-            filtered = sortedPages.filter { !$0.isDone }
-        case .done:
-            filtered = sortedPages.filter { $0.isDone }
-        }
-
-        // Apply search if searchText is not empty
-        guard !searchText.isEmpty else { return filtered }
-
-        let query = searchText.lowercased()
-        return filtered.filter { page in
-            // Match page number: "1", "Page 1", "page 1"
-            let pageNum = String(page.pageNumber)
-            if pageNum.contains(query) || "page \(pageNum)".contains(query) {
-                return true
-            }
-
-            // Match filename (case-insensitive)
-            if let filename = page.originalFileName?.lowercased(), filename.contains(query) {
-                return true
-            }
-
-            // Match page content (case-insensitive)
-            if page.plainText.lowercased().contains(query) {
-                return true
-            }
-
-            return false
-        }
+        return PageFilter.apply(to: document.unwrappedPages, option: filterOption, searchText: searchText)
     }
     
     var body: some View {
@@ -191,7 +141,7 @@ struct ThumbnailSidebar: View {
                 HStack(spacing: 8) {
                     Menu {
                         Picker(selection: $filterOptionString, label: Text("Filter by status")) {
-                            ForEach(FilterOption.allCases, id: \.self) { option in
+                            ForEach(PageFilterOption.allCases, id: \.self) { option in
                                 Text(option.label).tag(option.rawValue)
                             }
                         }
@@ -235,11 +185,11 @@ struct ThumbnailSidebar: View {
                 .padding(8)
 
             }
-            .onChange(of: filterOptionString) { _, newValue in
+            .onChange(of: filterOptionString) { _, _ in
                 // Announce immediately when status filter changes
                 announceFilterChange()
                 // Sync to NavigationState for filtered navigation
-                navigationState.activeStatusFilter = newValue
+                navigationState.activeStatusFilter = filterOption
             }
             .onChange(of: searchText) { _, newValue in
                 // Sync to NavigationState immediately for filtered navigation
@@ -258,7 +208,7 @@ struct ThumbnailSidebar: View {
             }
             .onAppear {
                 // Initial sync of filter state to NavigationState
-                navigationState.activeStatusFilter = filterOptionString
+                navigationState.activeStatusFilter = filterOption
                 navigationState.activeSearchText = searchText
             }
         }
@@ -310,34 +260,7 @@ struct ThumbnailView: View {
 
     /// Delete this page from the document
     private func deletePage() {
-        let deletedPageNumber = page.pageNumber
-
-        // Remove page entry from export cache (also renumbers subsequent pages)
-        TextExportCacheService.removeEntry(pageNumber: deletedPageNumber, from: document)
-
-        // Decrement pageNumber for all pages after the deleted one
-        for otherPage in document.unwrappedPages where otherPage.pageNumber > deletedPageNumber {
-            otherPage.pageNumber -= 1
-        }
-
-        // Remove from document's pages array
-        document.pages?.removeAll { $0.persistentModelID == page.persistentModelID }
-        document.totalPages -= 1
-        document.recalculateStorageSize()
-
-        // Delete the page from the model context
-        modelContext.delete(page)
-
-        // Refresh navigation state
-        navigationState?.refreshPageOrder()
-
-        // If we deleted the current page, navigate to an adjacent page
-        if navigationState?.currentPageNumber == deletedPageNumber {
-            let newPageNumber = min(deletedPageNumber, document.totalPages)
-            if newPageNumber > 0 {
-                navigationState?.goToPage(pageNumber: newPageNumber)
-            }
-        }
+        navigationState?.deletePage(page, modelContext: modelContext)
     }
 
     /// Formatted page label: "Page X"
@@ -416,34 +339,12 @@ struct ThumbnailView: View {
 
                 // MARK: - Rotation Section
                 Section {
-                    Button {
-                        page.rotation = (page.rotation + 90) % 360
-                    } label: {
-                        Label("Rotate Clockwise", systemImage: "rotate.right")
-                    }
-
-                    Button {
-                        page.rotation = (page.rotation + 270) % 360
-                    } label: {
-                        Label("Rotate Counterclockwise", systemImage: "")
-                    }
+                    PageRotationButtons(page: page)
                 }
 
                 // MARK: - Adjustments Section
                 Section {
-                    Toggle(isOn: Binding(
-                        get: { page.increaseContrast },
-                        set: { page.increaseContrast = $0 }
-                    )) {
-                        Label("Increase Contrast", systemImage: "circle.lefthalf.filled")
-                    }
-
-                    Toggle(isOn: Binding(
-                        get: { page.increaseBlackPoint },
-                        set: { page.increaseBlackPoint = $0 }
-                    )) {
-                        Label("Increase Black Point", systemImage: "")
-                    }
+                    PageAdjustmentToggles(page: page)
                 }
 
                 // MARK: - Reordering Section

@@ -4,6 +4,8 @@
 //
 //  App Intents representation of a single scanned page. Pages are indexed individually because they are where the OCR text lives: `text` maps to Spotlight's `textContent`, so searching a phrase in Spotlight lands on the page that contains it.
 //
+//  `id` is the CloudKit-synced `Page.uuid` — stable across devices. `SyncableEntity` is declarative only; see the note in `ProjectEntity` for why the id stays a bare `UUID`.
+//
 
 import AppIntents
 import CoreSpotlight

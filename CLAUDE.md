@@ -40,7 +40,15 @@ MultiScan is a multiplatform SwiftUI application (macOS, iOS, iPadOS) that uses 
 
 ## Development Commands
 
-### Build and Run
+## Xcode Integration
+
+- This is an SwiftUI project with a minimum deployment target of macOS 27 and iOS/iPadOS 27
+- Use the Xcode MCP tools for building (`BuildProject`), testing (`RunAllTests`), and previewing (`RenderPreview`)
+- Prefer `ExecuteSnippet` to verify unfamiliar Apple APIs before writing implementation code
+- Run `DocumentationSearch` before suggesting deprecated APIs
+
+
+### Build and Run directly when needed
 ```bash
 # Open in Xcode
 open MultiScan.xcodeproj
@@ -52,7 +60,7 @@ xcodebuild -scheme MultiScan -configuration Debug build
 xcodebuild -scheme MultiScan -configuration Debug -destination 'platform=macOS' build
 ```
 
-### Clean
+### Clean directly when needed
 ```bash
 xcodebuild -scheme MultiScan clean
 ```
@@ -177,22 +185,35 @@ document.pages?.append(page)                   // Write operations (optional cha
 ### Entitlements (`MultiScan.entitlements`)
 - `com.apple.developer.icloud-container-identifiers`: `iCloud.co.jservices.MultiScan`
 - `com.apple.developer.icloud-services`: `CloudKit`
-- `aps-environment`: `development` (for sync notifications)
+- `aps-environment`: `development` — **iOS/iPadOS** push entitlement
+- `com.apple.developer.aps-environment`: `development` — **macOS** push entitlement
+
+Both push keys are present on purpose. They are different entitlements, not aliases, and one shared entitlements file serves all three platforms; each platform's signing step keeps its own key and drops the other (verified against `codesign -d --entitlements`). CloudKit's mirroring relies on silent pushes to a `CKDatabaseSubscription`, so dropping the iOS key downgrades iPhone/iPad to pull-on-launch sync. `Info.plist` carries the matching `UIBackgroundModes: remote-notification`.
+
+**⚠️ The `AddEntitlement` MCP tool silently no-ops on `aps-environment`** — it treats the existing `com.apple.developer.aps-environment` as the same key and reports success without writing. Edit the file directly and verify with `codesign -d --entitlements - --xml <built app>`. A macOS build is not a valid check for the iOS key; build for `Any iOS Device (arm64)` (simulator builds carry no entitlements at all).
 
 ### Development Schema Initialization
-CloudKit requires the data schema to be pushed to iCloud's development environment before sync works. This is handled automatically in DEBUG builds via `NSPersistentCloudKitContainer.initializeCloudKitSchema()`.
+CloudKit needs the data schema in its development environment before sync works, and initializing it also *validates* the model for CloudKit compatibility. SwiftData has no API for this, so `AppModelContainer.initializeCloudKitSchemaIfRequested(configuration:)` drops to Core Data per Apple's "Syncing model data across a person's devices": load the same store file through `NSPersistentCloudKitContainer` synchronously, call `initializeCloudKitSchema()`, then remove the store before SwiftData opens it (otherwise both frameworks sync the same store).
+
+**It is opt-in**, gated on `#if DEBUG` + iCloud sync enabled + the `-initializeCloudKitSchema` launch argument. It uploads a representative record for every type and field then deletes them — slow, and it blocks other CloudKit operations, so Apple's guidance is not to run it on ordinary launches. Run it after changing the model, not habitually.
 
 **First run setup:**
-1. Build and run in DEBUG mode while signed into iCloud
-2. The schema is pushed to CloudKit's development environment
-3. Verify in CloudKit Dashboard (developer.apple.com/icloud) that `CD_Document` and `CD_Page` record types exist
+1. Enable iCloud sync in Settings > Import and Storage, relaunch
+2. Run once with `-initializeCloudKitSchema` in the scheme's arguments
+3. Verify in CloudKit Console that `CD_Document` and `CD_Page` record types exist
 
 **Production deployment:**
-1. In CloudKit Dashboard, promote schema from Development to Production
-2. This only needs to be done once before App Store release
+1. In CloudKit Console, promote schema from Development to Production
+2. This only needs to be done once before release
 3. Schema changes require re-promotion
 
-The initialization code is wrapped in `#if DEBUG` so it only runs during development.
+### Field Encryption
+`Page.plainText` is `@Attribute(.allowsCloudEncryption)`. It is the *only* field that needs it: every other text/image blob (`richTextData`, `imageData`, `textExportCache`) is `@Attribute(.externalStorage)`, which mirrors to a `CKAsset`, and **CloudKit encrypts assets automatically** — `encryptedValues` explicitly rejects `CKAsset` for that reason. `plainText` is the one readable plaintext copy of a page's OCR output in a CloudKit field.
+
+Rules that constrain any future change here:
+- **CloudKit only accepts encryption on fields new to the schema.** Existing fields (`Document.name`, `Page.thumbnailData`, `Page.originalFileName`, `boundingBoxesData`) can never be converted — that ship sailed when the 1.x schema was promoted. `plainText` was encryptable only because 2.x hadn't been promoted yet.
+- **No `#Index` on an encrypted field** — CloudKit rejects indexes it can't read. Encryption is CloudKit-side only, so the local SQLite column is untouched and `#Predicate` search still works.
+- If a development-environment schema already has a plain `CD_plainText` from an earlier 2.x build, reset the development environment before re-initializing.
 
 ### Schema Migration Strategies
 
@@ -251,6 +272,8 @@ The app tracks schema versions to gracefully handle data incompatibilities and p
 - `UserDefaults`: Checked BEFORE container loads. Survives database corruption.
 - `SchemaMetadata` model: Checked AFTER load. Detects CloudKit sync from newer app versions.
 
+**⚠️ The UserDefaults gate must never be lowered.** `SchemaValidationService.recordSuccessfulLoad()` raises the stored version only, and `AppModelContainer` skips calling it entirely when the pre-load check returned `.newerThanApp`. Writing `currentVersion` unconditionally (the original behaviour) overwrote a stored `3` with a `2`, so the "Update Required" screen appeared exactly once and the next launch read "compatible" and let the older build write over newer data — defeating the one gate that's supposed to survive database corruption.
+
 **Key Files:**
 - `Services/SchemaVersioning.swift`: Version constants, `SchemaMetadata` model
 - `Services/SchemaValidationService.swift`: Pre/post-load validation, integrity checks, self-healing
@@ -287,18 +310,21 @@ Minor issues are auto-fixed without user intervention:
 |-------|-----------|----------|
 | `totalPages` mismatch | `document.totalPages != pages.count` | Recalculate from actual count |
 | Page number gaps | Pages not numbered 1,2,3... | Renumber sequentially |
-| Orphan pages | `page.document == nil` | Delete orphan pages |
+| Orphan pages | `page.document == nil` | Quarantine; delete only after 24 h still orphaned |
 
 Critical issues require user action:
 - Data from newer schema version → "Update Required" prompt
+
+**`IntegrityIssue` carries a `PersistentIdentifier`, not a name.** Self-healing resolves the document with `context.model(for:)`. Project names are not unique — two devices both creating "Untitled" is routine with sync on — and the old name lookup (`fetchLimit = 1`) could apply one document's `totalPages` rewrite or full renumber to a different, healthy document sharing its name. Never reintroduce a name-based lookup here.
+
+**⚠️ Orphan pages are quarantined, never deleted on sight** (`deleteQuarantinedOrphanPages`). CloudKit mirrors `Page` and `Document` as separate record types and "the iCloud servers don't guarantee atomic processing of relationship changes" — a page whose record arrives before its document's, or before the link is applied, is indistinguishable from a real orphan at launch. Deleting it there is unrecoverable *and* propagates to every device. Instead, each orphan's uuid and first-seen date go in UserDefaults (`multiScanOrphanPageQuarantine`); it's deleted only once it has stayed orphaned past `orphanQuarantineWindow` (24 h, or 0 when sync is off — no out-of-order delivery to wait for). Entries for reattached pages are pruned each pass, so intermittent orphaning never accumulates toward the deadline. Orphans without a uuid get one assigned here, since the uuid backfill runs *after* this pass.
 
 ### Version History
 
 | Version | App Version | Changes |
 |---------|-------------|---------|
 | 1 | 1.5.1+ | Initial tracked version. Document, Page, SchemaMetadata models. |
-| 2 | 2.0 | `Page.richTextData` **format** changed from JSON-encoded `AttributedString` to RTF (TextKit 2 engine). Property name/type unchanged, so the SwiftData/CloudKit schema is identical — but v1 apps decode the blob as JSON and would see (and could save back) empty text, so they must be gated. Migration is lazy: reads accept both formats, writes produce RTF. `SchemaMetadata.recordSuccessfulLoad()` raises the stored version so other devices' gates fire via CloudKit. |
-| 2 (unchanged) | 2.x | Additive fields only — `Document.uuid`, `Document.lastModified`, `Page.uuid`, `Page.plainText`, `Page.plainTextUpdatedAt` — with lazy backfill at launch. No bump: builds without these columns keep working, and stale `plainText` is detected via `plainTextUpdatedAt < lastModified`. CloudKit production schema must be re-promoted once for the new fields.
+| 2 | 2.0 | `Page.richTextData` **format** changed from JSON-encoded `AttributedString` to RTF (TextKit 2 engine). Property name/type unchanged, so the SwiftData/CloudKit schema is identical — but v1 apps decode the blob as JSON and would see (and could save back) empty text, so they must be gated. Migration is lazy: reads accept both formats, writes produce RTF. `SchemaMetadata.recordSuccessfulLoad()` raises the stored version so other devices' gates fire via CloudKit. Additive fields — `Document.uuid`, `Document.lastModified`, `Page.uuid`, `Page.plainText`, `Page.plainTextUpdatedAt` — with lazy backfill at launch. CloudKit production schema must be re-promoted once for the new fields.  |  | |
 
 ### When to Bump Schema Version
 
@@ -515,8 +541,8 @@ Every save also updates `Page.plainText`/`plainTextUpdatedAt` and `Document.last
 
 | Field | Purpose |
 |-------|---------|
-| `Document.uuid: UUID?`, `Page.uuid: UUID?` | Stable, device-independent identity for App Intents entities, Spotlight, `SyncableEntity`, and deep links. **Optional on purpose**: a non-optional `UUID()` default can stamp the same value on every existing row during lightweight migration. Backfilled by `ProjectMaintenance.backfillIdentityAndPlainText` (main context) after schema self-healing. `#Index` on both. |
-| `Page.plainText: String` | Stored mirror of the RTF, set by the `attributedText` setter and `init`. Replaces the old computed property (which decoded RTF on every call), so the per-document page filters, `#Predicate` full-text search (`localizedStandardContains`), and Spotlight `textContent` never touch external storage. |
+| `Document.uuid: UUID?`, `Page.uuid: UUID?` | Stable, device-independent identity for App Intents entities, Spotlight, and deep links. **This is a public contract** — saved shortcuts and the Spotlight manifest store it, so its serialized form must not change. **Optional on purpose**: a non-optional `UUID()` default can stamp the same value on every existing row during lightweight migration. Backfilled by `ProjectMaintenance.backfillIdentityAndPlainText` (main context) after schema self-healing. `#Index` on both. |
+| `Page.plainText: String` | Stored mirror of the RTF, set by the `attributedText` setter and `init`. Replaces the old computed property (which decoded RTF on every call), so the per-document page filters, `#Predicate` full-text search (`localizedStandardContains`), and Spotlight `textContent` never touch external storage. **`@Attribute(.allowsCloudEncryption)`** — see "Field Encryption". Never add `#Index` to it. |
 | `Page.plainTextUpdatedAt: Date?` | Staleness guard: if `nil` or older than `lastModified` (a build without the column wrote the RTF), the backfill re-derives `plainText` — from the export cache when it matches, otherwise one RTF decode. |
 | `Document.lastModified: Date?` | Bumped on rename/emoji (`DocumentCard`) and by every page text write (`Page.attributedText` setter). `lastModifiedDate` is the max of this, page dates, and `createdAt`. |
 
@@ -524,13 +550,22 @@ Backfill runs per document, decoding `textExportCache` once (no per-page externa
 
 ## App Intents & Spotlight
 
-Everything lives in `MultiScan/AppIntents/` plus the services listed below. All intents run in-process (`allowedExecutionTargets = .main`); there is no App Intents extension.
+Everything lives in `MultiScan/AppIntents/` plus the services listed below. There is no App Intents extension. Intents that touch `AppRouter`, the main `ModelContext`, or the `@MainActor` import pipeline declare `allowedExecutionTargets = .main`; `GetProjectTextIntent` only reads through `ProjectStore`, so it deliberately leaves the default (`.default`) — don't "fix" that asymmetry.
+
+Where an intent runs is declared with `supportedModes` (`IntentModes`). The boolean `openAppWhenRun` is **deprecated** — don't reintroduce it.
 
 ### Entities (`AppIntents/Entities/`)
-- **`ProjectEntity`** (`IndexedEntity, SyncableEntity, Transferable`): `id` = `Document.uuid`; `@Property`s with Spotlight `indexingKey`s (`name → displayName`, `createdAt`, `lastModified`, `summary → contentDescription`); 200 px JPEG cover for the display representation; `attributeSet` adds keywords + `domainIdentifier = "project.<uuid>"`. Transferable exports RTF file / RTF data / UTF-8 text, fetched lazily via `ProjectStore.projectText` (the entity carries only metadata).
+- **`ProjectEntity`** (`IndexedEntity, Transferable`): `id` = `Document.uuid`; `@Property`s with Spotlight `indexingKey`s (`name → displayName`, `createdAt`, `lastModified`, `summary → contentDescription`); 200 px JPEG cover for the display representation; `attributeSet` adds keywords + `domainIdentifier = "project.<uuid>"`. Transferable exports RTF file / RTF data / UTF-8 text, fetched lazily via `ProjectStore.projectText` (the entity carries only metadata).
 - **`PageEntity`** (same conformances): `id` = `Page.uuid`; `text → textContent` (from the stored column), 128 px thumbnail; Transferable exports RTF, plain text, and a JPEG of the page (rotation/adjustments applied via `PlatformImage.processedCGImage`).
-- **Queries** (`EntityQueries.swift`): `EntityQuery + EntityStringQuery + IndexedEntityQuery` for both; `@Dependency var store: ProjectStore`. Reindex callbacks route to `SpotlightIndexer.reindex(...)` / `reindexAll()`.
+- **`SyncableEntity` is declarative only.** It adds no requirements beyond `AppEntity`; its real purpose is to pair the entity with a `SyncableEntityIdentifier<LocalID, StableID>`. Both entities keep a bare `UUID` id on purpose — the uuids are CloudKit-synced so they're already stable across devices, and adopting the paired identifier would change the id's serialized form and break saved shortcuts + the Spotlight manifest. The conformance is kept to **document** that these ids cross devices. Don't "complete" it by switching to `SyncableEntityIdentifier`.
+- **Queries** (`EntityQueries.swift`): `EntityQuery + EntityStringQuery + IndexedEntityQuery + EntityPropertyQuery` for both; `@Dependency var store: ProjectStore`. Reindex callbacks route to `SpotlightIndexer.reindex(...)` / `reindexAll()`.
+  - `entities(for:)` is a **batch** resolve — `ProjectStore.projectEntities(uuids:)` / `pageEntities(uuids:)` issue one fetch for all identifiers. Never reintroduce a per-id loop.
+  - `EntityPropertyQuery` powers the Shortcuts **Find Projects/Pages where…** action. The framework only *parses* the filter into `ProjectQueryFilter` / `PageQueryFilter`; `ProjectStore` executes it, honoring `mode`, `sortedBy`, and `limit`. A full-text page term is pushed down into the `FetchDescriptor` (the unbounded case); the rest are field checks in memory. `EnumerableEntityQuery` is deliberately **not** used — it would materialize every page.
+  - `properties` / `sortingOptions` must be `nonisolated(unsafe) static let … = QueryProperties { … }`. The metadata extractor requires that literal declaration shape (a computed getter fails extraction), and the builder types aren't `Sendable`.
 - Entities are Sendable value snapshots built inside `ProjectStore` (a `@ModelActor`); `@Model` objects never leave it.
+
+### Errors
+Every error type that can escape into an intent — `CreateProjectIntent.CreateProjectError`, `ProjectStoreError`, `RichTextExportError` — conforms to **`CustomLocalizedStringResourceConvertible`**. The framework routes thrown errors by *type* and keys on that protocol; `LocalizedError` alone shows the user a generic "something went wrong".
 
 ### Intents (`AppIntents/Intents/`)
 | Intent | Schema / protocol | Notes |
@@ -538,11 +573,14 @@ Everything lives in `MultiScan/AppIntents/` plus the services listed below. All 
 | `SearchProjectsIntent` | `@AppIntent(schema: .system.searchInApp)`, `ShowInAppSearchResultsIntent` | `router.showSearch(term)` → Home with the search field presented. (`.system.search` is deprecated in 27.) |
 | `OpenProjectIntent` | `@AppIntent(schema: .system.open)`, `OpenIntent` | Spotlight uses it to open project results. |
 | `OpenPageIntent` | `OpenIntent` | Opens the project at a page; Spotlight uses it for page results. |
-| `CreateProjectIntent` | `LongRunningIntent, CancellableIntent` | "Scan New Project": `[IntentFile]` (images/PDF) → `ProjectImportPipeline` → returns `ProjectEntity`; reports per-page `progress`. |
+| `CreateProjectIntent` | `LongRunningIntent, CancellableIntent` | "Scan New Project": `[IntentFile]` (images/PDF) → `ProjectImportPipeline` → returns `ProjectEntity`; reports per-page `progress`. Staging the incoming files runs through the nonisolated `stageFiles(_:in:)` so the copy/write loop doesn't block the main actor. |
 | `GetProjectTextIntent` | `AppIntent` | Plain text via `ProjectStore.projectText` (RTF comes from Transferable). |
 | `DeleteProjectIntent` | `DeleteIntent` | `requestConfirmation` then `ProjectMaintenance.deleteProjects` on the main context. |
 
-`MultiScanShortcuts` (`AppShortcutsProvider`) exposes Search / Open / Scan phrases; phrases are localized in `AppShortcuts.xcstrings`. Call `MultiScanShortcuts.updateAppShortcutParameters()` after creating, renaming, or deleting projects (already done in the pipeline, `DocumentCard`, `HomeView`, `DeleteProjectIntent`).
+`MultiScanShortcuts` (`AppShortcutsProvider`) exposes Search / Open / Scan phrases; phrases are localized in `AppShortcuts.xcstrings`. Call `MultiScanShortcuts.updateAppShortcutParameters()` after creating, renaming, or deleting projects (already done in the pipeline, `DocumentCard`, `HomeView`, `DeleteProjectIntent`). Keep the phrase set small and distinct — near-duplicate wordings *degrade* Siri's match accuracy, since the system already does flexible matching.
+
+### Donation
+App Intents does **not** auto-donate actions taken in the app's own UI — the system only donates intents it ran itself. `DocumentCard.openProject()` donates `OpenProjectIntent` after an open so Siri Suggestions and Spotlight prediction learn the pattern. `ProjectMaintenance.deleteDonations(forProjects:)` prunes donations when a project is deleted (called from both `deleteProjects` and `HomeView.deleteDocument`) — the system never prunes them itself, and stale donations degrade prediction. In-app *creation* is deliberately not donated: a `CreateProjectIntent` carries `[IntentFile]`, which a file-picker import can't reproduce, so the donation would be unreplayable.
 
 The `.system` domain has **no entity schemas**, so the entities are plain `AppEntity` types. `@AssistantIntent`/`@AssistantEntity` are deprecated — use `@AppIntent(schema:)` / `@AppEntity(schema:)`.
 
@@ -740,10 +778,22 @@ struct PageCacheEntry: Codable, Sendable {
     let plainText: String // Pre-extracted — Smart Cleanup analyzes this, no decoding
     let wordCount: Int    // Pre-computed for separator metadata
     let charCount: Int
+    let pageLastModified: Date? // Freshness fingerprint (see below)
 }
 ```
 
 Each entry stores the text **twice on purpose**: export needs formatting (`rtfData`), Smart Cleanup analysis needs only plain text (`plainText`) — so analysis never decodes an attributed string at all. Version 1 caches (JSON AttributedString entries) fail plist decoding → `decodeCache` returns nil → rebuilt from source pages once.
+
+#### ⚠️ Freshness fingerprints — read this before touching the cache
+
+The cache is one blob on `Document`, but the text it mirrors lives on the `Page` records. Under CloudKit those are separate record types with independent last-writer-wins resolution: **if two devices edit different pages of the same project, both page edits merge correctly but only one device's cache blob survives** — leaving a cache that is well-formed, the right length, and wrong. The old `cache.pages.count == pages.count` check can't see this.
+
+So each entry records its source page's `lastModified` at write time, and `isFresh(_:against:)` compares every entry against the live pages.
+
+- **Read-side consumers must use `loadFreshCache(from:)`**, never `loadCache(from:)`. Consumers with a cheap fallback (`TextExporter`, `NavigationState.rebuildTextCache`) pass `rebuildIfStale: false` and take the slow path; Smart Cleanup's edit paths pass `rebuildIfStale: true` because there is no alternative source. Off-main consumers (`SmartCleanupModel.analyze`, `ProjectStore`) build `fingerprints(of:)` on their own actor and call the `nonisolated isFresh(_:against:)` after decoding.
+- **The mutation helpers deliberately keep using the raw `loadCache`.** They run while pages and cache are intentionally out of step (pages already renumbered, cache not yet); a freshness check there would reject a cache that's about to be corrected and force a needless full rebuild.
+- **`pageLastModified` is optional, and `nil` means "unverifiable", not "stale".** Caches written before fingerprinting exist on disk and sync; rejecting them would force an N-external-read rebuild of every document on upgrade. Entries gain fingerprints as pages are written, so the gap closes on its own. Don't "tighten" this into a required field without accepting that cost.
+- Any new `PageCacheEntry` built from a page write must pass the page's `lastModified` **after** the `attributedText` assignment (the setter bumps it). `renumbered(to:)` carries the fingerprint over unchanged — reordering doesn't touch text.
 
 #### Sync Points
 The cache is updated whenever page data changes:
@@ -761,8 +811,9 @@ The cache is updated whenever page data changes:
 // Build initial cache (call after OCR while data is in memory)
 static func buildInitialCache(for document: Document, from pages: [Page])
 
-// Update single page entry (call after page text edit)
-static func updateEntry(pageNumber: Int, attributedText: NSAttributedString, in document: Document)
+// Update single page entry (call after page text edit).
+// pageLastModified is the freshness fingerprint — read it off the page AFTER the write.
+static func updateEntry(pageNumber: Int, attributedText: NSAttributedString, pageLastModified: Date?, in document: Document)
 
 // Add new page entries (call after adding pages to existing document)
 static func addEntries(for pages: [Page], to document: Document)
@@ -773,15 +824,23 @@ static func removeEntry(pageNumber: Int, from document: Document)
 // Swap page numbers (call after page reorder)
 static func swapPageNumbers(_ pageNumber1: Int, _ pageNumber2: Int, in document: Document)
 
-// Load cache for export
+// Raw load — mutation helpers only (see freshness note above)
 static func loadCache(from document: Document) -> TextExportCache?
+
+// Load for READING page content: nil unless the cache still matches the pages
+static func loadFreshCache(from document: Document, rebuildIfStale: Bool = false) -> TextExportCache?
+
+// Freshness primitives for off-main consumers
+nonisolated static func fingerprints(of document: Document) -> [Int: Date]
+nonisolated static func isFresh(_ cache: TextExportCache, against fingerprints: [Int: Date]) -> Bool
 ```
 
 Renumbering operations (`insertEntries`, `removeEntry`, `swapPageNumbers`) use `PageCacheEntry.renumbered(to:)`, which copies raw fields — no decode/encode. `PageCacheEntry.decodedText()` decodes an entry's RTF for removal operations.
 
 #### Cache Resilience
 - **Version checking**: Cache includes version number; mismatches (including v1 caches) trigger automatic rebuild
-- **Fallback**: If cache is invalid or missing, TextExporter falls back to direct page loading
+- **Freshness checking**: entry fingerprints vs. page `lastModified` catch a cache that diverged from the pages (CloudKit merge) — see above
+- **Fallback**: If cache is invalid, stale, or missing, TextExporter falls back to direct page loading
 - **Recovery**: `rebuildCache(for:)` regenerates cache from source data (triggers N loads, use sparingly)
 
 ### ExportSettings (`Services/ExportSettings.swift`)

@@ -84,24 +84,118 @@
       "localizations" : {
         "en" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@, %2$lld of %3$lld pages visible"
+            "state" : "translated",
+            "value" : "%1$@, %2$lld of %3$#@pages@ visible"
+          },
+          "substitutions" : {
+            "pages" : {
+              "argNum" : 3,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg page"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg pages"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%1$@, %2$lld de %3$lld páginas visibles"
+            "value" : "%1$@, %2$lld de %3$#@pages@"
+          },
+          "substitutions" : {
+            "pages" : {
+              "argNum" : 3,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg página visible"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg páginas visibles"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
     },
     "%@. Showing %lld of %lld pages." : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@. Showing %2$lld of %3$#@pages@."
+          },
+          "substitutions" : {
+            "pages" : {
+              "argNum" : 3,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg page"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg pages"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%1$@. Mostrando %2$lld de %3$lld páginas."
+            "value" : "%1$@. Mostrando %2$lld de %3$#@pages@."
+          },
+          "substitutions" : {
+            "pages" : {
+              "argNum" : 3,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg página"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg páginas"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -119,10 +213,40 @@
     },
     "%lld characters" : {
       "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld character"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld characters"
+                }
+              }
+            }
+          }
+        },
         "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld caracteres"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld carácter"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld caracteres"
+                }
+              }
+            }
           }
         }
       }
@@ -132,14 +256,58 @@
       "localizations" : {
         "en" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$lld of %2$lld pages completed"
+            "state" : "translated",
+            "value" : "%1$lld of %2$#@pages@ completed"
+          },
+          "substitutions" : {
+            "pages" : {
+              "argNum" : 2,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg page"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg pages"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%1$lld de las %2$lld páginas completadas"
+            "value" : "%1$lld de %2$#@pages@"
+          },
+          "substitutions" : {
+            "pages" : {
+              "argNum" : 2,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg página completada"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "las %arg páginas completadas"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -148,14 +316,58 @@
       "localizations" : {
         "en" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$lld of %2$lld pages reviewed (%3$@)"
+            "state" : "translated",
+            "value" : "%1$lld of %2$#@pages@ reviewed (%3$@)"
+          },
+          "substitutions" : {
+            "pages" : {
+              "argNum" : 2,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg page"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg pages"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%1$lld de %2$lld páginas revisadas (%3$@)"
+            "value" : "%1$lld de %2$#@pages@ (%3$@)"
+          },
+          "substitutions" : {
+            "pages" : {
+              "argNum" : 2,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg página revisada"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg páginas revisadas"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -179,10 +391,40 @@
     "%lld pages" : {
       "comment" : "App Intents plural type name\nProject page count in App Intents/Spotlight",
       "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld page"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld pages"
+                }
+              }
+            }
+          }
+        },
         "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld páginas"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld página"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld páginas"
+                }
+              }
+            }
           }
         }
       }
@@ -190,10 +432,40 @@
     "%lld projects" : {
       "comment" : "App Intents plural type name",
       "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld project"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld projects"
+                }
+              }
+            }
+          }
+        },
         "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld proyectos"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld proyecto"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld proyectos"
+                }
+              }
+            }
           }
         }
       }
@@ -240,10 +512,40 @@
     },
     "%lld words" : {
       "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld word"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld words"
+                }
+              }
+            }
+          }
+        },
         "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld palabras"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld palabra"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld palabras"
+                }
+              }
+            }
           }
         }
       }
@@ -253,14 +555,98 @@
       "localizations" : {
         "en" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$lld words, %2$lld characters"
+            "state" : "translated",
+            "value" : "%1$#@words@, %2$#@characters@"
+          },
+          "substitutions" : {
+            "characters" : {
+              "argNum" : 2,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg character"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg characters"
+                    }
+                  }
+                }
+              }
+            },
+            "words" : {
+              "argNum" : 1,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg word"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg words"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%1$lld palabras, %2$lld caracteres"
+            "value" : "%1$#@words@, %2$#@characters@"
+          },
+          "substitutions" : {
+            "characters" : {
+              "argNum" : 2,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg carácter"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg caracteres"
+                    }
+                  }
+                }
+              }
+            },
+            "words" : {
+              "argNum" : 1,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg palabra"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg palabras"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -347,10 +733,40 @@
     },
     "All %lld pages" : {
       "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "All %lld page"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "All %lld pages"
+                }
+              }
+            }
+          }
+        },
         "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Todas las %lld páginas"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "needs_review",
+                  "value" : "Toda la %lld página"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "needs_review",
+                  "value" : "Todas las %lld páginas"
+                }
+              }
+            }
           }
         }
       }
@@ -601,10 +1017,40 @@
     },
     "Created “%@” with %lld pages." : {
       "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Created “%1$@” with %2$lld page."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Created “%1$@” with %2$lld pages."
+                }
+              }
+            }
+          }
+        },
         "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Se creó “%1$@” con %2$lld páginas."
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Se creó “%1$@” con %2$lld página."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Se creó “%1$@” con %2$lld páginas."
+                }
+              }
+            }
           }
         }
       }
@@ -688,10 +1134,40 @@
     },
     "Delete %lld projects (%@)? This cannot be undone." : {
       "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Delete %1$lld project (%2$@)? This cannot be undone."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Delete %1$lld projects (%2$@)? This cannot be undone."
+                }
+              }
+            }
+          }
+        },
         "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "¿Eliminar %1$lld proyectos (%2$@)? Esta acción no se puede deshacer."
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "¿Eliminar %1$lld proyecto (%2$@)? Esta acción no se puede deshacer."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "¿Eliminar %1$lld proyectos (%2$@)? Esta acción no se puede deshacer."
+                }
+              }
+            }
           }
         }
       }
@@ -758,10 +1234,40 @@
     },
     "Deleted %lld projects." : {
       "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Deleted %lld project."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Deleted %lld projects."
+                }
+              }
+            }
+          }
+        },
         "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Se eliminaron %lld proyectos."
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Se eliminó %lld proyecto."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Se eliminaron %lld proyectos."
+                }
+              }
+            }
           }
         }
       }
@@ -905,6 +1411,9 @@
           }
         }
       }
+    },
+    "Failed to convert rich text to RTF." : {
+
     },
     "Failed to load data: %@" : {
       "localizations" : {
@@ -2513,16 +3022,6 @@
         }
       }
     },
-    "Scan New Project" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Escanear proyecto nuevo"
-          }
-        }
-      }
-    },
     "Search" : {
 
     },
@@ -2777,6 +3276,9 @@
         }
       }
     },
+    "Start New Project" : {
+
+    },
     "Start Project" : {
       "localizations" : {
         "es-419" : {
@@ -2986,6 +3488,9 @@
           }
         }
       }
+    },
+    "There is no text to export." : {
+
     },
     "This page has no image." : {
       "localizations" : {

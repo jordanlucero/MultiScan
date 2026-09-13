@@ -2,7 +2,7 @@
 //  AppRouter.swift
 //  MultiScan
 //
-//  App-level navigation requests that originate outside the view hierarchy: Spotlight results, App Intents (Open Project / Open Page / Search), and the app-wide search UI.
+//  App-level navigation requests that originate outside the view hierarchy: Spotlight results, App Intents, and the app-wide search UI.
 //
 //  `ContentView` observes `openRequest` / `wantsHome`; the review views consume the page number; `HomeView` binds its `.searchable` field to `searchText` / `isSearchPresented`.
 //
@@ -17,8 +17,7 @@ import Observation
 final class AppRouter {
     static let shared = AppRouter()
 
-    /// A request to show a project (and optionally a specific page). `id` makes repeated requests
-    /// for the same target distinguishable so `onChange` fires each time.
+    /// A request to show a project (and optionally a specific page). `id` makes repeated requests for the same target distinguishable so `onChange` fires each time.
     struct OpenRequest: Equatable, Sendable {
         let id: UUID
         let projectUUID: UUID
@@ -49,5 +48,20 @@ final class AppRouter {
 
     func consumeOpenRequest() {
         openRequest = nil
+    }
+
+    /// Consumes a pending open request that targets `document`, navigating to the requested page. Requests for other projects are left alone for the view showing that project.
+    /// - Returns: the page number navigated to, or `nil` if nothing changed.
+    @discardableResult
+    func fulfillOpenRequest(for document: Document, navigationState: NavigationState) -> Int? {
+        guard let request = openRequest, request.projectUUID == document.uuid else { return nil }
+
+        var navigatedTo: Int?
+        if let pageNumber = request.pageNumber, navigationState.currentPageNumber != pageNumber {
+            navigationState.goToPage(pageNumber: pageNumber)
+            navigatedTo = pageNumber
+        }
+        consumeOpenRequest()
+        return navigatedTo
     }
 }

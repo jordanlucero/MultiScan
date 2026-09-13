@@ -46,17 +46,17 @@ final class Page {
     var richTextData: Data?
 
     /// Stable, device-independent identity used by App Intents, Spotlight, and `SyncableEntity`.
-    /// Optional on purpose: a non-optional `UUID()` default can stamp the *same* value onto every
-    /// pre-existing row during lightweight migration. `ProjectMaintenance.backfill` assigns missing values.
+    /// Optional on purpose: a non-optional `UUID()` default can stamp the *same* value onto every pre-existing row during lightweight migration. `ProjectMaintenance.backfill` assigns missing values.
     var uuid: UUID?
 
     /// Plain-text mirror of `richTextData`, kept in sync by the `attributedText` setter (and `init`).
-    /// Stored as a real column so `#Predicate` full-text search runs in SQLite, Spotlight gets
-    /// `textContent` without decoding RTF, and per-keystroke page filtering never touches external storage.
+    /// Stored as a real column so `#Predicate` full-text search runs in SQLite, Spotlight gets `textContent` without decoding RTF, and per-keystroke page filtering never touches external storage.
+    ///
+    /// **Encrypted in CloudKit.** This is the only plaintext copy of a page's OCR output that mirrors as a readable CloudKit field — every other text/image blob is `.externalStorage`, which maps to a `CKAsset` and is encrypted by CloudKit automatically. Encryption is CloudKit-side only: locally it stays an ordinary SQLite column, so `#Predicate` search is unaffected. Do not add `#Index` here — CloudKit rejects indexes on encrypted fields.
+    @Attribute(.allowsCloudEncryption)
     var plainText: String = ""
 
-    /// When `plainText` was last derived from `richTextData`. `nil` or older than `lastModified`
-    /// means the mirror is stale (e.g., written by a build without this column) and is re-derived on backfill.
+    /// When `plainText` was last derived from `richTextData`. `nil` or older than `lastModified` means the mirror is stale (e.g., written by a build without this column) and is re-derived on backfill.
     var plainTextUpdatedAt: Date?
 
     #Index<Page>([\.uuid])

@@ -2,8 +2,7 @@
 //  DeleteProjectIntent.swift
 //  MultiScan
 //
-//  Deletes projects after an explicit confirmation. The Spotlight index catches up through the
-//  save notification (see `SpotlightIndexer`).
+//  Deletes projects after an explicit confirmation. The Spotlight index catches up through the save notification (see `SpotlightIndexer`).
 //
 
 import AppIntents

@@ -7,16 +7,11 @@
 //  ## Performance Architecture
 //  This exporter supports two modes:
 //
-//  1. **Cache-based (preferred)**: Uses `TextExportCacheService` to load pre-computed
-//     page data (RTF + statistics) from a single cached file.
+//  1. **Cache-based (preferred)**: Uses `TextExportCacheService` to load pre-computed page data (RTF + statistics) from a single cached file.
 //
-//  2. **Direct page access (fallback)**: Reads each page's raw text data from SwiftData
-//     external storage. This triggers N disk reads. Only used when the cache is
-//     unavailable or invalid.
+//  2. **Direct page access (fallback)**: Reads each page's raw text data from SwiftData external storage. This triggers N disk reads. Only used when the cache is unavailable or invalid.
 //
-//  In both modes the expensive work — decoding page RTF and appending into the combined
-//  string — happens off the main actor. `NSMutableAttributedString.append` is O(n) per
-//  page (unlike the old SwiftUI `AttributedString.append`, which was O(n²) overall).
+//  In both modes the expensive work — decoding page RTF and appending into the combined string — happens off the main actor. `NSMutableAttributedString.append` is O(n) per page (unlike the old SwiftUI `AttributedString.append`, which was O(n²) overall).
 //
 //  ## Usage
 //  ```swift
@@ -31,9 +26,7 @@ import SwiftData
 
 /// The finished export: attributed text for preview plus pre-encoded share payloads.
 ///
-/// `NSAttributedString` is not Sendable, but the instance here is built fresh inside
-/// the export task and never mutated afterward — immutable NSAttributedStrings are
-/// safe to read from any thread once ownership is transferred.
+/// `NSAttributedString` is not Sendable, but the instance here is built fresh inside the export task and never mutated afterward — immutable NSAttributedStrings are safe to read from any thread once ownership is transferred.
 struct TextExportResult: @unchecked Sendable {
     let attributedText: NSAttributedString
     let rtfData: Data?
@@ -60,8 +53,7 @@ struct TextExporter {
 
     /// Initialize with a Document to enable cache-based export (preferred).
     ///
-    /// This mode loads page data from a single cached file instead of N external
-    /// storage files, dramatically improving performance for large documents.
+    /// This mode loads page data from a single cached file instead of N external storage files, dramatically improving performance for large documents.
     init(document: Document, settings: ExportSettings) {
         self.document = document
         self.pages = document.unwrappedPages
@@ -80,8 +72,7 @@ struct TextExporter {
 
     // MARK: - Page Snapshot
 
-    /// Sendable snapshot of one page's export inputs, gathered on the main actor
-    /// (or on `ProjectStore` for App Intents / Transferable exports).
+    /// Sendable snapshot of one page's export inputs, gathered on the main actor (or on `ProjectStore` for App Intents / Transferable exports).
     struct PageSnapshot: Sendable {
         let pageNumber: Int
         let fileName: String?
@@ -96,15 +87,13 @@ struct TextExporter {
 
     /// Builds the combined export result from all pages.
     ///
-    /// Uses the cache when available (fast single-file load), falls back to direct
-    /// page access if the cache is unavailable (slow N-file load).
+    /// Uses the cache when available (fast single-file load), falls back to direct page access if the cache is unavailable (slow N-file load).
     @MainActor
     func buildCombinedTextAsync() async -> TextExportResult {
         let snapshots: [PageSnapshot]
 
         if let document = document,
-           let cache = TextExportCacheService.loadCache(from: document),
-           cache.pages.count == document.unwrappedPages.count {
+           let cache = TextExportCacheService.loadFreshCache(from: document) {
             // Cache path: one external-storage read for the whole document
             snapshots = cache.pages
                 .sorted { $0.pageNumber < $1.pageNumber }

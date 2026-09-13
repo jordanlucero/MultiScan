@@ -4,24 +4,16 @@
 //
 //  The editing controller between a Page model and the TextKit 2 text view.
 //
-//  One controller exists per selected page (created on page switch, like the old
-//  EditablePageText). It owns the authoritative text snapshot, debounces auto-save,
-//  routes formatting and Smart Cleanup edits into the text view's storage with undo
-//  support on both platforms, and normalizes fonts at the storage boundary.
+//  One controller exists per selected page (created on page switch, like the old EditablePageText). It owns the authoritative text snapshot, debounces auto-save, routes formatting and Smart Cleanup edits into the text view's storage with undo support on both platforms, and normalizes fonts at the storage boundary.
 //
 //  ## Ownership & Lifecycle
 //  - `init` decodes the page's persisted text once and normalizes it to the display font.
 //  - `attach(_:)` loads the snapshot into a platform text view (called by PageTextEditor).
-//  - `textDidChange()` (from the view delegate) refreshes the snapshot + statistics and
-//    schedules a debounced save.
-//  - `detach()` performs a final save and severs the view link, so a debounce that fires
-//    after a page switch can never read another page's storage.
+//  - `textDidChange()` (from the view delegate) refreshes the snapshot + statistics and schedules a debounced save.
+//  - `detach()` performs a final save and severs the view link, so a debounce that fires after a page switch can never read another page's storage.
 //
 //  ## Undo
-//  Typing undo is native to NSTextView/UITextView (`allowsUndo` on macOS, automatic on
-//  iOS — including shake-to-undo and three-finger swipe). Programmatic edits (formatting,
-//  Remove Line Breaks, Smart Cleanup) register snapshot-based undo actions on the view's
-//  UndoManager, so they participate in the same stack on both platforms.
+//  Typing undo is native to NSTextView/UITextView (`allowsUndo` on macOS, automatic on iOS — including shake-to-undo and three-finger swipe). Programmatic edits (formatting, Remove Line Breaks, Smart Cleanup) register snapshot-based undo actions on the view's UndoManager, so they participate in the same stack on both platforms.
 //
 
 import SwiftUI
@@ -65,8 +57,7 @@ final class PageTextController {
 
     // MARK: - View Attachment
 
-    /// Loads the controller's content into a platform text view. Idempotent for the
-    /// same view; reloads when a new view instance appears (e.g., sheet reopened).
+    /// Loads the controller's content into a platform text view. Idempotent for the same view; reloads when a new view instance appears (e.g., sheet reopened).
     func attach(_ textView: PageTextView) {
         if self.textView === textView { return }
         self.textView = textView
@@ -85,8 +76,7 @@ final class PageTextController {
 
     #if os(iOS)
     /// Re-normalizes the live content to the current Dynamic Type body size.
-    /// Display-only: `normalizedForStorage` strips sizes on save, so this never
-    /// dirties the document or triggers a save.
+    /// Display-only: `normalizedForStorage` strips sizes on save, so this never dirties the document or triggers a save.
     private func dynamicTypeDidChange() {
         currentText = RichTextArchiver.normalizedForDisplay(currentText)
         guard let textView else { return }
@@ -152,9 +142,11 @@ final class PageTextController {
         page.attributedText = storageText
 
         if let document = page.document {
+            // Read lastModified after the assignment above — the setter just bumped it, and that value is the cache entry's freshness fingerprint.
             TextExportCacheService.updateEntry(
                 pageNumber: page.pageNumber,
                 attributedText: storageText,
+                pageLastModified: page.lastModified,
                 in: document
             )
         }

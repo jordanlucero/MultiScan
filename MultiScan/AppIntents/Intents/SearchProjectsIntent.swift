@@ -2,8 +2,7 @@
 //  SearchProjectsIntent.swift
 //  MultiScan
 //
-//  `.system.searchInApp` schema: "Search for <term> in MultiScan". The schema requires the app to
-//  open and show results in its own search UI, which is HomeView's app-wide search field.
+//  `.system.searchInApp` schema: "Search for <term> in MultiScan". The schema requires the app to open and show results in its own search UI, which is HomeView's app-wide search field.
 //
 
 import AppIntents

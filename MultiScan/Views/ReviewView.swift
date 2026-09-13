@@ -12,8 +12,10 @@ struct ReviewView: View {
     @Environment(\.undoManager) private var undoManager
     @Environment(AppRouter.self) private var router
     @StateObject private var navigationState = NavigationState()
-    @StateObject private var ocrService = OCRService()
-    private let importService = ImageImportService()
+
+    /// Shared import → OCR pipeline (also used by Home and the "Start New Project" intent).
+    private let pipeline = ProjectImportPipeline.shared
+
     @State private var selectedPageNumber: Int?
     @State private var showProgress: Bool = false
     @State private var showExportPanel: Bool = false
@@ -51,8 +53,7 @@ struct ReviewView: View {
     var body: some View {
         mainContent
             #if os(iOS)
-            // On iOS the progress button lives inside the More menu, so the popover
-            // can't anchor to it — attach it to the root instead.
+            // On iOS the progress button lives inside the More menu, so the popover can't anchor to it — attach it to the root instead.
             .popover(isPresented: $showProgress) {
                 ProgressPopover(navigationState: navigationState)
             }
@@ -185,12 +186,9 @@ struct ReviewView: View {
 
     /// Jumps to the page requested by a deep link (Spotlight page result, Open Page intent, search hit).
     private func fulfillOpenRequest() {
-        guard let request = router.openRequest, request.projectUUID == document.uuid else { return }
-        if let pageNumber = request.pageNumber, navigationState.currentPageNumber != pageNumber {
-            navigationState.goToPage(pageNumber: pageNumber)
+        if let pageNumber = router.fulfillOpenRequest(for: document, navigationState: navigationState) {
             selectedPageNumber = pageNumber
         }
-        router.consumeOpenRequest()
     }
 
     private var navigationTitle: String {
@@ -236,19 +234,8 @@ struct ReviewView: View {
 
             Menu {
                 // Review
-                Button { navigationState.toggleCurrentPageDone() } label: {
-                    Label(
-                        navigationState.currentPage?.isDone == true ? "Mark as Not Reviewed" : "Mark as Reviewed",
-                        systemImage: navigationState.currentPage?.isDone == true ? "checkmark.circle.fill" : "checkmark.circle"
-                    )
-                }
-
-                Button { navigationState.toggleRandomization() } label: {
-                    Label(
-                        navigationState.isRandomized ? "Sequential Order" : "Shuffled Order",
-                        systemImage: navigationState.isRandomized ? "shuffle.circle.fill" : "shuffle.circle"
-                    )
-                }
+                PageReviewStatusButton(navigationState: navigationState)
+                PageOrderButton(navigationState: navigationState)
 
                 Button { showProgress.toggle() } label: {
                     Label("View Progress", systemImage: "flag.pattern.checkered")
@@ -259,31 +246,8 @@ struct ReviewView: View {
                 // Image adjustments
                 if let page = navigationState.currentPage {
                     Section("Image") {
-                        Button {
-                            page.rotation = (page.rotation + 90) % 360
-                        } label: {
-                            Label("Rotate Clockwise", systemImage: "rotate.right")
-                        }
-
-                        Button {
-                            page.rotation = (page.rotation + 270) % 360
-                        } label: {
-                            Label("Rotate Counterclockwise", systemImage: "rotate.left")
-                        }
-
-                        Toggle(isOn: Binding(
-                            get: { page.increaseContrast },
-                            set: { page.increaseContrast = $0 }
-                        )) {
-                            Label("Increase Contrast", systemImage: "circle.lefthalf.filled")
-                        }
-
-                        Toggle(isOn: Binding(
-                            get: { page.increaseBlackPoint },
-                            set: { page.increaseBlackPoint = $0 }
-                        )) {
-                            Label("Increase Black Point", systemImage: "circle.bottomhalf.filled")
-                        }
+                        PageRotationButtons(page: page)
+                        PageAdjustmentToggles(page: page)
                     }
 
                     Divider()
@@ -302,18 +266,14 @@ struct ReviewView: View {
 
                 // Export
                 Section("Export") {
-                    Button { showExportPanel = true } label: {
-                        Label("Export Project Text…", systemImage: "square.and.arrow.up.on.square")
-                    }
+                    ExportProjectTextButton { showExportPanel = true }
                 }
 
                 Divider()
 
                 // Statistics
                 if let page = navigationState.currentPage {
-                    let wordCount = page.plainText.split(separator: " ").count
-                    let charCount = page.plainText.count
-                    Label("\(wordCount) words, \(charCount) characters", systemImage: "textformat")
+                    PageStatisticsLabel(page: page)
                 }
             } label: {
                 Label("More", systemImage: "ellipsis.circle")
@@ -409,7 +369,7 @@ struct ReviewView: View {
                 .font(.headline)
 
             if isAddingPages {
-                ProgressView("Processing \(Int(ocrService.progress * 100), format: .percent)")
+                ProgressView("Processing \(Int(pipeline.progress * 100), format: .percent)")
                     .progressViewStyle(.linear)
             } else {
                 PhotosPicker(
@@ -453,29 +413,13 @@ struct ReviewView: View {
         isAddingPages = true
         defer { isAddingPages = false }
 
-        let result = await importService.processFileURLs(urls, optimizeImages: optimizeImagesOnImport)
-
-        var allImages = result.images
-
-        // Process any PDFs by rendering pages to images
-        if !result.pdfURLs.isEmpty {
-            let pdfService = PDFImportService()
-            for pdfURL in result.pdfURLs {
-                let accessed = pdfURL.startAccessingSecurityScopedResource()
-                defer { if accessed { pdfURL.stopAccessingSecurityScopedResource() } }
-
-                do {
-                    let pdfImages = try await pdfService.renderPDF(at: pdfURL)
-                    allImages.append(contentsOf: pdfImages)
-                } catch {
-                    print("PDF import error: \(error)")
-                }
-            }
+        do {
+            let prepared = try await pipeline.prepare(urls: urls, optimizeImages: optimizeImagesOnImport)
+            guard !prepared.images.isEmpty else { return }
+            await addPagesToDocument(images: prepared.images)
+        } catch {
+            print("Import error: \(error)")
         }
-
-        guard !allImages.isEmpty else { return }
-
-        await addPagesToDocument(images: allImages)
     }
 
     // MARK: - Photos Import Handling
@@ -491,7 +435,7 @@ struct ReviewView: View {
             selectedPhotos = []
         }
 
-        let images = await importService.processSelectedPhotos(items, optimizeImages: optimizeImagesOnImport)
+        let images = await pipeline.loadPhotos(items, optimizeImages: optimizeImagesOnImport)
 
         guard !images.isEmpty else { return }
 
@@ -503,59 +447,25 @@ struct ReviewView: View {
     @MainActor
     private func addPagesToDocument(images: [(data: Data, fileName: String)]) async {
         // Insert after a specific page (iOS insert menus) or append to the end (default).
-        let insertAfterNum = insertAfterPageNumber ?? document.totalPages
-        let insertStart = insertAfterNum + 1
-        let isAppend = insertAfterNum >= document.totalPages
+        let insertAfter = insertAfterPageNumber
         defer { insertAfterPageNumber = nil }
 
         do {
-            let results = try await ocrService.processImages(images, startingPageNumber: insertStart)
-            let newCount = results.count
-
-            // Shift existing pages that come after the insertion point (no-op when appending)
-            for page in document.unwrappedPages where page.pageNumber >= insertStart {
-                page.pageNumber += newCount
-            }
-
-            // Collect new pages for cache update
-            var newPages: [Page] = []
-
-            for result in results {
-                let page = Page(
-                    pageNumber: result.pageNumber,
-                    text: result.text,
-                    imageData: result.imageData,
-                    originalFileName: result.originalFileName,
-                    boundingBoxesData: result.boundingBoxesData
-                )
-                page.thumbnailData = result.thumbnailData
-                page.document = document
-                document.pages?.append(page)
-                newPages.append(page)
-            }
-
-            document.totalPages += newCount
-            document.recalculateStorageSize()
-
-            // Add new page entries to export cache while richText is still in memory
-            if isAppend {
-                TextExportCacheService.addEntries(for: newPages, to: document)
-            } else {
-                // Page numbers shifted — update cache entries in memory (no external storage loads)
-                TextExportCacheService.insertEntries(for: newPages, in: document, shiftingFrom: insertStart, by: newCount)
-            }
-
-            try modelContext.save()
+            let result = try await pipeline.addPages(
+                to: document,
+                images: images,
+                insertAfter: insertAfter,
+                in: modelContext
+            )
 
             // Refresh navigation state with new pages
             navigationState.setupNavigation(for: document)
 
             // Navigate to the first inserted page so the user sees the result
-            if !isAppend, let firstNew = newPages.first {
-                navigationState.goToPage(pageNumber: firstNew.pageNumber)
-                selectedPageNumber = firstNew.pageNumber
+            if !result.isAppend, let firstNew = result.firstNewPageNumber {
+                navigationState.goToPage(pageNumber: firstNew)
+                selectedPageNumber = firstNew
             }
-
         } catch {
             print("Failed to add pages: \(error)")
         }

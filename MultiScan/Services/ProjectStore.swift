@@ -8,6 +8,7 @@
 //  `ProjectStore` is a `@ModelActor`: every fetch runs on its own context, off the main actor, and only `Sendable` snapshots (entities, search hits, fingerprints) cross the actor boundary — never `@Model` objects. All *writes* stay on the main context (`ProjectMaintenance`) so `@Query` views and the in-memory objects the UI holds stay coherent.
 //
 
+import AppIntents
 import Foundation
 import SwiftData
 import ImageIO
@@ -89,17 +90,22 @@ struct ProjectTextExport: Sendable {
     let plainText: String
 }
 
-enum ProjectStoreError: LocalizedError {
+/// Conforms to `CustomLocalizedStringResourceConvertible` as well as `LocalizedError`: these errors escape into App Intents (`GetProjectTextIntent`, the entities' `Transferable` exports), and the framework routes thrown errors by type — a `LocalizedError` alone shows as a generic failure.
+enum ProjectStoreError: LocalizedError, CustomLocalizedStringResourceConvertible {
     case projectNotFound
     case pageNotFound
     case noImage
 
-    var errorDescription: String? {
+    var localizedStringResource: LocalizedStringResource {
         switch self {
-        case .projectNotFound: return String(localized: "That project no longer exists.")
-        case .pageNotFound: return String(localized: "That page no longer exists.")
-        case .noImage: return String(localized: "This page has no image.")
+        case .projectNotFound: "That project no longer exists."
+        case .pageNotFound: "That page no longer exists."
+        case .noImage: "This page has no image."
         }
+    }
+
+    var errorDescription: String? {
+        String(localized: localizedStringResource)
     }
 }
 
@@ -138,8 +144,15 @@ actor ProjectStore {
         document(uuid: uuid).flatMap(makeProjectEntity)
     }
 
+    /// Batch resolve for `EntityQuery.entities(for:)` — one fetch for all identifiers, not one each.
+    /// Identifiers with no match are simply absent from the result (the framework expects that).
     func projectEntities(uuids: [UUID]) -> [ProjectEntity] {
-        uuids.compactMap { projectEntity(uuid: $0) }
+        guard !uuids.isEmpty else { return [] }
+        let wanted = Set(uuids.map { Optional($0) })
+        let descriptor = FetchDescriptor<Document>(predicate: #Predicate { wanted.contains($0.uuid) })
+        let entities = ((try? modelContext.fetch(descriptor)) ?? []).compactMap(makeProjectEntity)
+        let byID = Dictionary(entities.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return uuids.compactMap { byID[$0] }
     }
 
     /// Most recently modified projects first.
@@ -177,14 +190,45 @@ actor ProjectStore {
         return results
     }
 
+    /// Executes a parsed Shortcuts "Find Projects where…" filter. Projects are few (pages are the unbounded side), so filtering in memory is bounded — but entities are only built for the survivors, because `makeProjectEntity` re-encodes a cover thumbnail.
+    func projectEntities(
+        matching filters: [ProjectQueryFilter],
+        matchAll: Bool,
+        sortedBy: [QuerySortOrder<ProjectSortKey>],
+        limit: Int?
+    ) -> [ProjectEntity] {
+        var documents = allDocuments()
+        if !filters.isEmpty {
+            documents = documents.filter { document in
+                matchAll
+                    ? filters.allSatisfy { $0.matches(document) }
+                    : filters.contains { $0.matches(document) }
+            }
+        }
+        documents.sort { a, b in
+            for order in sortedBy {
+                if let ascending = order.compare(a, b) { return ascending }
+            }
+            return a.lastModifiedDate > b.lastModifiedDate
+        }
+        if let limit { documents = Array(documents.prefix(limit)) }
+        return documents.compactMap(makeProjectEntity)
+    }
+
     // MARK: Page entities
 
     func pageEntity(uuid: UUID) -> PageEntity? {
         page(uuid: uuid).flatMap(makePageEntity)
     }
 
+    /// Batch resolve for `EntityQuery.entities(for:)` — one fetch for all identifiers, not one each.
     func pageEntities(uuids: [UUID]) -> [PageEntity] {
-        uuids.compactMap { pageEntity(uuid: $0) }
+        guard !uuids.isEmpty else { return [] }
+        let wanted = Set(uuids.map { Optional($0) })
+        let descriptor = FetchDescriptor<Page>(predicate: #Predicate { wanted.contains($0.uuid) })
+        let entities = ((try? modelContext.fetch(descriptor)) ?? []).compactMap(makePageEntity)
+        let byID = Dictionary(entities.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return uuids.compactMap { byID[$0] }
     }
 
     /// Pages of the given projects, restricted to `ids`. Fetches each project once instead of N page lookups.
@@ -218,6 +262,35 @@ actor ProjectStore {
         )
         descriptor.fetchLimit = limit
         return ((try? modelContext.fetch(descriptor)) ?? []).compactMap(makePageEntity)
+    }
+
+    /// Executes a parsed Shortcuts "Find Pages where…" filter. The page store is unbounded, so a full-text term is pushed down into the fetch (the one filter that would otherwise scan every page's OCR text); the remaining comparators are cheap field checks evaluated in memory. An `.or` query has no single pushable predicate, so it scans — that's the trade the mode implies.
+    func pageEntities(
+        matching filters: [PageQueryFilter],
+        matchAll: Bool,
+        sortedBy: [QuerySortOrder<PageSortKey>],
+        limit: Int?
+    ) -> [PageEntity] {
+        var descriptor = FetchDescriptor<Page>()
+        if matchAll, let term = filters.compactMap(\.fullTextTerm).first, !term.isEmpty {
+            descriptor.predicate = #Predicate { $0.plainText.localizedStandardContains(term) }
+        }
+        var pages = (try? modelContext.fetch(descriptor)) ?? []
+        if !filters.isEmpty {
+            pages = pages.filter { page in
+                matchAll
+                    ? filters.allSatisfy { $0.matches(page) }
+                    : filters.contains { $0.matches(page) }
+            }
+        }
+        pages.sort { a, b in
+            for order in sortedBy {
+                if let ascending = order.compare(a, b) { return ascending }
+            }
+            return a.pageNumber < b.pageNumber
+        }
+        if let limit { pages = Array(pages.prefix(limit)) }
+        return pages.compactMap(makePageEntity)
     }
 
     // MARK: App-wide search
@@ -284,7 +357,7 @@ actor ProjectStore {
         let snapshots: [TextExporter.PageSnapshot]
         if let data = document.textExportCache,
            let cache = TextExportCacheService.decodeCache(from: data),
-           cache.pages.count == document.unwrappedPages.count {
+           TextExportCacheService.isFresh(cache, against: TextExportCacheService.fingerprints(of: document)) {
             snapshots = cache.pages
                 .sorted { $0.pageNumber < $1.pageNumber }
                 .map { TextExporter.PageSnapshot(pageNumber: $0.pageNumber, fileName: $0.fileName, textData: $0.rtfData, wordCount: $0.wordCount, charCount: $0.charCount) }
@@ -429,8 +502,7 @@ actor ProjectStore {
 enum ProjectMaintenance {
     private static let logger = Logger(subsystem: "co.jservices.MultiScan", category: "ProjectMaintenance")
 
-    /// Assigns missing `uuid`s and (re)derives stale `plainText` mirrors. Idempotent; runs after
-    /// schema self-healing on every launch and is a no-op once all rows are current.
+    /// Assigns missing `uuid`s and (re)derives stale `plainText` mirrors. Idempotent; runs after schema self-healing on every launch and is a no-op once all rows are current.
     /// - Returns: number of pages updated.
     @discardableResult
     static func backfillIdentityAndPlainText(context: ModelContext) async -> Int {
@@ -454,8 +526,9 @@ enum ProjectMaintenance {
             // One cache decode per document supplies plain text for every page without external reads.
             var cachedText: [Int: String] = [:]
             if let data = document.textExportCache {
+                let fingerprints = TextExportCacheService.fingerprints(of: document)
                 let cache = await Task.detached(priority: .utility) { TextExportCacheService.decodeCache(from: data) }.value
-                if let cache, cache.pages.count == document.unwrappedPages.count {
+                if let cache, TextExportCacheService.isFresh(cache, against: fingerprints) {
                     for entry in cache.pages { cachedText[entry.pageNumber] = entry.plainText }
                 }
             }
@@ -485,17 +558,32 @@ enum ProjectMaintenance {
 
     /// Deletes projects by identity. Cascades to pages; Spotlight cleanup follows from the save notification.
     static func deleteProjects(uuids: [UUID], context: ModelContext) throws -> Int {
-        var deleted = 0
+        var deleted: [UUID] = []
         for uuid in uuids {
             var descriptor = FetchDescriptor<Document>(predicate: #Predicate { $0.uuid == uuid })
             descriptor.fetchLimit = 1
             if let document = try context.fetch(descriptor).first {
                 context.delete(document)
-                deleted += 1
+                deleted.append(uuid)
             }
         }
         try context.save()
-        return deleted
+        deleteDonations(forProjects: deleted)
+        return deleted.count
+    }
+
+    /// Drops donations that point at projects which no longer exist. Stale donations degrade
+    /// prediction quality, and the system never prunes them on its own.
+    nonisolated static func deleteDonations(forProjects uuids: [UUID]) {
+        guard !uuids.isEmpty else { return }
+        Task.detached(priority: .utility) {
+            for uuid in uuids {
+                let identifier = EntityIdentifier(for: ProjectEntity.self, identifier: uuid)
+                _ = try? await IntentDonationManager.shared.deleteDonations(
+                    matching: .entityIdentifier(identifier)
+                )
+            }
+        }
     }
 
     /// Resolves a project for the UI (deep links / search results).

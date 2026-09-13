@@ -1,4 +1,4 @@
-// remove?
+//
 //  SchemaValidationService.swift
 //  MultiScan
 //
@@ -72,8 +72,13 @@ enum SchemaValidationService {
     }
 
     /// Records the current schema version after successful container load.
+    ///
+    /// **Raises the stored version only, never lowers it.** This is the gate that's meant to survive database corruption, so it must not erase evidence that the store has seen a newer app.
     static func recordSuccessfulLoad() {
-        UserDefaults.standard.set(SchemaVersioning.currentVersion, forKey: SchemaVersioning.userDefaultsKey)
+        let defaults = UserDefaults.standard
+        let stored = defaults.integer(forKey: SchemaVersioning.userDefaultsKey)
+        guard SchemaVersioning.currentVersion > stored else { return }
+        defaults.set(SchemaVersioning.currentVersion, forKey: SchemaVersioning.userDefaultsKey)
     }
 
     // MARK: - Post-Load Validation
@@ -111,8 +116,7 @@ enum SchemaValidationService {
         let currentDeviceID = SchemaMetadata.currentDeviceID
         let thisDeviceMetadata = allMetadata.first { $0.deviceID == currentDeviceID }
 
-        // Check ALL metadata records for newer schema versions
-        // (another device may have synced newer data)
+        // Check ALL metadata records for newer schema versions as another device may have synced newer data
         for metadata in allMetadata {
             if metadata.schemaVersion > SchemaVersioning.currentVersion {
                 issues.append(.newerSchemaVersion(
@@ -172,6 +176,7 @@ enum SchemaValidationService {
         // Check totalPages matches actual count
         if document.totalPages != actualCount {
             issues.append(.totalPagesMismatch(
+                documentID: document.persistentModelID,
                 documentName: document.name,
                 stored: document.totalPages,
                 actual: actualCount
@@ -184,6 +189,7 @@ enum SchemaValidationService {
 
         if pageNumbers != expectedNumbers {
             issues.append(.pageNumberingIssue(
+                documentID: document.persistentModelID,
                 documentName: document.name,
                 found: pageNumbers,
                 expected: expectedNumbers
@@ -194,6 +200,8 @@ enum SchemaValidationService {
     }
 
     /// Checks for pages that have no associated document.
+    ///
+    /// Reporting an orphan does **not** mean it's safe to delete — see `deleteQuarantinedOrphanPages(context:)` for why.
     private static func checkForOrphanPages(context: ModelContext) async -> [IntegrityIssue] {
         var issues: [IntegrityIssue] = []
 
@@ -203,7 +211,10 @@ enum SchemaValidationService {
         }
 
         let orphans = allPages.filter { $0.document == nil }
-        if !orphans.isEmpty {
+        if orphans.isEmpty {
+            // Nothing orphaned right now, so drop every quarantine record. Without this, a page that was briefly orphaned during one launch's sync would keep its first-seen date and, if it ever looked orphaned again past the window, be deleted on sight — the exact accumulation the grace period exists to prevent. The heal pass below only runs when an orphan issue is reported, so this is the only place that can clear it.
+            UserDefaults.standard.removeObject(forKey: orphanQuarantineKey)
+        } else {
             issues.append(.orphanPages(count: orphans.count))
         }
 
@@ -223,24 +234,26 @@ enum SchemaValidationService {
 
         for issue in issues {
             switch issue {
-            case .totalPagesMismatch(let documentName, _, let actual):
+            case .totalPagesMismatch(let documentID, let documentName, _, let actual):
                 // Fix: Update totalPages to match actual count
-                if let document = findDocument(named: documentName, context: context) {
+                if let document = findDocument(id: documentID, context: context) {
                     document.totalPages = actual
                     print("SchemaValidation: Fixed totalPages for '\(documentName)' → \(actual)")
                 }
 
-            case .pageNumberingIssue(let documentName, _, _):
+            case .pageNumberingIssue(let documentID, let documentName, _, _):
                 // Fix: Renumber pages sequentially
-                if let document = findDocument(named: documentName, context: context) {
+                if let document = findDocument(id: documentID, context: context) {
                     renumberPages(in: document)
                     print("SchemaValidation: Renumbered pages for '\(documentName)'")
                 }
 
-            case .orphanPages(let count):
-                // Fix: Delete orphan pages (they have no parent document)
-                deleteOrphanPages(context: context)
-                print("SchemaValidation: Deleted \(count) orphan pages")
+            case .orphanPages:
+                // Fix: quarantine now, delete only after the grace period (see below).
+                let deleted = deleteQuarantinedOrphanPages(context: context)
+                if deleted > 0 {
+                    print("SchemaValidation: Deleted \(deleted) orphan pages past the quarantine window")
+                }
 
             case .newerSchemaVersion:
                 // Cannot fix - this requires user action (update the app)
@@ -256,12 +269,11 @@ enum SchemaValidationService {
 
     // MARK: - Helper Methods
 
-    private static func findDocument(named name: String, context: ModelContext) -> Document? {
-        var descriptor = FetchDescriptor<Document>(
-            predicate: #Predicate { $0.name == name }
-        )
-        descriptor.fetchLimit = 1
-        return try? context.fetch(descriptor).first
+    /// Resolves the exact document an issue was reported against.
+    ///
+    /// Deliberately by identifier, not by name
+    private static func findDocument(id: PersistentIdentifier, context: ModelContext) -> Document? {
+        context.model(for: id) as? Document
     }
 
     private static func renumberPages(in document: Document) {
@@ -271,13 +283,60 @@ enum SchemaValidationService {
         }
     }
 
-    private static func deleteOrphanPages(context: ModelContext) {
-        let descriptor = FetchDescriptor<Page>()
-        guard let allPages = try? context.fetch(descriptor) else { return }
+    // MARK: - Orphan Page Quarantine
 
-        for page in allPages where page.document == nil {
-            context.delete(page)
+    /// UserDefaults key holding `[page uuid string: first seen orphaned]`.
+    private static let orphanQuarantineKey = "multiScanOrphanPageQuarantine"
+
+    /// How long a page must stay orphaned before deletion, when iCloud sync is on.
+    ///
+    /// Note that CloudKit mirrors `Page` and `Document` as separate record types and iCloud "doesn't guarantee atomic processing of relationship changes," hence this.
+    private static let orphanQuarantineWindow: TimeInterval = 24 * 60 * 60
+
+    /// Quarantines currently-orphaned pages and deletes only those that have been orphaned since before the grace window.
+    ///
+    /// - Returns: the number of pages actually deleted.
+    @discardableResult
+    private static func deleteQuarantinedOrphanPages(context: ModelContext) -> Int {
+        let descriptor = FetchDescriptor<Page>()
+        guard let allPages = try? context.fetch(descriptor) else { return 0 }
+
+        let orphans = allPages.filter { $0.document == nil }
+        // With sync off there's no out-of-order delivery to wait for.
+        let window = SchemaVersioning.isICloudSyncEnabled ? orphanQuarantineWindow : 0
+
+        let defaults = UserDefaults.standard
+        var quarantine = (defaults.dictionary(forKey: orphanQuarantineKey) as? [String: Date]) ?? [:]
+        let now = Date()
+        var stillOrphaned: Set<String> = []
+        var deleted = 0
+
+        for page in orphans {
+            // The backfill that assigns uuids runs after this pass, so an orphan may not have one yet. Assign here — the quarantine needs a key that survives relaunch.
+            let uuid = page.uuid ?? {
+                let new = UUID()
+                page.uuid = new
+                return new
+            }()
+            let key = uuid.uuidString
+            stillOrphaned.insert(key)
+
+            let firstSeen = quarantine[key] ?? now
+            quarantine[key] = firstSeen
+
+            if now.timeIntervalSince(firstSeen) >= window {
+                context.delete(page)
+                quarantine.removeValue(forKey: key)
+                stillOrphaned.remove(key)
+                deleted += 1
+            }
         }
+
+        // Drop entries for pages that got reattached (or were deleted) — otherwise a page that is briefly orphaned on several separate launches would accumulate toward the deadline.
+        quarantine = quarantine.filter { stillOrphaned.contains($0.key) }
+        defaults.set(quarantine, forKey: orphanQuarantineKey)
+
+        return deleted
     }
 
     // MARK: - Database Reset
@@ -342,10 +401,10 @@ struct ValidationResult {
 /// Types of integrity issues that can be detected.
 enum IntegrityIssue {
     /// Document's totalPages doesn't match actual page count.
-    case totalPagesMismatch(documentName: String, stored: Int, actual: Int)
+    case totalPagesMismatch(documentID: PersistentIdentifier, documentName: String, stored: Int, actual: Int)
 
     /// Pages are not numbered sequentially (gaps or duplicates).
-    case pageNumberingIssue(documentName: String, found: [Int], expected: [Int])
+    case pageNumberingIssue(documentID: PersistentIdentifier, documentName: String, found: [Int], expected: [Int])
 
     /// Pages exist without an associated document.
     case orphanPages(count: Int)
@@ -366,9 +425,9 @@ enum IntegrityIssue {
     /// Human-readable description of the issue.
     var description: String {
         switch self {
-        case .totalPagesMismatch(let name, let stored, let actual):
+        case .totalPagesMismatch(_, let name, let stored, let actual):
             return "Document '\(name)' has totalPages=\(stored) but actually has \(actual) pages"
-        case .pageNumberingIssue(let name, let found, let expected):
+        case .pageNumberingIssue(_, let name, let found, let expected):
             return "Document '\(name)' has page numbers \(found) but expected \(expected)"
         case .orphanPages(let count):
             return "\(count) pages found without a parent document"

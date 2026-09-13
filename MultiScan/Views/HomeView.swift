@@ -14,7 +14,7 @@ struct HomeView: View {
     #endif
     @Query private var documents: [Document]
 
-    /// Shared import → OCR → project pipeline (also driven by the "Scan New Project" intent).
+    /// Shared import → OCR → project pipeline (also driven by the "Start New Project" intent).
     private let pipeline = ProjectImportPipeline.shared
 
     // Import state
@@ -193,8 +193,7 @@ struct HomeView: View {
 
     // MARK: - Toolbar Content
 
-    /// The system search field is positioned explicitly: left of the "+" button in the trailing
-    /// toolbar on macOS and iPad, and in the bottom bar on iPhone (compact width).
+    /// The system search field is positioned explicitly: left of the "+" button in the trailing toolbar on macOS and iPad, and in the bottom bar on iPhone (compact width).
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         #if os(iOS)
@@ -283,10 +282,13 @@ struct HomeView: View {
     // MARK: - Document Actions
 
     private func deleteDocument(_ document: Document) {
+        let uuid = document.uuid
         modelContext.delete(document)
         do {
             try modelContext.save()
             MultiScanShortcuts.updateAppShortcutParameters()
+            // Donations outlive the data they point at unless we prune them.
+            ProjectMaintenance.deleteDonations(forProjects: [uuid].compactMap { $0 })
         } catch {
             print("Failed to delete document: \(error)")
         }

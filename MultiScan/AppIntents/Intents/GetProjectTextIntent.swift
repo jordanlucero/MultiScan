@@ -2,8 +2,7 @@
 //  GetProjectTextIntent.swift
 //  MultiScan
 //
-//  Returns a project's recognized text as plain text for Shortcuts/Siri workflows
-//  (summaries, notes, sharing). RTF output comes from `ProjectEntity`'s Transferable conformance.
+//  Returns a project's recognized text as plain text for Shortcuts and Siri workflows. RTF output comes from `ProjectEntity`'s Transferable conformance.
 //
 
 import AppIntents

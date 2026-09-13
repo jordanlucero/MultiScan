@@ -13,7 +13,7 @@ struct OpenPageIntent: OpenIntent {
         "Opens a MultiScan project at a specific page.",
         categoryName: "Projects"
     )
-    static let openAppWhenRun = true
+    static var supportedModes: IntentModes { .foreground }
     static var allowedExecutionTargets: IntentExecutionTargets { .main }
 
     @Parameter(title: "Page", requestValueDialog: "Which page?")

@@ -2,7 +2,7 @@
 //  CompactReviewView.swift
 //  MultiScan
 //
-//  iPhone (compact size class) review layout: full-screen image viewer with a persistent bottom sheet for the page text, a page grid sheet for navigation, and a toolbar.
+//  iPhone (vertical size class) review layout: full-screen image viewer with a persistent bottom sheet for the page text, a page grid sheet for navigation, and a toolbar.
 //
 
 #if os(iOS)
@@ -20,20 +20,19 @@ struct CompactReviewView: View {
     @Environment(\.undoManager) private var undoManager
     @Environment(AppRouter.self) private var router
     @StateObject private var navigationState = NavigationState()
-    @StateObject private var ocrService = OCRService()
-    private let importService = ImageImportService()
+
+    /// Shared import → OCR pipeline (also used by Home and the "Start New Project" intent).
+    private let pipeline = ProjectImportPipeline.shared
 
     @State private var selectedPageNumber: Int?
 
-    /// Smart Cleanup analysis results for the current page
-    @State private var cleanupOptions: [TextManipulationService.CleanupOption] = []
-    @State private var isAnalyzingCleanup = false
-    @State private var cleanupAnalysisTask: Task<Void, Never>?
+    /// Smart Cleanup analysis + edits (shared with the RichTextSidebar pane on macOS/iPad).
+    /// The compact layout has no reachable text controller, so its edits go model-side and the text sheet is reloaded afterwards.
+    @State private var cleanup: SmartCleanupModel?
     @State private var showTextSheet = true
     @State private var textSheetRefreshID = UUID()
     @State private var showSlideGrid = false
     @State private var showExportPanel = false
-    @State private var isAddingPages = false
 
     @AppStorage("optimizeImagesOnImport") private var optimizeImagesOnImport = false
 
@@ -93,7 +92,7 @@ struct CompactReviewView: View {
                     selectedPageNumber = firstPage.pageNumber
                 }
                 fulfillOpenRequest()
-                scheduleCleanupAnalysis()
+                setUpCleanupModel()
             }
             .onChange(of: navigationState.currentPageNumber) { _, newPageNumber in
                 selectedPageNumber = newPageNumber
@@ -114,50 +113,35 @@ struct CompactReviewView: View {
 
     /// Jumps to the page requested by a deep link (Spotlight page result, Open Page intent, search hit).
     private func fulfillOpenRequest() {
-        guard let request = router.openRequest, request.projectUUID == document.uuid else { return }
-        if let pageNumber = request.pageNumber, navigationState.currentPageNumber != pageNumber {
-            navigationState.goToPage(pageNumber: pageNumber)
+        if let pageNumber = router.fulfillOpenRequest(for: document, navigationState: navigationState) {
             selectedPageNumber = pageNumber
         }
-        router.consumeOpenRequest()
     }
 
     // MARK: - Smart Cleanup
 
-    private func scheduleCleanupAnalysis() {
-        cleanupAnalysisTask?.cancel()
-        cleanupOptions = []
-        isAnalyzingCleanup = true
+    private func setUpCleanupModel() {
+        guard cleanup == nil else { return }
+        cleanup = SmartCleanupModel(document: document)
+        scheduleCleanupAnalysis()
+    }
 
-        cleanupAnalysisTask = Task {
-            do {
-                try await Task.sleep(for: .seconds(3))
-            } catch {
-                return
-            }
-            await runCleanupAnalysisAsync()
+    /// No live `PageTextController` is reachable from here — it lives inside the text sheet — so every edit goes model-side and the sheet is reloaded when the current page changed.
+    private func applyCleanupOption(_ option: TextManipulationService.CleanupOption) {
+        let needsReload = cleanup?.apply(
+            option,
+            currentPageNumber: navigationState.currentPageNumber,
+            liveController: nil
+        ) ?? false
+
+        if needsReload {
+            refreshTextSheet()
         }
     }
 
-    private func runCleanupAnalysisAsync() async {
-        guard let cacheData = document.textExportCache,
-              let pageNumber = navigationState.currentPage?.pageNumber else {
-            isAnalyzingCleanup = false
-            return
-        }
-
-        // Run expensive analysis off the MainActor
-        let options = await Task.detached(priority: .userInitiated) {
-            guard let cache = TextExportCacheService.decodeCache(from: cacheData) else {
-                return [TextManipulationService.CleanupOption]()
-            }
-            let result = TextManipulationService.analyzeForSmartCleanup(cache: cache)
-            return TextManipulationService.buildOptions(from: result, forPageNumber: pageNumber)
-        }.value
-
-        guard !Task.isCancelled else { return }
-        cleanupOptions = options
-        isAnalyzingCleanup = false
+    /// Smart Cleanup is always active on iPhone — it lives in the More menu, not a toggled pane.
+    private func scheduleCleanupAnalysis() {
+        cleanup?.scheduleAnalysis(forPage: navigationState.currentPage?.pageNumber)
     }
 
     /// Removes line breaks from the current page's text, modifying the model directly.
@@ -165,80 +149,13 @@ struct CompactReviewView: View {
         guard let page = navigationState.currentPage else { return }
         let cleaned = TextManipulationService.removingLineBreaks(from: page.attributedText)
         page.attributedText = cleaned
-        TextExportCacheService.updateEntry(pageNumber: page.pageNumber, attributedText: cleaned, in: document)
+        TextExportCacheService.updateEntry(
+            pageNumber: page.pageNumber,
+            attributedText: cleaned,
+            pageLastModified: page.lastModified,
+            in: document
+        )
         refreshTextSheet()
-    }
-
-    private func executeCleanupOption(_ option: TextManipulationService.CleanupOption) {
-        switch option {
-        case .removePageNumber(let detection):
-            removeToken(detection.numberText, fromPage: detection.pageNumber)
-
-        case .removeSectionHeaderFromPage(let header, let pageNumber):
-            removeLine(header.headerText, fromPage: pageNumber, stripNumbers: true)
-
-        case .removeSectionHeaderFromRange(let header):
-            for pageNumber in header.affectedPages {
-                removeLine(header.headerText, fromPage: pageNumber, stripNumbers: true)
-            }
-
-        case .removeConsecutiveNumbers(let group, let pageNumber):
-            guard let numberTexts = group.pageMapping[pageNumber] else { return }
-            for text in numberTexts {
-                removeToken(text, fromPage: pageNumber)
-            }
-
-        case .removeConsecutiveNumbersFromRange(let group):
-            for (pageNumber, numberTexts) in group.pageMapping {
-                for text in numberTexts {
-                    removeToken(text, fromPage: pageNumber)
-                }
-            }
-
-        case .removeAllPageNumbers(let detections, let consecutiveGroups):
-            for detection in detections {
-                removeToken(detection.numberText, fromPage: detection.pageNumber)
-            }
-            for group in consecutiveGroups {
-                for (pageNumber, numberTexts) in group.pageMapping {
-                    for text in numberTexts {
-                        removeToken(text, fromPage: pageNumber)
-                    }
-                }
-            }
-        }
-
-        refreshTextSheet()
-
-        // Re-analyze immediately
-        cleanupAnalysisTask?.cancel()
-        cleanupOptions = []
-        isAnalyzingCleanup = true
-        cleanupAnalysisTask = Task {
-            await runCleanupAnalysisAsync()
-        }
-    }
-
-    private func removeToken(_ numberText: String, fromPage pageNumber: Int) {
-        guard let cache = TextExportCacheService.loadCache(from: document),
-              let entry = cache.pages.first(where: { $0.pageNumber == pageNumber }),
-              let decoded = entry.decodedText() else { return }
-        let cleaned = TextManipulationService.removingPageNumberToken(numberText, from: decoded)
-        if let page = document.unwrappedPages.first(where: { $0.pageNumber == pageNumber }) {
-            page.attributedText = cleaned
-            TextExportCacheService.updateEntry(pageNumber: pageNumber, attributedText: cleaned, in: document)
-        }
-    }
-
-    private func removeLine(_ normalizedLine: String, fromPage pageNumber: Int, stripNumbers: Bool) {
-        guard let cache = TextExportCacheService.loadCache(from: document),
-              let entry = cache.pages.first(where: { $0.pageNumber == pageNumber }),
-              let decoded = entry.decodedText() else { return }
-        let cleaned = TextManipulationService.removingLine(matching: normalizedLine, from: decoded, stripNumbers: stripNumbers)
-        if let page = document.unwrappedPages.first(where: { $0.pageNumber == pageNumber }) {
-            page.attributedText = cleaned
-            TextExportCacheService.updateEntry(pageNumber: pageNumber, attributedText: cleaned, in: document)
-        }
     }
 
     /// Forces the RichTextSidebar sheet to reinitialize its PageTextController
@@ -282,70 +199,36 @@ struct CompactReviewView: View {
                     }
                     .disabled(navigationState.currentPage == nil)
 
-                    if isAnalyzingCleanup {
+                    if cleanup?.isAnalyzing ?? true {
                         Label("Checking…", systemImage: "sparkle.magnifyingglass")
-                    } else if cleanupOptions.isEmpty {
-                        Label("No suggestions", systemImage: "sparkles")
-                    } else {
+                    } else if let options = cleanup?.options, !options.isEmpty {
                         Menu {
-                            ForEach(cleanupOptions) { option in
+                            ForEach(options) { option in
                                 Button(option.label) {
-                                    executeCleanupOption(option)
+                                    applyCleanupOption(option)
                                 }
                             }
                         } label: {
-                            Label("\(cleanupOptions.count) suggestions", systemImage: "sparkles")
+                            Label("\(options.count) suggestions", systemImage: "sparkles")
                         }
+                    } else {
+                        Label("No suggestions", systemImage: "sparkles")
                     }
                 }
 
                 Divider()
 
                 // Review
-                Button { navigationState.toggleCurrentPageDone() } label: {
-                    Label(
-                        navigationState.currentPage?.isDone == true ? "Mark as Not Reviewed" : "Mark as Reviewed",
-                        systemImage: navigationState.currentPage?.isDone == true ? "checkmark.circle.fill" : "checkmark.circle"
-                    )
-                }
-
-                Button { navigationState.toggleRandomization() } label: {
-                    Label(
-                        navigationState.isRandomized ? "Sequential Order" : "Shuffled Order",
-                        systemImage: navigationState.isRandomized ? "shuffle.circle.fill" : "shuffle.circle"
-                    )
-                }
+                PageReviewStatusButton(navigationState: navigationState)
+                PageOrderButton(navigationState: navigationState)
 
                 Divider()
 
                 // Image adjustments
                 if let page = navigationState.currentPage {
                     Section("Image") {
-                        Button {
-                            page.rotation = (page.rotation + 90) % 360
-                        } label: {
-                            Label("Rotate Clockwise", systemImage: "rotate.right")
-                        }
-
-                        Button {
-                            page.rotation = (page.rotation + 270) % 360
-                        } label: {
-                            Label("Rotate Counterclockwise", systemImage: "rotate.left")
-                        }
-
-                        Toggle(isOn: Binding(
-                            get: { page.increaseContrast },
-                            set: { page.increaseContrast = $0 }
-                        )) {
-                            Label("Increase Contrast", systemImage: "circle.lefthalf.filled")
-                        }
-
-                        Toggle(isOn: Binding(
-                            get: { page.increaseBlackPoint },
-                            set: { page.increaseBlackPoint = $0 }
-                        )) {
-                            Label("Increase Black Point", systemImage: "circle.bottomhalf.filled")
-                        }
+                        PageRotationButtons(page: page)
+                        PageAdjustmentToggles(page: page)
                     }
                 }
 
@@ -353,18 +236,14 @@ struct CompactReviewView: View {
 
                 // Export
                 Section("Export") {
-                    Button { showExportPanel = true } label: {
-                        Label("Export Project Text…", systemImage: "square.and.arrow.up.on.square")
-                    }
+                    ExportProjectTextButton { showExportPanel = true }
                 }
 
                 Divider()
 
                 // Statistics
                 if let page = navigationState.currentPage {
-                    let wordCount = page.plainText.split(separator: " ").count
-                    let charCount = page.plainText.count
-                    Label("\(wordCount) words, \(charCount) characters", systemImage: "textformat")
+                    PageStatisticsLabel(page: page)
                 }
             } label: {
                 Label("More", systemImage: "ellipsis.circle")
@@ -376,36 +255,19 @@ struct CompactReviewView: View {
 
     @MainActor
     private func processFileURLs(_ urls: [URL], insertAfter: Int? = nil) async {
-        isAddingPages = true
-        defer { isAddingPages = false }
-
-        let result = await importService.processFileURLs(urls, optimizeImages: optimizeImagesOnImport)
-        var allImages = result.images
-
-        if !result.pdfURLs.isEmpty {
-            let pdfService = PDFImportService()
-            for pdfURL in result.pdfURLs {
-                let accessed = pdfURL.startAccessingSecurityScopedResource()
-                defer { if accessed { pdfURL.stopAccessingSecurityScopedResource() } }
-                do {
-                    let pdfImages = try await pdfService.renderPDF(at: pdfURL)
-                    allImages.append(contentsOf: pdfImages)
-                } catch {
-                    print("PDF import error: \(error)")
-                }
-            }
+        do {
+            let prepared = try await pipeline.prepare(urls: urls, optimizeImages: optimizeImagesOnImport)
+            guard !prepared.images.isEmpty else { return }
+            await addPagesToDocument(images: prepared.images, insertAfter: insertAfter)
+        } catch {
+            print("Import error: \(error)")
         }
-
-        guard !allImages.isEmpty else { return }
-        await addPagesToDocument(images: allImages, insertAfter: insertAfter)
     }
 
     @MainActor
     private func processSelectedPhotos(_ items: [PhotosPickerItem], insertAfter: Int? = nil) async {
         guard !items.isEmpty else { return }
-        isAddingPages = true
-        defer { isAddingPages = false }
-        let images = await importService.processSelectedPhotos(items, optimizeImages: optimizeImagesOnImport)
+        let images = await pipeline.loadPhotos(items, optimizeImages: optimizeImagesOnImport)
         guard !images.isEmpty else { return }
         await addPagesToDocument(images: images, insertAfter: insertAfter)
     }
@@ -416,51 +278,19 @@ struct CompactReviewView: View {
     ///   - insertAfter: Page number to insert after (nil = append to end, 0 = insert at beginning)
     @MainActor
     private func addPagesToDocument(images: [(data: Data, fileName: String)], insertAfter: Int? = nil) async {
-        let insertAfterNum = insertAfter ?? document.totalPages
-        let insertStart = insertAfterNum + 1
-        let isAppend = insertAfterNum >= document.totalPages
-
         do {
-            let results = try await ocrService.processImages(images, startingPageNumber: insertStart)
-            let newCount = results.count
-
-            // Shift existing pages that come after the insertion point
-            for page in document.unwrappedPages where page.pageNumber >= insertStart {
-                page.pageNumber += newCount
-            }
-
-            var newPages: [Page] = []
-            for result in results {
-                let page = Page(
-                    pageNumber: result.pageNumber,
-                    text: result.text,
-                    imageData: result.imageData,
-                    originalFileName: result.originalFileName,
-                    boundingBoxesData: result.boundingBoxesData
-                )
-                page.thumbnailData = result.thumbnailData
-                page.document = document
-                document.pages?.append(page)
-                newPages.append(page)
-            }
-
-            document.totalPages += newCount
-            document.recalculateStorageSize()
-
-            if isAppend {
-                TextExportCacheService.addEntries(for: newPages, to: document)
-            } else {
-                // Page numbers shifted — update cache entries in memory (no external storage loads)
-                TextExportCacheService.insertEntries(for: newPages, in: document, shiftingFrom: insertStart, by: newCount)
-            }
-
-            try modelContext.save()
+            let result = try await pipeline.addPages(
+                to: document,
+                images: images,
+                insertAfter: insertAfter,
+                in: modelContext
+            )
             navigationState.setupNavigation(for: document)
 
             // Navigate to the first new page
-            if let firstNew = newPages.first {
-                navigationState.goToPage(pageNumber: firstNew.pageNumber)
-                selectedPageNumber = firstNew.pageNumber
+            if let firstNew = result.firstNewPageNumber {
+                navigationState.goToPage(pageNumber: firstNew)
+                selectedPageNumber = firstNew
             }
         } catch {
             print("Failed to add pages: \(error)")

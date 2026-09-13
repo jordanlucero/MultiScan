@@ -2,10 +2,6 @@
 //  MultiScanShortcuts.swift
 //  MultiScan
 //
-//  App Shortcuts: pre-built phrases Siri and the Shortcuts app expose without any setup.
-//  Phrases are localized through `AppShortcuts.xcstrings`. `updateAppShortcutParameters()` is
-//  called whenever projects are created, renamed, or deleted so the "Open <project>" phrase
-//  offers current names.
 //
 
 import AppIntents
@@ -14,9 +10,9 @@ struct MultiScanShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
             intent: SearchProjectsIntent(),
+            // Note that near-duplicate wordings degrade Siri's match accuracy rather than widening coverage.
             phrases: [
                 "Search \(.applicationName)",
-                "Search in \(.applicationName)",
                 "Search my \(.applicationName) projects"
             ],
             shortTitle: "Search Projects",
@@ -36,10 +32,10 @@ struct MultiScanShortcuts: AppShortcutsProvider {
         AppShortcut(
             intent: CreateProjectIntent(),
             phrases: [
-                "Scan a new project in \(.applicationName)",
+                "Start a new project in \(.applicationName)",
                 "Start a new \(.applicationName) project"
             ],
-            shortTitle: "Scan New Project",
+            shortTitle: "Start New Project",
             systemImageName: "document.viewfinder"
         )
     }

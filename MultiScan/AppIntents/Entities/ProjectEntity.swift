@@ -5,8 +5,10 @@
 //  App Intents representation of a project (`Document`).
 //
 //  - `IndexedEntity`: donated to the Spotlight semantic index by `SpotlightIndexer`.
-//  - `SyncableEntity`: `id` is the CloudKit-synced `Document.uuid`, stable across devices.
 //  - `Transferable`: exports the whole project as RTF (file/data) or plain text, fetched lazily through `ProjectStore` — the entity itself carries only metadata.
+//
+//  `id` is the CloudKit-synced `Document.uuid`, so it is already stable across devices and launches.
+//
 //
 
 import AppIntents

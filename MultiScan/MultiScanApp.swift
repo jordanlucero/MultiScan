@@ -254,6 +254,14 @@ struct MultiScanApp: App {
     @State private var showDeletePageConfirmation = false
     @State private var navigationSettings = NavigationSettings()
 
+    /// Radio-style binding for the View ▸ Filter By Status menu: selecting an option stores it, deselecting is a no-op (one option is always active).
+    private func filterBinding(for option: PageFilterOption) -> Binding<Bool> {
+        Binding(
+            get: { filterOption == option.rawValue },
+            set: { if $0 { filterOption = option.rawValue } }
+        )
+    }
+
     // MARK: - Container State Management
 
     /// Tracks the container loading state for showing appropriate UI.
@@ -316,17 +324,14 @@ struct MultiScanApp: App {
     //   └── Production Environment   ← App Store builds sync here
     //       └── (real user data, be careful!)
     //
-    // These environments are completely isolated. Your debug testing never
-    // touches production data, and vice versa.
+    // These environments are completely isolated. Your debug testing never touches production data, and vice versa.
     //
     // ## Schema Initialization (the #if DEBUG block below)
     //
     // Before CloudKit can sync data, it needs to know your data structure (the "schema").
     // The schema defines what record types exist and what fields they have.
     //
-    // SwiftData doesn't expose a direct way to push the schema to CloudKit, so we
-    // temporarily use Core Data's API (NSPersistentCloudKitContainer.initializeCloudKitSchema)
-    // to do this during development. This is Apple's recommended approach as of macOS 26-aligned releases.
+    // SwiftData doesn't expose a direct way to push the schema to CloudKit, so we temporarily use Core Data's API (NSPersistentCloudKitContainer.initializeCloudKitSchema) to do this during development. This is Apple's recommended approach as of OS 26/27 releases.
     //
     //
     // ## Schema Changes & Version Compatibility
@@ -353,9 +358,8 @@ struct MultiScanApp: App {
 
     var body: some Scene {
         WindowGroup {
-            // ────────────────────────────────────────────────────────────────────
+            //
             // MARK: Container State Handling
-            // ────────────────────────────────────────────────────────────────────
             //
             // Show different UI based on container load state:
             // - ready: Normal app content
@@ -406,12 +410,11 @@ struct MultiScanApp: App {
             .windowToolbarFullScreenVisibility(.onHover)
             #endif
             .task {
-                // ────────────────────────────────────────────────────────────────────
-                // MARK: Post-Load Validation & Self-Healing
-                // ────────────────────────────────────────────────────────────────────
                 //
-                // This runs after the view appears. If we're already in a failed state
-                // (from pre-load checks), skip validation.
+                // MARK: Post-Load Validation & Self-Healing
+                //
+                //
+                // This runs after the view appears. If we're already in a failed state (from pre-load checks), skip validation.
                 //
 
                 // Skip if already in error state
@@ -420,8 +423,7 @@ struct MultiScanApp: App {
                 }
 
                 // Run post-load validation
-                // This checks SchemaMetadata in the database (important for CloudKit sync
-                // scenarios where another device might have written newer data)
+                // This checks SchemaMetadata in the database (important for CloudKit sync scenarios where another device might have written newer data)
                 let result = await SchemaValidationService.validatePostLoad(
                     context: sharedModelContainer.mainContext
                 )
@@ -447,7 +449,7 @@ struct MultiScanApp: App {
                     }
                 }
 
-                // 2.x additive fields: assign missing UUIDs and refresh stale plain-text mirrors, then bring the Spotlight index up to date (also catches CloudKit-synced changes).
+                // Assign missing UUIDs and refresh stale plain-text mirrors, then bring the Spotlight index up to date (also catches CloudKit-synced changes).
                 await ProjectMaintenance.backfillIdentityAndPlainText(context: sharedModelContainer.mainContext)
                 MultiScanShortcuts.updateAppShortcutParameters()
                 await SpotlightIndexer.shared.scheduleReconcile()
@@ -566,39 +568,11 @@ struct MultiScanApp: App {
 
             // Image Menu Commands
             CommandMenu("Image") {
-                Button("Rotate Clockwise", systemImage: "rotate.right") {
-                    if let page = focusedCurrentPage {
-                        page.rotation = (page.rotation + 90) % 360
-                    }
-                }
-                .keyboardShortcut("R", modifiers: [.command])
-                .disabled(focusedCurrentPage == nil)
-
-                Button("Rotate Counterclockwise") {
-                    if let page = focusedCurrentPage {
-                        page.rotation = (page.rotation + 270) % 360
-                    }
-                }
-                .keyboardShortcut("R", modifiers: [.command, .shift])
-                .disabled(focusedCurrentPage == nil)
+                PageRotationButtons(page: focusedCurrentPage, showsKeyboardShortcuts: true)
 
                 Divider()
 
-                Toggle(isOn: Binding(
-                    get: { focusedCurrentPage?.increaseContrast ?? false },
-                    set: { newValue in focusedCurrentPage?.increaseContrast = newValue }
-                )) {
-                    Label("Increase Contrast", systemImage: "circle.lefthalf.filled")
-                }
-                .disabled(focusedCurrentPage == nil)
-
-                Toggle(isOn: Binding(
-                    get: { focusedCurrentPage?.increaseBlackPoint ?? false },
-                    set: { newValue in focusedCurrentPage?.increaseBlackPoint = newValue }
-                )) {
-                    Label("Increase Black Point", systemImage: "")
-                }
-                .disabled(focusedCurrentPage == nil)
+                PageAdjustmentToggles(page: focusedCurrentPage)
 
                 Divider()
 
@@ -625,20 +599,10 @@ struct MultiScanApp: App {
                 Divider()
 
                 Menu("Filter By Status", systemImage: "line.3.horizontal.decrease.circle") {
-                    Toggle("All Pages", isOn: Binding(
-                        get: { filterOption == "all" },
-                        set: { if $0 { filterOption = "all" } }
-                    ))
-
-                    Toggle("Reviewed Only", isOn: Binding(
-                        get: { filterOption == "done" },
-                        set: { if $0 { filterOption = "done" } }
-                    ))
-
-                    Toggle("Not Reviewed Only", isOn: Binding(
-                        get: { filterOption == "notDone" },
-                        set: { if $0 { filterOption = "notDone" } }
-                    ))
+                    // Labels are menu-specific; the stored values come from PageFilterOption
+                    Toggle("All Pages", isOn: filterBinding(for: .all))
+                    Toggle("Reviewed Only", isOn: filterBinding(for: .done))
+                    Toggle("Not Reviewed Only", isOn: filterBinding(for: .notDone))
                 }
 
                 Divider()
@@ -692,7 +656,7 @@ struct MultiScanApp: App {
             
             // Help Menu Commands
             CommandGroup(replacing: .help) {
-                Link("MultiScan Documentation", destination: URL(string: "https://multiscan.jservices.co/help")!) // tips icon used by system apps missing from SF symbols. removed SF symbols from both links and temporarily just pointing to GitHub releases for Documentation
+                Link("MultiScan Documentation", destination: URL(string: "https://multiscan.jservices.co/help")!)
                 Link("Open MultiScan Repository on GitHub", destination: URL(string: "https://github.com/jordanlucero/MultiScan")!)
             }
         }
@@ -702,7 +666,7 @@ struct MultiScanApp: App {
         //
         // ⚠️ WORKAROUND: Custom Window scene instead of native Settings scene
         //
-        // Last tested in 26.3 Beta 2. SwiftUI's built-in `Settings` scene is broken with NavigationSplitView.
+        // Last tested in 26.3. SwiftUI's built-in `Settings` scene is broken with NavigationSplitView.
         //
         // This workaround uses a custom `Window` scene that follows Apple's HIG for settings windows.
         // - Opens with ⌘, keyboard shortcut (via OpenSettingsCommand)

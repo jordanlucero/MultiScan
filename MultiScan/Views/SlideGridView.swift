@@ -37,20 +37,8 @@ struct SlideGridView: View {
         GridItem(.flexible(), spacing: 12)
     ]
 
-    private var sortedPages: [Page] {
-        document.unwrappedPages.sorted { $0.pageNumber < $1.pageNumber }
-    }
-
     private var filteredPages: [Page] {
-        guard !searchText.isEmpty else { return sortedPages }
-        let query = searchText.lowercased()
-        return sortedPages.filter { page in
-            let numberMatch = String(localized: "Page \(page.pageNumber)").lowercased().contains(query)
-                || "\(page.pageNumber)".contains(query)
-            let fileMatch = page.originalFileName?.lowercased().contains(query) ?? false
-            let textMatch = page.plainText.lowercased().contains(query)
-            return numberMatch || fileMatch || textMatch
-        }
+        PageFilter.apply(to: document.unwrappedPages, searchText: searchText)
     }
 
     private var hasAddCallbacks: Bool {
@@ -238,29 +226,7 @@ struct SlideGridView: View {
     // MARK: - Page Deletion
 
     private func deletePage(_ page: Page) {
-        let deletedPageNumber = page.pageNumber
-
-        TextExportCacheService.removeEntry(pageNumber: deletedPageNumber, from: document)
-
-        for otherPage in document.unwrappedPages where otherPage.pageNumber > deletedPageNumber {
-            otherPage.pageNumber -= 1
-        }
-
-        document.pages?.removeAll { $0.persistentModelID == page.persistentModelID }
-        document.totalPages -= 1
-        document.recalculateStorageSize()
-
-        modelContext.delete(page)
-
-        navigationState.refreshPageOrder()
-
-        if navigationState.currentPageNumber == deletedPageNumber {
-            let newPageNumber = min(deletedPageNumber, document.totalPages)
-            if newPageNumber > 0 {
-                navigationState.goToPage(pageNumber: newPageNumber)
-            }
-        }
-
+        navigationState.deletePage(page, modelContext: modelContext)
         selectedPageNumber = navigationState.currentPageNumber
     }
 

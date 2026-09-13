@@ -65,13 +65,13 @@ struct DocumentCard: View {
         // Touch: single tap opens the project
         .onTapGesture {
             guard !isProcessing else { return }
-            onOpen()
+            openProject()
         }
         #else
         // Mac: double-click opens (single click selects/focuses)
         .onTapGesture(count: 2) {
             guard !isProcessing else { return }
-            onOpen()
+            openProject()
         }
         #endif
         .contextMenu { contextMenuContent }
@@ -81,14 +81,14 @@ struct DocumentCard: View {
             guard !isProcessing else { return .ignored }
             // Let focused child elements handle their own activation
             guard !isMenuButtonFocused && !isNameFieldFocused && !isEmojiFieldFocused else { return .ignored }
-            onOpen()
+            openProject()
             return .handled
         }
         .onKeyPress(.space) {
             guard !isProcessing else { return .ignored }
             // Let focused child elements handle their own activation
             guard !isMenuButtonFocused && !isNameFieldFocused && !isEmojiFieldFocused else { return .ignored }
-            onOpen()
+            openProject()
             return .handled
         }
         .sheet(isPresented: $showingExportPanel) {
@@ -96,6 +96,19 @@ struct DocumentCard: View {
         }
         // Onscreen awareness: lets Siri/Apple Intelligence refer to a visible project.
         .appEntityIdentifier(document.uuid.map { EntityIdentifier(for: ProjectEntity.self, identifier: $0) })
+    }
+
+    /// Opens the project and donates the matching intent.
+    /// For predicition learning.
+    private func openProject() {
+        onOpen()
+        guard let uuid = document.uuid else { return }
+        Task {
+            guard let entity = await ProjectStore.shared.projectEntity(uuid: uuid) else { return }
+            let intent = OpenProjectIntent()
+            intent.target = entity
+            _ = try? await IntentDonationManager.shared.donate(intent: intent)
+        }
     }
 
     // MARK: - Context Menu Content

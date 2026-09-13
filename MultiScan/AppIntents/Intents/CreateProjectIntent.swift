@@ -2,9 +2,7 @@
 //  CreateProjectIntent.swift
 //  MultiScan
 //
-//  "Scan New Project": builds a project from images/PDFs handed in by Shortcuts or Siri and runs
-//  OCR through the same pipeline the Home screen uses. OCR of a long PDF easily exceeds the
-//  default intent time limit, so this is a `LongRunningIntent` reporting per-page progress.
+//  "Start New Project": builds a project from images/PDFs handed in by Shortcuts or Siri and runs OCR through the same pipeline the Home screen uses. OCR of a long PDF easily exceeds the default intent time limit, so this is a `LongRunningIntent` reporting per-page progress.
 //
 
 import AppIntents
@@ -12,12 +10,12 @@ import Foundation
 import UniformTypeIdentifiers
 
 struct CreateProjectIntent: AppIntent, LongRunningIntent, CancellableIntent {
-    static let title: LocalizedStringResource = "Scan New Project"
+    static let title: LocalizedStringResource = "Start New Project"
     static let description = IntentDescription(
         "Creates a MultiScan project from images or PDFs and recognizes their text.",
         categoryName: "Projects"
     )
-    static let openAppWhenRun = false
+    static var supportedModes: IntentModes { .background }
     static var allowedExecutionTargets: IntentExecutionTargets { .main }
 
     @Parameter(
@@ -38,14 +36,16 @@ struct CreateProjectIntent: AppIntent, LongRunningIntent, CancellableIntent {
 
     @Dependency var store: ProjectStore
 
-    enum CreateProjectError: LocalizedError {
+    /// Conforms to `CustomLocalizedStringResourceConvertible` so Siri/Shortcuts show the real
+    /// message — the framework routes thrown errors by type and genericizes a plain `Error`.
+    enum CreateProjectError: Error, CustomLocalizedStringResourceConvertible {
         case nothingToScan
         case projectUnavailable
 
-        var errorDescription: String? {
+        var localizedStringResource: LocalizedStringResource {
             switch self {
-            case .nothingToScan: return String(localized: "No images or PDF pages were found to scan.")
-            case .projectUnavailable: return String(localized: "The project was created but could not be loaded.")
+            case .nothingToScan: "No images or PDF pages were found to scan."
+            case .projectUnavailable: "The project was created but could not be loaded."
             }
         }
     }
@@ -62,20 +62,8 @@ struct CreateProjectIntent: AppIntent, LongRunningIntent, CancellableIntent {
         let optimizeImages = UserDefaults.standard.bool(forKey: "optimizeImagesOnImport")
 
         let projectID: UUID = try await performBackgroundTask { @MainActor @Sendable in
-            try FileManager.default.createDirectory(at: stagingDirectory, withIntermediateDirectories: true)
-            var urls: [URL] = []
-            for (index, file) in files.enumerated() {
-                let fileName = file.filename.isEmpty ? "file-\(index + 1)" : file.filename
-                let destination = stagingDirectory.appendingPathComponent(fileName)
-                if let sourceURL = file.fileURL {
-                    let accessed = sourceURL.startAccessingSecurityScopedResource()
-                    defer { if accessed { sourceURL.stopAccessingSecurityScopedResource() } }
-                    try FileManager.default.copyItem(at: sourceURL, to: destination)
-                } else {
-                    try file.data.write(to: destination)
-                }
-                urls.append(destination)
-            }
+            // `stageFiles` is nonisolated, so the copy/write loop runs off the main actor.
+            let urls = try await Self.stageFiles(files, in: stagingDirectory)
 
             let pipeline = ProjectImportPipeline.shared
             let prepared = try await pipeline.prepare(urls: urls, optimizeImages: optimizeImages) { estimate in
@@ -105,5 +93,24 @@ struct CreateProjectIntent: AppIntent, LongRunningIntent, CancellableIntent {
             value: entity,
             dialog: IntentDialog("Created “\(entity.name)” with \(entity.pageCount) pages.")
         )
+    }
+
+    /// Copies the incoming `IntentFile`s into a staging directory. Plain disk I/O — deliberately nonisolated so a large PDF handed in by Shortcuts doesn't block the main actor.
+    private static func stageFiles(_ files: [IntentFile], in directory: URL) async throws -> [URL] {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        var urls: [URL] = []
+        for (index, file) in files.enumerated() {
+            let fileName = file.filename.isEmpty ? "file-\(index + 1)" : file.filename
+            let destination = directory.appendingPathComponent(fileName)
+            if let sourceURL = file.fileURL {
+                let accessed = sourceURL.startAccessingSecurityScopedResource()
+                defer { if accessed { sourceURL.stopAccessingSecurityScopedResource() } }
+                try FileManager.default.copyItem(at: sourceURL, to: destination)
+            } else {
+                try file.data.write(to: destination)
+            }
+            urls.append(destination)
+        }
+        return urls
     }
 }

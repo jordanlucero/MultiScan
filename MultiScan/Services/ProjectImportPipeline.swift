@@ -2,7 +2,7 @@
 //  ProjectImportPipeline.swift
 //  MultiScan
 //
-//  Shared import → OCR → project creation pipeline used by the Home screen and the "Scan New Project" App Intent. Owns the in-flight state (which projects are still processing, overall progress) so an intent-driven import shows the same progress card as a manual one.
+//  Shared import → OCR → project creation pipeline used by the Home screen and the "Start New Project" App Intent. Owns the in-flight state (which projects are still processing, overall progress) so an intent-driven import shows the same progress card as a manual one.
 //
 
 import Foundation
@@ -60,8 +60,7 @@ final class ProjectImportPipeline {
     // MARK: Input preparation
 
     /// Scans files/folders, renders PDFs to page images, and returns everything ready for OCR.
-    /// - Parameter onEstimate: Called with the expected page count *before* PDF rendering, so callers
-    ///   can announce/size progress immediately.
+    /// - Parameter onEstimate: Called with the expected page count *before* PDF rendering, so callers can announce/size progress immediately.
     func prepare(
         urls: [URL],
         optimizeImages: Bool,
@@ -138,6 +137,76 @@ final class ProjectImportPipeline {
             try? context.save()
             throw error
         }
+    }
+
+    // MARK: Adding pages to an existing project
+
+    /// Outcome of an `addPages` call, so the caller can decide where to navigate.
+    struct AddPagesResult: Sendable {
+        /// Page number of the first page added, or `nil` if OCR produced nothing.
+        let firstNewPageNumber: Int?
+        /// Whether the pages went on the end rather than being inserted mid-project.
+        let isAppend: Bool
+        let addedCount: Int
+    }
+
+    /// Runs OCR over `images` and adds the resulting pages to an existing project, shifting the page numbers after the insertion point and keeping the export cache in sync.
+    ///
+    /// - Parameter insertAfter: Page number to insert after — `nil` appends to the end, `0` inserts at the beginning. Inserting at a position is an iOS-only entry point.
+    @discardableResult
+    func addPages(
+        to document: Document,
+        images: [(data: Data, fileName: String)],
+        insertAfter: Int? = nil,
+        in context: ModelContext
+    ) async throws -> AddPagesResult {
+        let insertAfterNum = insertAfter ?? document.totalPages
+        let insertStart = insertAfterNum + 1
+        let isAppend = insertAfterNum >= document.totalPages
+
+        // Reset so a progress UI doesn't briefly show the previous import's final value
+        progress = 0
+        let results = try await ocrService.processImages(images, startingPageNumber: insertStart)
+        let newCount = results.count
+
+        // Shift existing pages that come after the insertion point (no-op when appending)
+        for page in document.unwrappedPages where page.pageNumber >= insertStart {
+            page.pageNumber += newCount
+        }
+
+        var newPages: [Page] = []
+        for result in results {
+            let page = Page(
+                pageNumber: result.pageNumber,
+                text: result.text,
+                imageData: result.imageData,
+                originalFileName: result.originalFileName,
+                boundingBoxesData: result.boundingBoxesData
+            )
+            page.thumbnailData = result.thumbnailData
+            page.document = document
+            document.pages?.append(page)
+            newPages.append(page)
+        }
+
+        document.totalPages += newCount
+        document.recalculateStorageSize()
+
+        // Update the export cache while the new page text is still in memory
+        if isAppend {
+            TextExportCacheService.addEntries(for: newPages, to: document)
+        } else {
+            // Page numbers shifted — update cache entries in memory (no external storage loads)
+            TextExportCacheService.insertEntries(for: newPages, in: document, shiftingFrom: insertStart, by: newCount)
+        }
+
+        try context.save()
+
+        return AddPagesResult(
+            firstNewPageNumber: newPages.first?.pageNumber,
+            isAppend: isAppend,
+            addedCount: newCount
+        )
     }
 
     private func populate(_ document: Document, with results: [ProcessedImage]) {

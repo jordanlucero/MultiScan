@@ -5,9 +5,8 @@
 //  Transferable rich text wrapper for ShareLink / pasteboard export.
 //
 //  RTF conversion is native: `NSAttributedString.data(from:documentAttributes:)`.
-//  The wrapper stores pre-encoded, Sendable data (RTF bytes + plain text) so it can
-//  cross actor boundaries and be exported from Transferable's async closures without
-//  touching the non-Sendable NSAttributedString.
+//  The wrapper stores pre-encoded, Sendable data (RTF bytes + plain text) so it can cross actor boundaries and be exported from Transferable's async closures without touching the non-Sendable NSAttributedString.
+//
 //
 
 import Foundation
@@ -16,15 +15,20 @@ import UniformTypeIdentifiers
 
 // MARK: - Export Error Types
 
-enum RichTextExportError: LocalizedError {
+/// Conforms to `CustomLocalizedStringResourceConvertible` as well as `LocalizedError`: the App Intents framework routes thrown errors by type and keys on the former, so a `LocalizedError` alone would surface as a generic failure in Siri/Shortcuts.
+enum RichTextExportError: LocalizedError, CustomLocalizedStringResourceConvertible {
     case rtfConversionFailed
     case emptyContent
 
-    var errorDescription: String? {
+    var localizedStringResource: LocalizedStringResource {
         switch self {
-        case .rtfConversionFailed: return "Failed to convert rich text to RTF"
-        case .emptyContent: return "No content to export"
+        case .rtfConversionFailed: "Failed to convert rich text to RTF."
+        case .emptyContent: "There is no text to export."
         }
+    }
+
+    var errorDescription: String? {
+        String(localized: localizedStringResource)
     }
 }
 
@@ -32,8 +36,7 @@ enum RichTextExportError: LocalizedError {
 
 /// A Sendable rich text payload that exports RTF (file + data) with a plain text fallback.
 struct RichText: Transferable, Sendable {
-    /// Pre-encoded RTF. Nil when conversion failed — file/data representations then
-    /// throw at share time, and the plain text fallback still works.
+    /// Pre-encoded RTF. Nil when conversion failed — file/data representations then throw at share time, and the plain text fallback still works.
     let rtfData: Data?
     let plainText: String
 

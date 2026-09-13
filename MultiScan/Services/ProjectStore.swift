@@ -217,10 +217,6 @@ actor ProjectStore {
 
     // MARK: Page entities
 
-    func pageEntity(uuid: UUID) -> PageEntity? {
-        page(uuid: uuid).flatMap(makePageEntity)
-    }
-
     /// Batch resolve for `EntityQuery.entities(for:)` — one fetch for all identifiers, not one each.
     func pageEntities(uuids: [UUID]) -> [PageEntity] {
         guard !uuids.isEmpty else { return [] }
@@ -351,7 +347,7 @@ actor ProjectStore {
     // MARK: Text export
 
     /// Combined project text (RTF + plain) built from the export cache — one external read.
-    func projectText(uuid: UUID, options: ExportOptions) throws -> ProjectTextExport {
+    func projectText(uuid: UUID, options: ExportOptions) async throws -> ProjectTextExport {
         guard let document = document(uuid: uuid) else { throw ProjectStoreError.projectNotFound }
 
         let snapshots: [TextExporter.PageSnapshot]
@@ -367,7 +363,7 @@ actor ProjectStore {
                 .map { TextExporter.PageSnapshot(pageNumber: $0.pageNumber, fileName: $0.originalFileName, textData: $0.richTextData, wordCount: nil, charCount: nil) }
         }
 
-        let result = TextExporter.buildResult(
+        let result = await TextExporter.buildResult(
             from: snapshots,
             createVisualSeparation: options.createVisualSeparation,
             separatorStyle: options.separatorStyle,

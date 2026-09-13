@@ -19,7 +19,13 @@ struct SearchResultsView: View {
             if results.isEmpty && results.term == term && !isSearching {
                 ContentUnavailableView.search(text: term)
             } else {
-                resultsList
+                SearchResultsList(
+                    results: results,
+                    term: term,
+                    isSearching: isSearching,
+                    onOpenProject: { router.open(project: $0) },
+                    onOpenPage: { router.open(project: $0, page: $1) }
+                )
             }
         }
         .task(id: term) {
@@ -34,15 +40,26 @@ struct SearchResultsView: View {
         }
     }
 
-    private var resultsList: some View {
+}
+
+// MARK: - Results List
+
+struct SearchResultsList: View {
+    let results: SearchResults
+    let term: String
+    let isSearching: Bool
+    let onOpenProject: (UUID) -> Void
+    let onOpenPage: (UUID, Int) -> Void
+
+    var body: some View {
         List {
             if !results.projects.isEmpty {
                 Section("Projects") {
                     ForEach(results.projects) { hit in
                         Button {
-                            router.open(project: hit.id)
+                            onOpenProject(hit.id)
                         } label: {
-                            projectRow(hit)
+                            ProjectSearchRow(hit: hit, term: term)
                         }
                         .buttonStyle(.plain)
                     }
@@ -53,9 +70,9 @@ struct SearchResultsView: View {
                 Section("Pages") {
                     ForEach(results.pages) { hit in
                         Button {
-                            router.open(project: hit.projectID, page: hit.pageNumber)
+                            onOpenPage(hit.projectID, hit.pageNumber)
                         } label: {
-                            pageRow(hit)
+                            PageSearchRow(hit: hit, term: term)
                         }
                         .buttonStyle(.plain)
                     }
@@ -68,14 +85,22 @@ struct SearchResultsView: View {
             }
         }
     }
+}
 
-    private func projectRow(_ hit: ProjectSearchHit) -> some View {
+// MARK: - Rows
+
+/// Separate View types so the term-highlighting scan runs per row only when that row's hit or the term changes — not whenever `isSearching` flips.
+struct ProjectSearchRow: View {
+    let hit: ProjectSearchHit
+    let term: String
+
+    var body: some View {
         HStack(spacing: 12) {
             Text(hit.emoji ?? "📄")
                 .font(.title2)
                 .frame(width: 32)
             VStack(alignment: .leading, spacing: 2) {
-                Text(highlighted(hit.name))
+                Text(highlighted(hit.name, matching: term))
                     .font(.headline)
                     .lineLimit(1)
                 Text(hit.pageCount == 1 ? "1 page" : "\(hit.pageCount) pages")
@@ -88,20 +113,30 @@ struct SearchResultsView: View {
         .accessibilityElement(children: .combine)
         .accessibilityHint("Opens the project")
     }
+}
 
-    private func pageRow(_ hit: PageSearchHit) -> some View {
+struct PageSearchRow: View {
+    let hit: PageSearchHit
+    let term: String
+
+    private var projectTitle: String {
+        let emoji = hit.projectEmoji ?? ""
+        return emoji.isEmpty ? hit.projectName : "\(emoji) \(hit.projectName)"
+    }
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 Text("Page \(hit.pageNumber)")
                     .font(.headline)
                 Text("·")
                     .foregroundStyle(.secondary)
-                Text(projectTitle(hit))
+                Text(projectTitle)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
-            Text(highlighted(hit.snippet))
+            Text(highlighted(hit.snippet, matching: term))
                 .font(.callout)
                 .lineLimit(3)
         }
@@ -110,25 +145,21 @@ struct SearchResultsView: View {
         .accessibilityElement(children: .combine)
         .accessibilityHint("Opens the project at this page")
     }
+}
 
-    private func projectTitle(_ hit: PageSearchHit) -> String {
-        let emoji = hit.projectEmoji ?? ""
-        return emoji.isEmpty ? hit.projectName : "\(emoji) \(hit.projectName)"
-    }
-
-    /// Bolds every case/diacritic-insensitive occurrence of the search term.
-    private func highlighted(_ text: String) -> AttributedString {
-        var attributed = AttributedString(text)
-        let options: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
-        var searchStart = text.startIndex
-        while searchStart < text.endIndex,
-              let range = text.range(of: term, options: options, range: searchStart..<text.endIndex) {
-            if let lower = AttributedString.Index(range.lowerBound, within: attributed),
-               let upper = AttributedString.Index(range.upperBound, within: attributed) {
-                attributed[lower..<upper].inlinePresentationIntent = .stronglyEmphasized
-            }
-            searchStart = range.upperBound
+/// Bolds every case/diacritic-insensitive occurrence of the search term.
+private func highlighted(_ text: String, matching term: String) -> AttributedString {
+    var attributed = AttributedString(text)
+    guard !term.isEmpty else { return attributed }
+    let options: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
+    var searchStart = text.startIndex
+    while searchStart < text.endIndex,
+          let range = text.range(of: term, options: options, range: searchStart..<text.endIndex) {
+        if let lower = AttributedString.Index(range.lowerBound, within: attributed),
+           let upper = AttributedString.Index(range.upperBound, within: attributed) {
+            attributed[lower..<upper].inlinePresentationIntent = .stronglyEmphasized
         }
-        return attributed
+        searchStart = range.upperBound
     }
+    return attributed
 }

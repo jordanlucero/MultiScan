@@ -37,7 +37,7 @@ enum ViewerBackground: String, CaseIterable {
 }
 
 struct ImageViewer: View {
-    @ObservedObject var navigationState: NavigationState
+    let navigationState: NavigationState
 
     // Settings
     @AppStorage("viewerBackground") private var viewerBackgroundRaw = ViewerBackground.system.rawValue
@@ -97,24 +97,21 @@ struct ImageViewer: View {
                     )
                     .ignoresSafeArea()
                 }
-                .accessibilityLabel("Page image")
-                .accessibilityValue("Zoom \(Int(zoomController.zoomLevel * 100)) percent")
-                .accessibilityAction(named: "Zoom In") {
-                    zoomController.zoomIn()
-                }
-                .accessibilityAction(named: "Zoom Out") {
-                    zoomController.zoomOut()
-                }
-                .accessibilityAction(named: "Fit to Window") {
-                    zoomController.zoomToFit()
-                }
+                // `zoomLevel` updates continuously while pinching. Reading it in a
+                // modifier keeps that dependency off this body, so a zoom gesture
+                // doesn't re-run the representable's update pass every frame.
+                .modifier(ZoomAccessibility(controller: zoomController))
             } else {
                 ProgressView("Loading image…")
             }
         }
         .overlay(alignment: .topTrailing) {
-            zoomControls
-                .padding()
+            ImageZoomControls(
+                controller: zoomController,
+                isVisible: controlsVisible,
+                focusedButton: $focusedButton
+            )
+            .padding()
         }
         .onHover { hovering in
             isHovering = hovering
@@ -123,37 +120,6 @@ struct ImageViewer: View {
             await loadImage(for: imageRequest)
         }
         .focusedSceneValue(\.imageZoomController, zoomController)
-    }
-
-    @ViewBuilder
-    private var zoomControls: some View {
-        HStack {
-            Button(action: { zoomController.zoomToFit() }) {
-                Image(systemName: "arrow.up.left.and.arrow.down.right")
-            }
-            .accessibilityLabel("Fit to Window")
-            .help("Fit to Window")
-            .focused($focusedButton, equals: .fit)
-
-            Button(action: { zoomController.zoomIn() }) {
-                Image(systemName: "plus.magnifyingglass")
-            }
-            .accessibilityLabel("Zoom In")
-            .help("Zoom In")
-            .focused($focusedButton, equals: .zoomIn)
-
-            Button(action: { zoomController.zoomOut() }) {
-                Image(systemName: "minus.magnifyingglass")
-            }
-            .accessibilityLabel("Zoom Out")
-            .help("Zoom Out")
-            .focused($focusedButton, equals: .zoomOut)
-        }
-        .padding()
-        .glassEffect()
-        .opacity(controlsVisible ? 1.0 : 0.0)
-        .animation(.easeInOut(duration: 0.25), value: controlsVisible)
-        .accessibilityHidden(false) // Keep accessible to VoiceOver regardless of opacity
     }
 
     private var controlsVisible: Bool {
@@ -171,14 +137,7 @@ struct ImageViewer: View {
         }
 
         // Decode + rotate + adjust off the main actor
-        let cgImage = await Task.detached(priority: .userInitiated) {
-            PlatformImage.processedCGImage(
-                from: imageData,
-                userRotation: request.rotation,
-                increaseContrast: request.increaseContrast,
-                increaseBlackPoint: request.increaseBlackPoint
-            )
-        }.value
+        let cgImage = await Self.decode(imageData, for: request)
 
         guard !Task.isCancelled else { return }
 
@@ -190,5 +149,76 @@ struct ImageViewer: View {
         } else {
             displayImage = nil
         }
+    }
+
+    @concurrent
+    private nonisolated static func decode(_ imageData: Data, for request: ImageRequest) async -> CGImage? {
+        PlatformImage.processedCGImage(
+            from: imageData,
+            userRotation: request.rotation,
+            increaseContrast: request.increaseContrast,
+            increaseBlackPoint: request.increaseBlackPoint
+        )
+    }
+}
+
+// MARK: - Zoom Controls
+
+struct ImageZoomControls: View {
+    let controller: ImageZoomController
+    let isVisible: Bool
+    @FocusState.Binding var focusedButton: ImageViewer.ZoomButton?
+
+    var body: some View {
+        HStack {
+            Button(action: { controller.zoomToFit() }) {
+                Image(systemName: "arrow.up.left.and.arrow.down.right")
+            }
+            .accessibilityLabel("Fit to Window")
+            .help("Fit to Window")
+            .focused($focusedButton, equals: .fit)
+
+            Button(action: { controller.zoomIn() }) {
+                Image(systemName: "plus.magnifyingglass")
+            }
+            .accessibilityLabel("Zoom In")
+            .help("Zoom In")
+            .focused($focusedButton, equals: .zoomIn)
+
+            Button(action: { controller.zoomOut() }) {
+                Image(systemName: "minus.magnifyingglass")
+            }
+            .accessibilityLabel("Zoom Out")
+            .help("Zoom Out")
+            .focused($focusedButton, equals: .zoomOut)
+        }
+        .padding()
+        .glassEffect()
+        .opacity(isVisible ? 1.0 : 0.0)
+        .animation(.easeInOut(duration: 0.25), value: isVisible)
+        .accessibilityHidden(false) // Keep accessible to VoiceOver regardless of opacity
+    }
+}
+
+// MARK: - Zoom Accessibility
+
+/// Holds the continuously-changing `zoomLevel` read so it doesn't become a
+/// dependency of the view hosting the platform scroll view.
+private struct ZoomAccessibility: ViewModifier {
+    let controller: ImageZoomController
+
+    func body(content: Content) -> some View {
+        content
+            .accessibilityLabel("Page image")
+            .accessibilityValue("Zoom \(Int(controller.zoomLevel * 100)) percent")
+            .accessibilityAction(named: "Zoom In") {
+                controller.zoomIn()
+            }
+            .accessibilityAction(named: "Zoom Out") {
+                controller.zoomOut()
+            }
+            .accessibilityAction(named: "Fit to Window") {
+                controller.zoomToFit()
+            }
     }
 }

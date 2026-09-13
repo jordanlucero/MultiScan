@@ -37,13 +37,13 @@ enum TextManipulationService {
     // MARK: - Smart Cleanup Types
 
     /// Where a detected artifact appears in the page text
-    enum LinePosition: Sendable {
+    enum LinePosition: Equatable, Sendable {
         case firstLine
         case lastLine
     }
 
     /// A detected page number at the top or bottom of a page's text
-    struct PageNumberDetection: Sendable {
+    struct PageNumberDetection: Equatable, Sendable {
         let pageNumber: Int
         let detectedNumber: Int
         let numberText: String       // exact text of the number for token-level removal (e.g., "42", "1,234")
@@ -53,7 +53,7 @@ enum TextManipulationService {
     }
 
     /// A detected section header that repeats across a contiguous run of pages
-    struct SectionHeaderDetection: Sendable {
+    struct SectionHeaderDetection: Equatable, Sendable {
         let headerText: String
         let displayText: String
         let pageRange: ClosedRange<Int>
@@ -61,7 +61,7 @@ enum TextManipulationService {
     }
 
     /// A group of consecutive integers detected across adjacent project pages
-    struct ConsecutiveNumberGroup: Sendable {
+    struct ConsecutiveNumberGroup: Equatable, Sendable {
         let numbers: [Int]                  // consecutive values in order
         let pageMapping: [Int: [String]]    // project page → number texts found on that page
         let pageRange: ClosedRange<Int>     // span of project pages
@@ -80,7 +80,7 @@ enum TextManipulationService {
     }
 
     /// A concrete cleanup action the user can take
-    enum CleanupOption: Identifiable, Sendable {
+    enum CleanupOption: Identifiable, Equatable, Sendable {
         case removePageNumber(detection: PageNumberDetection)
         case removeSectionHeaderFromPage(header: SectionHeaderDetection, pageNumber: Int)
         case removeSectionHeaderFromRange(header: SectionHeaderDetection)
@@ -761,13 +761,6 @@ enum TextManipulationService {
         text.deleteCharacters(in: NSRange(range, in: plainText))
     }
 
-    /// Non-mutating variant of `removePageNumberToken(_:in:)`.
-    static func removingPageNumberToken(_ numberText: String, from text: NSAttributedString) -> NSAttributedString {
-        let mutable = NSMutableAttributedString(attributedString: text)
-        removePageNumberToken(numberText, in: mutable)
-        return mutable
-    }
-
     /// Computes the removal range for a page number token and its adjacent whitespace.
     /// Only covers the number text (not the entire line), but collapses the whole line
     /// (including newline) if removing the token would leave it empty.
@@ -929,17 +922,6 @@ enum TextManipulationService {
         let plainText = text.string
         guard let range = lineRemovalRange(matching: normalizedTarget, in: plainText, stripNumbers: stripNumbers) else { return }
         text.deleteCharacters(in: NSRange(range, in: plainText))
-    }
-
-    /// Non-mutating variant of `removeLine(matching:in:stripNumbers:)`.
-    static func removingLine(
-        matching normalizedTarget: String,
-        from text: NSAttributedString,
-        stripNumbers: Bool = false
-    ) -> NSAttributedString {
-        let mutable = NSMutableAttributedString(attributedString: text)
-        removeLine(matching: normalizedTarget, in: mutable, stripNumbers: stripNumbers)
-        return mutable
     }
 
     /// Computes the removal range (line + newline) for the first line matching `normalizedTarget`.

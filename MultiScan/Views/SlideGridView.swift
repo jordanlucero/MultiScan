@@ -12,8 +12,7 @@ import UniformTypeIdentifiers
 
 struct SlideGridView: View {
     let document: Document
-    @ObservedObject var navigationState: NavigationState
-    @Binding var selectedPageNumber: Int?
+    let navigationState: NavigationState
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
 
@@ -48,14 +47,15 @@ struct SlideGridView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
+                let currentPageNumber = navigationState.currentPageNumber
+
                 LazyVGrid(columns: columns, spacing: 12) {
                     ForEach(filteredPages) { page in
                         Button {
                             navigationState.goToPage(pageNumber: page.pageNumber)
-                            selectedPageNumber = page.pageNumber
                             dismiss()
                         } label: {
-                            thumbnailCell(for: page)
+                            SlideGridCell(page: page, isSelected: currentPageNumber == page.pageNumber)
                         }
                         .buttonStyle(.plain)
                         .contextMenu { contextMenu(for: page) }
@@ -126,19 +126,16 @@ struct SlideGridView: View {
                 }
                 insertTargetPageNumber = nil
             }
-            .confirmationDialog(
-                "Delete Page \(pageToDelete?.pageNumber ?? 0)?",
+            .deletePageConfirmation(
                 isPresented: Binding(
                     get: { pageToDelete != nil },
                     set: { if !$0 { pageToDelete = nil } }
                 ),
-                titleVisibility: .visible
+                pageNumber: pageToDelete?.pageNumber ?? 0
             ) {
-                Button("Delete", role: .destructive) {
-                    if let page = pageToDelete {
-                        withAnimation {
-                            deletePage(page)
-                        }
+                if let page = pageToDelete {
+                    withAnimation {
+                        navigationState.deletePage(page, modelContext: modelContext)
                     }
                 }
             }
@@ -223,17 +220,16 @@ struct SlideGridView: View {
         navigationState.movePage(page, by: 1)
     }
 
-    // MARK: - Page Deletion
+}
 
-    private func deletePage(_ page: Page) {
-        navigationState.deletePage(page, modelContext: modelContext)
-        selectedPageNumber = navigationState.currentPageNumber
-    }
+// MARK: - Thumbnail Cell
 
-    // MARK: - Thumbnail Cell
+/// Its own View type so a grid cell re-decodes its thumbnail only when that page or its selection changes — not on every search keystroke or reorder.
+struct SlideGridCell: View {
+    let page: Page
+    let isSelected: Bool
 
-    @ViewBuilder
-    private func thumbnailCell(for page: Page) -> some View {
+    var body: some View {
         VStack(spacing: 6) {
             ZStack(alignment: .topTrailing) {
                 // Thumbnail image
@@ -251,7 +247,7 @@ struct SlideGridView: View {
                 .aspectRatio(8.5/11, contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
                 .overlay {
-                    if selectedPageNumber == page.pageNumber {
+                    if isSelected {
                         RoundedRectangle(cornerRadius: 6)
                             .stroke(Color.accentColor, lineWidth: 2)
                     }
@@ -269,12 +265,12 @@ struct SlideGridView: View {
             // Label
             Text("Page \(page.pageNumber)")
                 .font(.caption2)
-                .foregroundStyle(selectedPageNumber == page.pageNumber ? .primary : .secondary)
+                .foregroundStyle(isSelected ? .primary : .secondary)
                 .lineLimit(1)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Page \(page.pageNumber)")
-        .accessibilityAddTraits(selectedPageNumber == page.pageNumber ? .isSelected : [])
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 #endif

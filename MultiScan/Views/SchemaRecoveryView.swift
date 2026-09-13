@@ -1,13 +1,16 @@
-//  remove??
+//
+//  SchemaRecoveryView.swift
+//  MultiScan
+//
+//  Shown instead of the app when the store can't be used: container creation failed, or the data was written by a newer app version.
+//
 
 import SwiftUI
 
 // MARK: - Recovery View
 
-/// Main recovery view shown when container loading fails.
 struct SchemaRecoveryView: View {
     let state: RecoveryState
-    let onRetry: () -> Void
     let onReset: () -> Void
 
     @State private var showResetConfirmation = false
@@ -15,13 +18,15 @@ struct SchemaRecoveryView: View {
     var body: some View {
         VStack(spacing: 32) {
             // Icon and title
-            headerSection
+            RecoveryHeader(iconName: state.iconName, iconColor: state.iconColor, title: state.title)
 
             // Description of what went wrong
-            descriptionSection
+            RecoveryDescription(description: state.description, technicalDetail: state.technicalDetail)
 
             // Action buttons
-            actionSection
+            RecoveryActions(state: state) {
+                showResetConfirmation = true
+            }
         }
         .padding(24)
         .confirmationDialog(
@@ -38,32 +43,42 @@ struct SchemaRecoveryView: View {
         }
     }
 
-    // MARK: - Header Section
+}
 
-    @ViewBuilder
-    private var headerSection: some View {
+// MARK: - Header Section
+
+struct RecoveryHeader: View {
+    let iconName: String
+    let iconColor: Color
+    let title: LocalizedStringResource
+
+    var body: some View {
         VStack(spacing: 16) {
-            Image(systemName: state.iconName)
+            Image(systemName: iconName)
                 .font(.system(size: 56))
-                .foregroundStyle(state.iconColor)
+                .foregroundStyle(iconColor)
 
-            Text(state.title)
+            Text(title)
                 .font(.title)
                 .fontWeight(.bold)
         }
     }
+}
 
-    // MARK: - Description Section
+// MARK: - Description Section
 
-    @ViewBuilder
-    private var descriptionSection: some View {
+struct RecoveryDescription: View {
+    let description: LocalizedStringResource
+    let technicalDetail: String?
+
+    var body: some View {
         VStack(spacing: 12) {
-            Text(state.description)
+            Text(description)
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
-            if let technicalDetail = state.technicalDetail {
+            if let technicalDetail {
                 Text(technicalDetail)
                     .font(.caption)
                     .foregroundStyle(.tertiary)
@@ -73,16 +88,18 @@ struct SchemaRecoveryView: View {
             }
         }
     }
+}
 
-    // MARK: - Action Section
+// MARK: - Action Section
 
-    @ViewBuilder
-    private var actionSection: some View {
+struct RecoveryActions: View {
+    let state: RecoveryState
+    let onRequestReset: () -> Void
+
+    var body: some View {
         VStack(spacing: 12) {
-            // Primary action depends on state
-            switch state {
-            case .incompatible:
-                // For incompatible data, "Check for Updates" is primary
+            // Incompatible data: updating the app is the way out. A failed load has no in-process retry (the container is created once per launch), so it offers only the secondary actions.
+            if case .incompatible = state {
                 Link(destination: URL(string: "itms-apps://apps.apple.com/updates")!) {
                     Label {
                         Text("Open App Store")
@@ -91,25 +108,12 @@ struct SchemaRecoveryView: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
-
-            case .failed:
-                // For failures, "Try Again" is primary
-                Button {
-                    onRetry()
-                } label: {
-                    Label {
-                        Text("Try Again")
-                    } icon: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                }
-                .buttonStyle(.borderedProminent)
             }
 
             // Secondary actions
             HStack(spacing: 12) {
                 Button(role: .destructive) {
-                    showResetConfirmation = true
+                    onRequestReset()
                 } label: {
                     Label {
                         Text("Reset All Data")
@@ -187,35 +191,12 @@ enum RecoveryState {
     }
 }
 
-// MARK: - Loading View
-
-/// Simple loading view shown while container is being created.
-struct ContainerLoadingView: View {
-    var body: some View {
-        VStack(spacing: 16) {
-            ProgressView()
-        }
-    }
-}
-
 // MARK: - Previews
 
 #Preview("Incompatible Data") {
-    SchemaRecoveryView(
-        state: .incompatible(version: 999),
-        onRetry: {},
-        onReset: {}
-    )
+    SchemaRecoveryView(state: .incompatible(version: 999), onReset: {})
 }
 
 #Preview("Load Failed") {
-    SchemaRecoveryView(
-        state: .failed(error: "NSError Code=123456 \"Example error.\""),
-        onRetry: {},
-        onReset: {}
-    )
-}
-
-#Preview("Loading") {
-    ContainerLoadingView()
+    SchemaRecoveryView(state: .failed(error: "NSError Code=123456 \"Example error.\""), onReset: {})
 }

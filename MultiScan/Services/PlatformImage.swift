@@ -78,53 +78,6 @@ enum PlatformImage {
         }
     }
 
-    /// Get image dimensions from Data without fully decoding the image
-    /// Accounts for EXIF orientation and user rotation (rotated images return their apparent dimensions)
-    /// - Parameters:
-    ///   - data: Image data
-    ///   - userRotation: User-applied rotation in degrees (0, 90, 180, 270). Default is 0.
-    /// - Returns: The image dimensions, or nil if they couldn't be determined
-    static func dimensions(of data: Data, userRotation: Int = 0) -> CGSize? {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-              let width = properties[kCGImagePropertyPixelWidth] as? CGFloat,
-              let height = properties[kCGImagePropertyPixelHeight] as? CGFloat else {
-            return nil
-        }
-
-        // Count total 90° rotations from both EXIF and user
-        var rotationCount = 0
-
-        // EXIF orientations 5-8 include a 90° or 270° rotation
-        if let orientation = properties[kCGImagePropertyOrientation] as? UInt32,
-           orientation >= 5 && orientation <= 8 {
-            rotationCount += 1
-        }
-
-        // Add user rotation (90° or 270° = odd number of 90° steps)
-        let userSteps = ((userRotation % 360) + 360) % 360 / 90
-        if userSteps == 1 || userSteps == 3 {
-            rotationCount += 1
-        }
-
-        // If total rotations is odd, swap dimensions
-        if rotationCount % 2 == 1 {
-            return CGSize(width: height, height: width)
-        }
-
-        return CGSize(width: width, height: height)
-    }
-
-    /// Create a CGImage from Data for use with Vision framework or other CoreGraphics operations
-    /// - Parameter data: Image data
-    /// - Returns: A CGImage, or nil if the data couldn't be decoded
-    static func cgImage(from data: Data) -> CGImage? {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
-            return nil
-        }
-        return CGImageSourceCreateImageAtIndex(source, 0, nil)
-    }
-
     // MARK: - Processed CGImage for Platform Views
 
     /// Shared CIContext for image processing (thread-safe, reusable)
@@ -149,11 +102,8 @@ enum PlatformImage {
             return nil
         }
 
-        // Decode HDR content when present (iPhone photos store HDR as a gain map that a
-        // plain decode drops). Best-effort: SDR sources decode normally under this request,
-        // and the nil-options decode is a fallback for any decoder that rejects it.
-        // Whether HDR actually *displays* is controlled at the view layer via
-        // preferredImageDynamicRange (see ZoomableImageView).
+        // Decode HDR content when present. SDR sources decode normally under this request, and the nil-options decode is a fallback for any decoder that rejects it.
+        // Whether HDR actually *displays* is controlled at the view layer via preferredImageDynamicRange (see ZoomableImageView).
         let hdrOptions = [kCGImageSourceDecodeRequest: kCGImageSourceDecodeToHDR] as CFDictionary
         guard let rawCGImage = CGImageSourceCreateImageAtIndex(source, 0, hdrOptions)
                 ?? CGImageSourceCreateImageAtIndex(source, 0, nil) else {
@@ -191,8 +141,7 @@ enum PlatformImage {
             }
         }
 
-        // More than 8 bits per component means the source decoded to HDR — render
-        // half-float into the source color space so the headroom survives the filter chain.
+        // More than 8 bits per component means the source decoded to HDR — render half-float into the source color space so the headroom survives the filter chain.
         if rawCGImage.bitsPerComponent > 8, let colorSpace = rawCGImage.colorSpace {
             return ciContext.createCGImage(ciImage, from: ciImage.extent, format: .RGBAh, colorSpace: colorSpace)
         }

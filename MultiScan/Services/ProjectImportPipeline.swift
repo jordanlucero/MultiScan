@@ -20,7 +20,6 @@ final class ProjectImportPipeline {
     struct PreparedImport: Sendable {
         let images: [(data: Data, fileName: String)]
         let suggestedName: String?
-        let estimatedPageCount: Int
     }
 
     enum ImportError: LocalizedError {
@@ -29,7 +28,7 @@ final class ProjectImportPipeline {
         var errorDescription: String? {
             switch self {
             case .noImages:
-                return String(localized: "No images or PDF pages were found.")
+                return String(localized: "No images or pages were found.")
             }
         }
     }
@@ -43,16 +42,12 @@ final class ProjectImportPipeline {
     /// OCR progress of the current import, 0…1.
     private(set) var progress: Double = 0
 
-    /// File currently being recognized.
-    private(set) var currentFile: String = ""
-
     /// Per-page progress callback for the active `createProject` call (App Intents `Progress`).
     private var pageProgressHandler: (@MainActor (Double) -> Void)?
 
     private init() {
-        ocrService.progressHandler = { [weak self] progress, file in
+        ocrService.progressHandler = { [weak self] progress in
             self?.progress = progress
-            self?.currentFile = file
             self?.pageProgressHandler?(progress)
         }
     }
@@ -86,7 +81,7 @@ final class ProjectImportPipeline {
             }
         }
 
-        return PreparedImport(images: allImages, suggestedName: result.suggestedName, estimatedPageCount: estimatedPageCount)
+        return PreparedImport(images: allImages, suggestedName: result.suggestedName)
     }
 
     /// Loads Photos picker selections into image data.
@@ -147,11 +142,9 @@ final class ProjectImportPipeline {
         let firstNewPageNumber: Int?
         /// Whether the pages went on the end rather than being inserted mid-project.
         let isAppend: Bool
-        let addedCount: Int
     }
 
     /// Runs OCR over `images` and adds the resulting pages to an existing project, shifting the page numbers after the insertion point and keeping the export cache in sync.
-    ///
     /// - Parameter insertAfter: Page number to insert after — `nil` appends to the end, `0` inserts at the beginning. Inserting at a position is an iOS-only entry point.
     @discardableResult
     func addPages(
@@ -202,11 +195,7 @@ final class ProjectImportPipeline {
 
         try context.save()
 
-        return AddPagesResult(
-            firstNewPageNumber: newPages.first?.pageNumber,
-            isAppend: isAppend,
-            addedCount: newCount
-        )
+        return AddPagesResult(firstNewPageNumber: newPages.first?.pageNumber, isAppend: isAppend)
     }
 
     private func populate(_ document: Document, with results: [ProcessedImage]) {

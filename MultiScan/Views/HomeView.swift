@@ -12,7 +12,8 @@ struct HomeView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     #endif
-    @Query private var documents: [Document]
+    /// Sorted by the store, not per body evaluation.
+    @Query(sort: \Document.createdAt, order: .reverse) private var documents: [Document]
 
     /// Shared import → OCR → project pipeline (also driven by the "Start New Project" intent).
     private let pipeline = ProjectImportPipeline.shared
@@ -29,16 +30,12 @@ struct HomeView: View {
     @State private var showingDeleteConfirmation = false
     @State private var isDragOver = false
     @State private var isOptimizing = false
-    @State private var optimizingDocumentID: PersistentIdentifier?
     @State private var isPreparingImport = false
 
     // Settings
     @AppStorage("optimizeImagesOnImport") private var optimizeImagesOnImport = false
     @AppStorage(SchemaVersioning.iCloudSyncEnabledKey) private var iCloudSyncEnabled = false
 
-    // Accessibility announcement tracking
-    @State private var hasAnnouncedHalfway = false
-    @State private var processingPageCount = 0
 
     // Settings sheet (iOS only — macOS uses the Settings window)
     #if os(iOS)
@@ -72,9 +69,19 @@ struct HomeView: View {
             if isShowingSearchResults {
                 SearchResultsView(term: router.searchText.trimmingCharacters(in: .whitespacesAndNewlines))
             } else if documents.isEmpty && !isPreparingImport {
-                emptyState
+                HomeEmptyState()
             } else {
-                documentsGrid
+                DocumentsGrid(
+                    documents: documents,
+                    columns: gridColumns,
+                    isPreparingImport: isPreparingImport,
+                    onSelect: onDocumentSelected,
+                    onDelete: { document in
+                        documentToDelete = document
+                        showingDeleteConfirmation = true
+                    },
+                    onOptimize: { document in optimizeImages(for: document) }
+                )
             }
         }
         .onDrop(of: [.fileURL], isTargeted: $isDragOver) { providers in
@@ -117,13 +124,8 @@ struct HomeView: View {
         .onChange(of: selectedPhotos) { _, items in
             Task { await processSelectedPhotos(items) }
         }
-        .onChange(of: pipeline.progress) { oldValue, newValue in
-            // Announce when progress crosses 50%
-            if !hasAnnouncedHalfway && oldValue < 0.5 && newValue >= 0.5 {
-                hasAnnouncedHalfway = true
-                AccessibilityNotification.Announcement(String(localized: "Processing is \(50.formatted(.percent)) done.", comment: "VoiceOver announcement when OCR progress passes the halfway point")).post()
-            }
-        }
+        // `pipeline.progress` is read only for the announcement, so it lives in a modifier
+        .modifier(OCRProgressAnnouncer())
         // App-wide search: projects by name, pages by recognized text. The system `searchInApp` intent lands here with the field presented and populated.
         .searchable(
             text: $router.searchText,
@@ -131,16 +133,6 @@ struct HomeView: View {
             prompt: Text("Search")
         )
         .toolbar { toolbarContent }
-    }
-
-    // MARK: - View Components
-
-    private var emptyState: some View {
-        ContentUnavailableView {
-            Label("No Projects", systemImage: "document.viewfinder")
-        } description: {
-            Text("Choose the + button in the toolbar to start a project from your photos or files.")
-        }
     }
 
     /// Grid columns: fixed 2 on iPhone portrait, adaptive everywhere else
@@ -151,44 +143,6 @@ struct HomeView: View {
         }
         #endif
         return [GridItem(.adaptive(minimum: 200, maximum: 260), spacing: 24, alignment: .top)]
-    }
-
-    private var documentsGrid: some View {
-        ScrollView {
-            LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 16) {
-                if isPreparingImport {
-                    placeholderCard
-                }
-                ForEach(documents.sorted(by: { $0.createdAt > $1.createdAt })) { document in
-                    documentLink(for: document)
-                }
-            }
-            .padding()
-        }
-    }
-
-    private var placeholderCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.gray.opacity(0.1))
-
-                VStack(spacing: 8) {
-                    ProgressView()
-                        .controlSize(.large)
-                }
-            }
-            .aspectRatio(8.5/11, contentMode: .fit)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-
-            Text("New Project")
-                .font(.headline)
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-        }
-        .frame(maxHeight: .infinity, alignment: .top)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Preparing new project")
     }
 
     // MARK: - Toolbar Content
@@ -217,66 +171,12 @@ struct HomeView: View {
         #endif
 
         ToolbarItem(placement: .primaryAction) {
-            addProjectToolbarItem
+            AddProjectMenu(
+                isPreparingImport: isPreparingImport,
+                onImportFromPhotos: { showingPhotosPicker = true },
+                onImportFromFiles: { showingFilePicker = true }
+            )
         }
-    }
-
-    private var addProjectToolbarItem: some View {
-        Menu {
-            Button("Import from Photos…", systemImage: "photo.on.rectangle") {
-                showingPhotosPicker = true
-            }
-            Button("Import from Files…", systemImage: "folder") {
-                showingFilePicker = true
-            }
-        } label: {
-            Label("Start Project", systemImage: "plus")
-                .labelStyle(.iconOnly)
-        }
-        .menuIndicator(.hidden)
-        .disabled(isPreparingImport)
-        .help(isPreparingImport ? "Preparing import" : "Start a new project")
-        .accessibilityLabel(isPreparingImport ? "Preparing import" : "Start Project")
-        .accessibilityHint(isPreparingImport ? "Import in progress" : "Start a project using imported images from your photos or files")
-    }
-
-    private func documentLink(for document: Document) -> some View {
-        let isProcessing = pipeline.processingDocumentIDs.contains(document.persistentModelID)
-
-        return DocumentCard(
-            document: document,
-            isProcessing: isProcessing,
-            ocrProgress: pipeline.progress,
-            onOpen: {
-                onDocumentSelected(document)
-            },
-            onDelete: {
-                documentToDelete = document
-                showingDeleteConfirmation = true
-            },
-            onOptimize: { optimizeImages(for: document) }
-        )
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(documentAccessibilityLabel(for: document))
-        .accessibilityHint(isProcessing ? "Processing in progress" : "Activate to open project")
-        .accessibilityAddTraits(.isButton)
-        .accessibilityAction(.default) {
-            guard !isProcessing else { return }
-            onDocumentSelected(document)
-        }
-    }
-
-    // MARK: - Accessibility
-
-    private func documentAccessibilityLabel(for document: Document) -> String {
-        let emoji = document.emoji ?? ""
-        let emojiPrefix = emoji.isEmpty ? "" : "\(emoji), "
-        let pageCount = document.totalPages == 1
-            ? String(localized: "1 page")
-            : String(localized: "\(document.totalPages) pages")
-        let dateString = document.lastModifiedDate.formatted(date: .abbreviated, time: .shortened)
-
-        return String(localized: "\(emojiPrefix)\(document.name), \(pageCount), \(document.completionPercentage.formatted(.percent)) reviewed, last modified \(dateString)", comment: "VoiceOver label for a project card: emoji, name, page count, percent reviewed, last-modified date")
     }
 
     // MARK: - Document Actions
@@ -296,9 +196,6 @@ struct HomeView: View {
 
     private func optimizeImages(for document: Document) {
         guard !isOptimizing else { return }
-
-        let documentID = document.persistentModelID
-        optimizingDocumentID = documentID
         isOptimizing = true
 
         // Gather image data from pages on main actor
@@ -332,7 +229,6 @@ struct HomeView: View {
             try? modelContext.save()
 
             isOptimizing = false
-            optimizingDocumentID = nil
         }
     }
 
@@ -359,8 +255,6 @@ struct HomeView: View {
             prepared = try await pipeline.prepare(urls: urls, optimizeImages: optimizeImagesOnImport) { estimatedPageCount in
                 // Announce immediately if we have content to process
                 if estimatedPageCount > 0 {
-                    hasAnnouncedHalfway = false
-                    processingPageCount = estimatedPageCount
                     AccessibilityNotification.Announcement(String(localized: "Processing \(estimatedPageCount) pages. This will take a few moments.")).post()
                 }
             }
@@ -401,8 +295,6 @@ struct HomeView: View {
         }
 
         // Announce processing start before document card appears
-        hasAnnouncedHalfway = false
-        processingPageCount = images.count
         AccessibilityNotification.Announcement(String(localized: "Processing \(images.count) pages. This will take a few moments.")).post()
 
         await startOCRProcessing(images: images, documentName: ProjectImportPipeline.defaultProjectName())
@@ -439,6 +331,163 @@ struct HomeView: View {
     private func presentError(_ error: Error) {
         importError = error
         showingError = true
+    }
+}
+
+// MARK: - Empty State
+
+struct HomeEmptyState: View {
+    var body: some View {
+        ContentUnavailableView {
+            Label("No Projects", systemImage: "document.viewfinder")
+        } description: {
+            Text("Choose the + button in the toolbar to start a project from your photos or files.")
+        }
+    }
+}
+
+// MARK: - Projects Grid
+
+struct DocumentsGrid: View {
+    let documents: [Document]
+    let columns: [GridItem]
+    let isPreparingImport: Bool
+    let onSelect: (Document) -> Void
+    let onDelete: (Document) -> Void
+    let onOptimize: (Document) -> Void
+
+    var body: some View {
+        ScrollView {
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
+                if isPreparingImport {
+                    NewProjectPlaceholderCard()
+                }
+                ForEach(documents) { document in
+                    DocumentGridItem(
+                        document: document,
+                        onSelect: onSelect,
+                        onDelete: onDelete,
+                        onOptimize: onOptimize
+                    )
+                }
+            }
+            .padding()
+        }
+    }
+}
+
+struct DocumentGridItem: View {
+    let document: Document
+    let onSelect: (Document) -> Void
+    let onDelete: (Document) -> Void
+    let onOptimize: (Document) -> Void
+
+    private let pipeline = ProjectImportPipeline.shared
+
+    var body: some View {
+        let isProcessing = pipeline.processingDocumentIDs.contains(document.persistentModelID)
+
+        DocumentCard(
+            document: document,
+            isProcessing: isProcessing,
+            ocrProgress: isProcessing ? pipeline.progress : 0,
+            onOpen: { onSelect(document) },
+            onDelete: { onDelete(document) },
+            onOptimize: { onOptimize(document) }
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityHint(isProcessing ? "Processing in progress" : "Activate to open project")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction(.default) {
+            guard !isProcessing else { return }
+            onSelect(document)
+        }
+    }
+
+    private var accessibilityLabel: String {
+        let emoji = document.emoji ?? ""
+        let emojiPrefix = emoji.isEmpty ? "" : "\(emoji), "
+        let pageCount = document.totalPages == 1
+            ? String(localized: "1 page")
+            : String(localized: "\(document.totalPages) pages")
+        let dateString = document.lastModifiedDate.formatted(date: .abbreviated, time: .shortened)
+
+        return String(localized: "\(emojiPrefix)\(document.name), \(pageCount), \(document.completionPercentage.formatted(.percent)) reviewed, last modified \(dateString)", comment: "VoiceOver label for a project card: emoji, name, page count, percent reviewed, last-modified date")
+    }
+}
+
+struct NewProjectPlaceholderCard: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.gray.opacity(0.1))
+
+                ProgressView()
+                    .controlSize(.large)
+            }
+            .aspectRatio(8.5/11, contentMode: .fit)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+
+            Text("New Project")
+                .font(.headline)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+        }
+        .frame(maxHeight: .infinity, alignment: .top)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Preparing new project")
+    }
+}
+
+// MARK: - Toolbar
+
+struct AddProjectMenu: View {
+    let isPreparingImport: Bool
+    let onImportFromPhotos: () -> Void
+    let onImportFromFiles: () -> Void
+
+    var body: some View {
+        Menu {
+            Button("Import from Photos…", systemImage: "photo.on.rectangle") {
+                onImportFromPhotos()
+            }
+            Button("Import from Files…", systemImage: "folder") {
+                onImportFromFiles()
+            }
+        } label: {
+            Label("Start Project", systemImage: "plus")
+                .labelStyle(.iconOnly)
+        }
+        .menuIndicator(.hidden)
+        .disabled(isPreparingImport)
+        .help(isPreparingImport ? "Preparing import" : "Start a new project")
+        .accessibilityLabel(isPreparingImport ? "Preparing import" : "Start Project")
+        .accessibilityHint(isPreparingImport ? "Import in progress" : "Start a project using imported images from your photos or files")
+    }
+}
+
+// MARK: - Accessibility Side Effects
+
+/// Isolates the read of `pipeline.progress`
+private struct OCRProgressAnnouncer: ViewModifier {
+    private let pipeline = ProjectImportPipeline.shared
+    @State private var hasAnnouncedHalfway = false
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: pipeline.progress) { oldValue, newValue in
+                // Progress dropping means a new import started — re-arm.
+                if newValue < oldValue {
+                    hasAnnouncedHalfway = false
+                }
+                // Announce when progress crosses 50%
+                if !hasAnnouncedHalfway && oldValue < 0.5 && newValue >= 0.5 {
+                    hasAnnouncedHalfway = true
+                    AccessibilityNotification.Announcement(String(localized: "Processing is \(50.formatted(.percent)) done.", comment: "VoiceOver announcement when OCR progress passes the halfway point")).post()
+                }
+            }
     }
 }
 

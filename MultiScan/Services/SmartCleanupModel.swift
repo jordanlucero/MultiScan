@@ -85,18 +85,26 @@ final class SmartCleanupModel {
         // Collect fingerprints here (cheap — stored columns only) so the freshness check can run alongside the decode off the main actor. Suggesting removals from a cache that diverged from the pages would delete text the user never sees.
         let fingerprints = TextExportCacheService.fingerprints(of: document)
 
-        let options = await Task.detached(priority: .userInitiated) {
-            guard let cache = TextExportCacheService.decodeCache(from: cacheData),
-                  TextExportCacheService.isFresh(cache, against: fingerprints) else {
-                return [TextManipulationService.CleanupOption]()
-            }
-            let result = TextManipulationService.analyzeForSmartCleanup(cache: cache)
-            return TextManipulationService.buildOptions(from: result, forPageNumber: pageNumber)
-        }.value
+        let options = await Self.computeOptions(cacheData: cacheData, fingerprints: fingerprints, pageNumber: pageNumber)
 
         guard !Task.isCancelled else { return }
         self.options = options
         isAnalyzing = false
+    }
+
+    /// Decodes the cache and runs detection on the cooperative pool.
+    @concurrent
+    private nonisolated static func computeOptions(
+        cacheData: Data,
+        fingerprints: [Int: Date],
+        pageNumber: Int
+    ) async -> [TextManipulationService.CleanupOption] {
+        guard let cache = TextExportCacheService.decodeCache(from: cacheData),
+              TextExportCacheService.isFresh(cache, against: fingerprints) else {
+            return []
+        }
+        let result = TextManipulationService.analyzeForSmartCleanup(cache: cache)
+        return TextManipulationService.buildOptions(from: result, forPageNumber: pageNumber)
     }
 
     // MARK: - Applying options

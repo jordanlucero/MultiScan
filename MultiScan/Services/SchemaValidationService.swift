@@ -39,36 +39,12 @@ enum SchemaValidationService {
     ///
     /// - Returns: Result indicating compatibility status
     static func checkPreLoadCompatibility() -> PreLoadCheckResult {
-        let defaults = UserDefaults.standard
-        let storedVersion = defaults.integer(forKey: SchemaVersioning.userDefaultsKey)
-        let hasLaunchedBefore = defaults.bool(forKey: SchemaVersioning.freshInstallKey)
-
-        // If no stored version and never launched, it's a fresh install
-        if storedVersion == 0 && !hasLaunchedBefore {
-            return .compatible // Fresh install, no existing data
-        }
-
-        // If no stored version but has launched before, it's legacy data
-        if storedVersion == 0 && hasLaunchedBefore {
-            return .unknownLegacy // Pre-versioning data, run extra validation
-        }
-
-        // Check if data is from a newer app version
+        let storedVersion = UserDefaults.standard.integer(forKey: SchemaVersioning.userDefaultsKey)
+        // 0 means a fresh install or pre-versioning data; both load normally and rely on the post-load integrity pass.
         if storedVersion > SchemaVersioning.currentVersion {
             return .newerThanApp(storedVersion: storedVersion)
         }
-
-        // Check if data is too old
-        if storedVersion < SchemaVersioning.minimumSupportedVersion {
-            return .tooOld(storedVersion: storedVersion)
-        }
-
         return .compatible
-    }
-
-    /// Records that the app has launched before (for fresh install detection).
-    static func markHasLaunched() {
-        UserDefaults.standard.set(true, forKey: SchemaVersioning.freshInstallKey)
     }
 
     /// Records the current schema version after successful container load.
@@ -368,7 +344,6 @@ enum SchemaValidationService {
 
         // Also clear UserDefaults versioning
         UserDefaults.standard.removeObject(forKey: SchemaVersioning.userDefaultsKey)
-        // Keep freshInstallKey set - this is no longer a fresh install
 
         return success
     }
@@ -380,19 +355,9 @@ enum SchemaValidationService {
 struct ValidationResult {
     let issues: [IntegrityIssue]
 
-    /// Whether there are issues that require user action.
-    var hasCriticalIssues: Bool {
-        issues.contains { $0.isCritical }
-    }
-
     /// Whether there are minor issues that can be auto-fixed.
     var hasMinorIssues: Bool {
         issues.contains { !$0.isCritical }
-    }
-
-    /// Whether the data passed all validation checks.
-    var isClean: Bool {
-        issues.isEmpty
     }
 }
 

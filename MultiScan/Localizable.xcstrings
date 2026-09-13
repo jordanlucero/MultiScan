@@ -975,26 +975,6 @@
         }
       }
     },
-    "Could not access the selected folder" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No se pudo acceder a la carpeta seleccionada"
-          }
-        }
-      }
-    },
-    "Could not convert image for processing" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No se pudo convertir la imagen para procesarla"
-          }
-        }
-      }
-    },
     "Could not load image file" : {
       "localizations" : {
         "es-419" : {
@@ -1088,26 +1068,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Datos de la versión: %1$lld, Compatible: %2$lld"
-          }
-        }
-      }
-    },
-    "Data integrity issues: %@" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Problemas de integridad de datos: %@"
-          }
-        }
-      }
-    },
-    "Database corrupted: %@" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Base de datos dañada: %@"
           }
         }
       }
@@ -3528,16 +3488,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Esto eliminará permanentemente la página de su proyecto. Esta acción no se puede deshacer."
-          }
-        }
-      }
-    },
-    "Try Again" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Intentar de nuevo"
           }
         }
       }

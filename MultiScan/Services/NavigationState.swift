@@ -2,46 +2,51 @@ import Foundation
 import SwiftUI
 import SwiftData
 
+/// Per-review-view navigation state.
+///
+/// `@Observable` rather than `ObservableObject`: observation is tracked per
+/// property, so a view that reads only `pageOrderVersion` no longer re-renders
+/// when `currentPageNumber` changes. Note that the macro tracks *every* stored
+/// property — under `@Published` the ordering arrays below were silently
+/// untracked, so mutating them didn't invalidate views reading `hasNext`.
 @MainActor
-class NavigationState: ObservableObject {
-    @Published var isRandomized: Bool = false
-    @Published var selectedDocument: Document?
+@Observable
+final class NavigationState {
+    var isRandomized: Bool = false
+    var selectedDocument: Document?
 
     // Sequential mode: index into originalOrder
-    @Published private var sequentialIndex: Int = 0
+    private var sequentialIndex: Int = 0
 
     // Shuffled mode: history-based navigation
     private var shuffledOrder: [Int] = []
     private var visitHistory: [Int] = []  // Page numbers in order visited
-    @Published private var historyIndex: Int = -1    // Current position in visitHistory
+    private var historyIndex: Int = -1    // Current position in visitHistory
 
     private var originalOrder: [Int] = []
 
     // MARK: - Filter State (synced from ThumbnailSidebar)
 
     /// Current status filter (synced from ThumbnailSidebar)
-    @Published var activeStatusFilter: PageFilterOption = .all
+    var activeStatusFilter: PageFilterOption = .all
 
     /// Current text search query (synced from ThumbnailSidebar)
-    @Published var activeSearchText: String = ""
+    var activeSearchText: String = ""
 
-    /// Navigation settings for filter-aware behavior
-    let navigationSettings = NavigationSettings()
+    /// Navigation settings for filter-aware behavior. Shared with the Settings UI,
+    /// so toggling filter-aware navigation takes effect immediately.
+    let navigationSettings = NavigationSettings.shared
 
     /// The window's undo manager, wired in by ReviewView/CompactReviewView so page
     /// order changes can register undo (⌘Z). Weak: the window owns its undo manager.
-    weak var undoManager: UndoManager?
+    /// Not observed — no view reads it during `body`.
+    @ObservationIgnored weak var undoManager: UndoManager?
 
-    // Published for view observation - updated whenever navigation changes
-    @Published private(set) var currentPageNumber: Int?
-
-    // MARK: - Full Document Text Cache (for TTS, accessibility, search)
-
-    /// Plain text version of the entire document for TTS and search
-    @Published private(set) var fullDocumentPlainText: String = ""
+    /// Updated whenever navigation changes
+    private(set) var currentPageNumber: Int?
 
     /// Version counter that increments when page order changes, used to trigger view updates
-    @Published private(set) var pageOrderVersion: Int = 0
+    private(set) var pageOrderVersion: Int = 0
 
     // MARK: - Current Page
 
@@ -137,9 +142,6 @@ class NavigationState: ObservableObject {
         }
 
         updateCurrentPageNumber()
-
-        // Build the full document text cache for TTS/accessibility/search
-        rebuildTextCache()
     }
 
     // MARK: - Navigation
@@ -563,41 +565,11 @@ class NavigationState: ObservableObject {
         selectedDocument?.unwrappedPages.count ?? 0
     }
 
-    var progress: Double {
-        guard totalPageCount > 0 else { return 0 }
-        return Double(donePageCount) / Double(totalPageCount)
-    }
-
-    // MARK: - Text Cache
-
-    /// Rebuilds the full document text cache from all pages
-    func rebuildTextCache() {
-        guard let document = selectedDocument else {
-            fullDocumentPlainText = ""
-            return
-        }
-
-        let sortedPages = document.unwrappedPages.sorted { $0.pageNumber < $1.pageNumber }
-
-        // Build plain text version (for TTS, search, accessibility).
-        // Prefer the export cache (one external-storage read) over decoding N pages.
-        if let cache = TextExportCacheService.loadFreshCache(from: document) {
-            fullDocumentPlainText = cache.pages
-                .sorted { $0.pageNumber < $1.pageNumber }
-                .map { $0.plainText }
-                .joined(separator: "\n\n")
-        } else {
-            fullDocumentPlainText = sortedPages.map { $0.plainText }.joined(separator: "\n\n")
-        }
-    }
-
-    /// Refreshes page ordering arrays after pages have been reordered
-    /// Call this after swapping page numbers to ensure navigation stays consistent
+    /// Refreshes the page ordering arrays after pages were added, removed, or renumbered.
     func refreshPageOrder() {
         guard let document = selectedDocument else { return }
         originalOrder = document.unwrappedPages.map { $0.pageNumber }.sorted()
         shuffledOrder = originalOrder.shuffled()
-        rebuildTextCache()
         pageOrderVersion += 1
     }
 }

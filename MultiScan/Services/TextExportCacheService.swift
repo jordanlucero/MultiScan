@@ -184,37 +184,7 @@ enum TextExportCacheService {
 
     // MARK: - Single Page Updates
 
-    /// Updates a single page's entry in the cache.
-    ///
-    /// Call this after `page.attributedText` has been modified and saved.
-    ///
-    /// - Parameters:
-    ///   - page: The page that was updated (with text already loaded)
-    ///   - document: The document containing the cache
-    static func updateEntry(for page: Page, in document: Document) {
-        guard var cache = loadCache(from: document) else {
-            // No cache exists - build one (fallback)
-            rebuildCache(for: document)
-            return
-        }
-
-        let newEntry = PageCacheEntry(from: page)
-
-        if let index = cache.pages.firstIndex(where: { $0.pageNumber == page.pageNumber }) {
-            // Update existing entry
-            cache.pages[index] = newEntry
-        } else {
-            // Entry doesn't exist - add it and sort
-            cache.pages.append(newEntry)
-            cache.pages.sort { $0.pageNumber < $1.pageNumber }
-        }
-
-        saveCache(cache, to: document)
-    }
-
-    /// Updates a page's entry using an attributed string that's already in memory.
-    ///
-    /// Use this variant when you have the text available but don't want to access `page.attributedText` (which might trigger an external storage load).
+    /// Updates a page's entry using an attributed string that's already in memory (so the page's external storage is never faulted in).
     ///
     /// - Parameters:
     ///   - pageNumber: The page number to update
@@ -317,32 +287,7 @@ enum TextExportCacheService {
 
     // MARK: - Page Reordering
 
-    /// Swaps page numbers for two entries (used when moving pages up/down).
-    ///
-    /// Call this after swapping pageNumber values on two Page models.
-    ///
-    /// - Parameters:
-    ///   - pageNumber1: First page number involved in the swap
-    ///   - pageNumber2: Second page number involved in the swap
-    ///   - document: The document containing the cache
-    static func swapPageNumbers(_ pageNumber1: Int, _ pageNumber2: Int, in document: Document) {
-        guard var cache = loadCache(from: document) else { return }
-
-        guard let index1 = cache.pages.firstIndex(where: { $0.pageNumber == pageNumber1 }),
-              let index2 = cache.pages.firstIndex(where: { $0.pageNumber == pageNumber2 }) else {
-            return
-        }
-
-        cache.pages[index1] = cache.pages[index1].renumbered(to: pageNumber2)
-        cache.pages[index2] = cache.pages[index2].renumbered(to: pageNumber1)
-
-        // Re-sort by page number
-        cache.pages.sort { $0.pageNumber < $1.pageNumber }
-
-        saveCache(cache, to: document)
-    }
-
-    /// Renumbers entries after a drag reorder using an old → new page number mapping.
+    /// Renumbers entries after a reorder using an old → new page number mapping.
     ///
     /// Call this after reassigning `pageNumber` on the Page models. Entries are renumbered with raw-field copies (no decode/encode) in a single cache write.
     ///
@@ -398,7 +343,7 @@ enum TextExportCacheService {
     ///
     /// - Parameter rebuildIfStale: rebuild from the source pages (N external-storage reads) when the cache is missing or diverged, rather than returning nil. Pass `true` only where there is no cheaper fallback.
     static func loadFreshCache(from document: Document, rebuildIfStale: Bool = false) -> TextExportCache? {
-        if let cache = loadCache(from: document), isFresh(cache, for: document) {
+        if let cache = loadCache(from: document), isFresh(cache, against: fingerprints(of: document)) {
             return cache
         }
         guard rebuildIfStale else { return nil }
@@ -430,20 +375,7 @@ enum TextExportCacheService {
         return true
     }
 
-    /// `isFresh(_:against:)` for a document on the main actor.
-    static func isFresh(_ cache: TextExportCache, for document: Document) -> Bool {
-        isFresh(cache, against: fingerprints(of: document))
-    }
-
-    /// Checks if a usable, current cache exists for the document.
-    ///
-    /// - Parameter document: The document to check
-    /// - Returns: True if a valid, current-version cache exists that matches the pages
-    static func hasValidCache(for document: Document) -> Bool {
-        loadFreshCache(from: document) != nil
-    }
-
-    // MARK: - Private Helpers
+    // MARK: - Saving
 
     /// Encodes and saves the cache to the document.
     /// Internal access for batch operations (e.g., Smart Cleanup) that modify multiple entries.

@@ -1,4 +1,4 @@
-// remove?
+//
 //  SchemaVersioning.swift
 //  MultiScan
 //
@@ -70,12 +70,6 @@ enum SchemaVersioning {
     /// it), so they must be gated behind the "Update Required" flow.
     static let currentVersion = 2
 
-    /// Minimum schema version this app can read.
-    ///
-    /// Data from versions below this cannot be loaded and requires reset.
-    /// In practice, this should rarely change - prefer self-healing over rejection.
-    static let minimumSupportedVersion = 1
-
     // ────────────────────────────────────────────────────────────────────────
     // MARK: Storage Keys
     // ────────────────────────────────────────────────────────────────────────
@@ -85,11 +79,6 @@ enum SchemaVersioning {
     /// This is checked BEFORE attempting to load the ModelContainer, allowing
     /// us to warn the user before potentially crashing on incompatible data.
     static let userDefaultsKey = "multiScanSchemaVersion"
-
-    /// UserDefaults key for tracking if this is a fresh install.
-    ///
-    /// Fresh installs don't need version warnings even if UserDefaults has no version.
-    static let freshInstallKey = "multiScanHasLaunchedBefore"
 
     // ────────────────────────────────────────────────────────────────────────
     // MARK: iCloud Sync Setting
@@ -210,60 +199,17 @@ final class SchemaMetadata {
 
 /// Result of checking schema compatibility before loading the container.
 enum PreLoadCheckResult {
-    /// Data is compatible with this app version.
+    /// Data is compatible with this app version (including fresh installs and pre-versioning data, which the post-load integrity pass covers).
     case compatible
 
-    /// No version information found - either fresh install or legacy data.
-    /// Proceed with caution and run integrity validation after load.
-    case unknownLegacy
-
-    /// Data was written by a newer app version.
-    /// User should be warned and offered options.
+    /// Data was written by a newer app version. The user is shown the "Update Required" screen.
     case newerThanApp(storedVersion: Int)
-
-    /// Data is too old to be supported by this app version.
-    /// This should be rare - we prefer self-healing over rejection.
-    case tooOld(storedVersion: Int)
-}
-
-// MARK: - Container State
-
-/// Represents the state of the ModelContainer during app initialization.
-///
-/// Used by MultiScanApp to manage the loading flow and show appropriate UI.
-enum ContainerState: Sendable {
-    /// Container is being created. Show loading indicator.
-    case loading
-
-    /// Container loaded successfully. Proceed to normal app UI.
-    case ready(ModelContainer)
-
-    /// Container failed to load. Show recovery UI with options.
-    case failed(ContainerLoadError)
-
-    /// Data is incompatible with this app version. Show warning.
-    case incompatible(IncompatibilityReason)
-}
-
-/// Reasons why data might be incompatible with the current app version.
-enum IncompatibilityReason: Sendable {
-    /// Data was written by a newer app version (CloudKit sync from updated device).
-    case newerData(version: Int)
-
-    /// Data is too old to be supported.
-    case legacyData(version: Int)
 }
 
 /// Errors that can occur during container loading.
 enum ContainerLoadError: Error, Sendable {
     /// The ModelContainer failed to initialize.
     case containerCreationFailed(String)
-
-    /// Critical data integrity issues were found that couldn't be auto-fixed.
-    case criticalIntegrityIssues([String])
-
-    /// The database file is corrupted or unreadable.
-    case databaseCorrupted(String)
 }
 
 extension ContainerLoadError: LocalizedError {
@@ -271,10 +217,6 @@ extension ContainerLoadError: LocalizedError {
         switch self {
         case .containerCreationFailed(let message):
             return String(localized: "Failed to load data: \(message)")
-        case .criticalIntegrityIssues(let issues):
-            return String(localized: "Data integrity issues: \(issues.joined(separator: ", "))")
-        case .databaseCorrupted(let message):
-            return String(localized: "Database corrupted: \(message)")
         }
     }
 }

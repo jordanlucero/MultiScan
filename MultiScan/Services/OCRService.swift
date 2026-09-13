@@ -20,17 +20,12 @@ struct ProcessedImage {
 }
 
 /// OCR service for processing images and extracting text.
-/// MainActor-isolated because it manages @Published UI state (progress, status) observed by SwiftUI.
-/// Heavy work (thumbnail generation, Vision OCR) is nonisolated to avoid blocking the main thread.
+/// MainActor-isolated because it reports progress to UI state.
+/// Heavy work (thumbnail generation, Vision OCR) runs `@concurrent`, off the main actor.
 @MainActor
-final class OCRService: ObservableObject {
-    @Published var isProcessing = false
-    @Published var progress: Double = 0
-    @Published var currentFile: String = ""
-    @Published var error: Error?
-
-    /// Called on the main actor whenever `progress`/`currentFile` change (for `@Observable` owners).
-    var progressHandler: (@MainActor (Double, String) -> Void)?
+final class OCRService {
+    /// Called on the main actor whenever progress changes (0…1).
+    var progressHandler: (@MainActor (Double) -> Void)?
 
     /// Process multiple images from Data
     /// - Parameters:
@@ -38,42 +33,25 @@ final class OCRService: ObservableObject {
     ///   - startingPageNumber: The page number to start from (default 1 for new documents)
     /// - Returns: Array of ProcessedImage results
     func processImages(_ images: [(data: Data, fileName: String)], startingPageNumber: Int = 1) async throws -> [ProcessedImage] {
-        isProcessing = true
-        progress = 0
-        currentFile = ""
-
-        defer {
-            isProcessing = false
-            currentFile = ""
-        }
-
         var results: [ProcessedImage] = []
         let imageCount = max(images.count, 1)
+        progressHandler?(0)
 
         for (index, image) in images.enumerated() {
             try Task.checkCancellation()
 
-            currentFile = image.fileName
-            progress = Double(index) / Double(imageCount)
-            progressHandler?(progress, currentFile)
-
-            let processed = try await Task.detached(priority: .utility) {
-                try await self.processImageData(image.data, fileName: image.fileName, pageNumber: startingPageNumber + index)
-            }.value
+            let processed = try await processImageData(image.data, fileName: image.fileName, pageNumber: startingPageNumber + index)
             results.append(processed)
 
-            progress = Double(index + 1) / Double(imageCount)
-            progressHandler?(progress, currentFile)
+            progressHandler?(Double(index + 1) / Double(imageCount))
         }
 
-        progress = 1.0
-        currentFile = ""
-        progressHandler?(progress, currentFile)
-
+        progressHandler?(1.0)
         return results
     }
 
-    /// Process a single image from Data (runs off MainActor to avoid blocking UI)
+    /// Process a single image from Data. `@concurrent` moves the decode, thumbnail, and Vision work onto the cooperative pool so the main actor stays free.
+    @concurrent
     private nonisolated func processImageData(_ data: Data, fileName: String, pageNumber: Int) async throws -> ProcessedImage {
         guard let imageSource = CGImageSourceCreateWithData(data as CFData, nil),
               let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else {
@@ -168,18 +146,12 @@ final class OCRService: ObservableObject {
 }
 
 enum OCRError: LocalizedError {
-    case folderAccessError
     case imageLoadError
-    case imageConversionError
 
     var errorDescription: String? {
         switch self {
-        case .folderAccessError:
-            return String(localized: "Could not access the selected folder")
         case .imageLoadError:
             return String(localized: "Could not load image file")
-        case .imageConversionError:
-            return String(localized: "Could not convert image for processing")
         }
     }
 }

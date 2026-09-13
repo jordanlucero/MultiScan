@@ -18,14 +18,15 @@ MultiScan is a multiplatform SwiftUI application (macOS, iOS, iPadOS) that uses 
 
 ### Core Components
 
-1. **MultiScanApp.swift**: Entry point, configures SwiftData model container
+1. **MultiScanApp.swift**: Entry point — the `FocusedValues` entries, the scene tree (main window, macOS Settings window), and the post-load maintenance hook. Deliberately small; the menu bar lives in **MultiScanCommands.swift** (`struct MultiScanCommands: Commands`) and the settings panes in **Views/SettingsView.swift**
 2. **HomeView.swift**: Document list with creation/import functionality
 3. **ReviewView.swift**: Main document editing UI with NavigationSplitView (macOS + iPad regular size class)
 4. **CompactReviewView.swift**: iPhone document editing UI (iOS-only file)
 5. **Models.swift**: SwiftData models (`Document`, `Page`)
 6. **Views/TextKit/**: The TextKit 2 text engine — platform text views, SwiftUI representables, and the page editing controller (see "TextKit 2 Text Engine")
 7. **AppIntents/**: App Intents entities, queries, intents, and App Shortcuts (see "App Intents & Spotlight")
-8. **Services/AppModelContainer.swift / ProjectStore.swift / SpotlightIndexer.swift / AppRouter.swift / ProjectImportPipeline.swift**: process-wide container, read-side model actor, Spotlight reconciler, deep-link router, shared import→OCR pipeline
+8. **Services/AppModelContainer.swift / ProjectStore.swift / SpotlightIndexer.swift / AppRouter.swift / ProjectImportPipeline.swift**: process-wide container (+ post-load maintenance), read-side model actor, Spotlight reconciler, deep-link router, shared import→OCR pipeline
+9. **Services/ExportSettings.swift / NavigationSettings.swift**: `@Observable` UserDefaults-backed preference objects
 
 ### Data Models
 - **Document**: Container for pages with metadata (name, emoji, storage size). Uses optional `pages` relationship with `unwrappedPages` accessor for CloudKit compatibility.
@@ -36,7 +37,12 @@ MultiScan is a multiplatform SwiftUI application (macOS, iOS, iPadOS) that uses 
 - SwiftData `@Model` classes for persistence
 - `@Query` property wrapper for reactive data fetching
 - `modelContext` from environment for CRUD operations
-- `NavigationState` (`ObservableObject`, one per review view) for page navigation state; `AppRouter` (`@Observable`, one per process) for app-level navigation requests (deep links, search)
+- `NavigationState` (`@Observable`, one per review view) for page navigation state; `AppRouter` (`@Observable`, one per process) for app-level navigation requests (deep links, search)
+- **All observation is `@Observable`** — there is no `ObservableObject`/`@Published`/`@ObservedObject`/`@StateObject` anywhere in the project, and none should be reintroduced. Owners use `@State`, consumers take a plain `let`, and two-way access uses `@Bindable`/`Bindable(_:)`.
+- `NavigationSettings.shared` is a **single** app-wide instance (the initializer is private). It caches its values in stored properties and only writes through to UserDefaults, so separate instances would silently diverge until relaunch — `NavigationState` and the Settings UI both use `.shared`.
+- **`NavigationState.currentPageNumber` is the only copy of the current page.** The thumbnail sidebar, page grid, rotors, and deep links all read it / call `goToPage`; there is no mirrored `selectedPageNumber` `@State` in the review views (there used to be, kept in sync by `onChange` handlers in both directions). Likewise `ReviewView`'s split-view `columnVisibility` is a `Binding` derived from `@AppStorage("showThumbnails")`, not a second piece of state.
+- `ContentView` gives the review view `.id(document.persistentModelID)`, so a deep link that switches straight from one open project to another gets fresh `@State` (navigation, controllers) for the new document.
+- **`FocusedValues` entries use `@Entry`** (`MultiScanApp.swift`) — the macro synthesizes the key type and accessors. Don't reintroduce hand-written `FocusedValueKey` conformances. Every entry must be `Optional` with no initializer, since a focused value always defaults to `nil`.
 
 ## Development Commands
 
@@ -109,7 +115,7 @@ CompactReviewView presents the text sheet with `interactiveDismissDisabled()` an
 | `ExportPanelView` | Two-pane HStack (preview left, options right), radio-group picker | Vertical NavigationStack sheet (preview top, options below), segmented picker, share/dismiss in the nav bar |
 | `HomeView` | Bare content in the window toolbar | Wrapped in NavigationStack, "MultiScan" title, gear (Settings) + plus toolbar; grid is fixed 2 columns on iPhone portrait, adaptive otherwise |
 | `DocumentCard` | Double-click opens | Single tap opens |
-| Settings | Custom Settings `Window` scene (workaround) | `SettingsSheetView` sheet from the Home gear button → Import & Storage / Viewer panes (defined in the iOS branch of MultiScanApp.swift) |
+| Settings | Custom Settings `Window` scene (workaround) | `SettingsSheetView` sheet from the Home gear button → Import & Storage / Viewer panes. All in `Views/SettingsView.swift`; the two panes are shared across platforms |
 
 ### ⚠️ Text Formatting on iOS — Do Not "Fix"
 
@@ -252,7 +258,7 @@ Reasoning:
 - Setting stored in UserDefaults (`SchemaVersioning.iCloudSyncEnabledKey`)
 - Checked at container creation time
 - **Requires app restart to change** - SwiftData's `cloudKitDatabase` is configured once
-- Toggle shows confirmation alert and quits app when changed
+- Toggle shows a confirmation alert; on macOS confirming quits the app (`NSApp.terminate`), on iOS the alert asks the user to relaunch
 
 **What happens when toggled:**
 - **ON → OFF**: Projects stay on device, stop syncing with other devices
@@ -279,7 +285,7 @@ The app tracks schema versions to gracefully handle data incompatibilities and p
 - `Services/SchemaValidationService.swift`: Pre/post-load validation, integrity checks, self-healing
 - `Views/SchemaRecoveryView.swift`: Recovery UI for failures/incompatibilities
 
-### Container Load Flow (`MultiScanApp.swift`)
+### Container Load Flow (`AppModelContainer.swift`, driven from `MultiScanApp.swift`)
 
 ```
 1. Pre-load check (UserDefaults)
@@ -290,7 +296,7 @@ The app tracks schema versions to gracefully handle data incompatibilities and p
    ├─ Success → Continue
    └─ Failure → Show Recovery UI (don't crash!)
 
-3. Post-load validation (.task {})
+3. Post-load validation (AppModelContainer.performPostLoadMaintenance, from the root view's .task)
    ├─ Check SchemaMetadata for CloudKit sync from newer version
    ├─ Run integrity validation (totalPages, pageNumbers, orphans)
    ├─ Self-heal minor issues automatically
@@ -346,9 +352,11 @@ After bumping:
 ### Recovery UI
 
 When container loading fails or data is incompatible, `SchemaRecoveryView` offers:
-- **Try Again**: Retry loading (for transient issues)
-- **Reset All Data**: Delete database and start fresh (with confirmation)
+- **Open App Store** (incompatible data only): the way out is updating the app
+- **Reset All Data**: Delete database and start fresh (with confirmation); the user relaunches afterwards
 - **Report Issue**: Link to GitHub issues
+
+There is no "Try Again": the container is a `static let` created once per process, so an in-process retry can't do anything.
 
 ## Adding New Features
 
@@ -608,17 +616,9 @@ The `.system` domain has **no entity schemas**, so the entities are plain `AppEn
 ### Debug aid
 Launching a DEBUG build with `-seedSampleProject` inserts a text-only sample project when the store is empty and logs a search self-test (`DebugSampleData`).
 
-## Full Document Text Cache
-
-The `NavigationState` class maintains `fullDocumentPlainText: String` (for TTS/search/FocusedValues). It is built from the text export cache when valid (one external-storage read) and falls back to per-page decodes otherwise. The old `fullDocumentAttributedText` was removed — nothing consumed it.
-
-### Cache Invalidation
-The cache is rebuilt when:
-- Document selection changes (via `setupNavigation(for:)`)
-- Call `rebuildTextCache()` manually after page text edits
+## Accessibility & Search
 
 ### Accessibility Integration
-- `fullDocumentPlainText` available via `FocusedValues` for app-level access
 - The TextKit 2 editor is a real NSTextView/UITextView, so system text accessibility (VoiceOver text navigation, macOS Edit ▸ Speech, dictation, Voice Control) works natively
 - **Dynamic Type (iOS)**: attributed strings carry explicit fonts, so they don't rescale automatically. `PageTextView` registers for `UITraitPreferredContentSizeCategory` changes and `PageTextController.dynamicTypeDidChange()` re-normalizes the live content to the new body size (display-only — storage strips sizes, so this never dirties the document)
 - **⚠️ Pending on-device verification**: the SwiftUI accessibility custom actions on `PageTextEditor` ("Exit text editor", next/previous page) haven't been VoiceOver-tested since the TextKit 2 migration — actions attached to a representable may not surface on the wrapped text view's accessibility element. Fallback if missing: `accessibilityCustomActions` on `PageTextView`
@@ -641,7 +641,6 @@ var increaseBlackPoint: Bool = false // CIColorControls brightness -0.1 (viewer)
 Cross-platform image loading that combines EXIF orientation with user rotation:
 - `from(data:userRotation:)` - Creates SwiftUI Image with combined orientation (thumbnails)
 - `processedCGImage(from:userRotation:increaseContrast:increaseBlackPoint:)` - CGImage with rotation + adjustments baked in via CIFilter (main viewer)
-- `dimensions(of:userRotation:)` - Returns apparent dimensions accounting for rotation
 - `combinedOrientation(exif:userRotation:)` - Lookup table merging EXIF + user rotation
 
 ### Main Viewer Pipeline (`ImageViewer` → `ZoomableImageView`)
@@ -745,9 +744,11 @@ Right-click on any thumbnail in `ThumbnailSidebar` shows context menu with:
 | Delete Page… | (none) |
 
 ### FocusedValues for Menu Bar
-- `currentPage: Page?` - Exposed from ReviewView for menu commands
-- `pageTextController: PageTextController?` - Exposed from RichTextSidebar; Format menu (B/I/U/S) and save-before-export go through it
-- Menu commands use `focusedNavigationState` for move/delete operations
+All commands live in `MultiScanCommands` (`MultiScanCommands.swift`) and read the focused window through these entries (declared in `MultiScanApp.swift`):
+- `navigationState: NavigationState?` — the focused review view's model. The current project and page are *derived* from it (`selectedDocument`, `currentPage`); don't add separate `document`/`currentPage` entries.
+- `pageTextController: PageTextController?` — from RichTextSidebar; Format menu (B/I/U/S) and save-before-export go through it
+- `imageZoomController: ImageZoomController?` — from ImageViewer; View ▸ Fit/Zoom
+- `Binding<Bool>?` toggles: `showExportPanel`, `showAddFromPhotos`, `showAddFromFiles`, `showFindNavigator`, `showDeletePageConfirmation` — a command flips the binding, the owning view presents the sheet/dialog. ReviewView provides all of them; CompactReviewView provides `navigationState` + `showDeletePageConfirmation` (⌘⌫ on a hardware keyboard). The "Delete Page N?" dialog itself is the shared `deletePageConfirmation(isPresented:pageNumber:onDelete:)` modifier in `PageMenuControls.swift`, also used by the thumbnail context menu and the iPhone page grid.
 
 ## Text Export Architecture
 
@@ -790,7 +791,7 @@ The cache is one blob on `Document`, but the text it mirrors lives on the `Page`
 
 So each entry records its source page's `lastModified` at write time, and `isFresh(_:against:)` compares every entry against the live pages.
 
-- **Read-side consumers must use `loadFreshCache(from:)`**, never `loadCache(from:)`. Consumers with a cheap fallback (`TextExporter`, `NavigationState.rebuildTextCache`) pass `rebuildIfStale: false` and take the slow path; Smart Cleanup's edit paths pass `rebuildIfStale: true` because there is no alternative source. Off-main consumers (`SmartCleanupModel.analyze`, `ProjectStore`) build `fingerprints(of:)` on their own actor and call the `nonisolated isFresh(_:against:)` after decoding.
+- **Read-side consumers must use `loadFreshCache(from:)`**, never `loadCache(from:)`. Consumers with a cheap fallback (`TextExporter`) pass `rebuildIfStale: false` and take the slow path; Smart Cleanup's edit paths pass `rebuildIfStale: true` because there is no alternative source. Off-main consumers (`SmartCleanupModel.analyze`, `ProjectStore`) build `fingerprints(of:)` on their own actor and call the `nonisolated isFresh(_:against:)` after decoding.
 - **The mutation helpers deliberately keep using the raw `loadCache`.** They run while pages and cache are intentionally out of step (pages already renumbered, cache not yet); a freshness check there would reject a cache that's about to be corrected and force a needless full rebuild.
 - **`pageLastModified` is optional, and `nil` means "unverifiable", not "stale".** Caches written before fingerprinting exist on disk and sync; rejecting them would force an N-external-read rebuild of every document on upgrade. Entries gain fingerprints as pages are written, so the gap closes on its own. Don't "tighten" this into a required field without accepting that cost.
 - Any new `PageCacheEntry` built from a page write must pass the page's `lastModified` **after** the `attributedText` assignment (the setter bumps it). `renumbered(to:)` carries the fingerprint over unchanged — reordering doesn't touch text.
@@ -804,7 +805,7 @@ The cache is updated whenever page data changes:
 | Page text saved | `updateEntry()` | `PageTextController.saveNow()` |
 | Page added to document | `addEntries()` | `ReviewView.addPagesToDocument()` |
 | Page deleted | `removeEntry()` | `NavigationState.deleteCurrentPage()`, `ThumbnailSidebar.deletePage()` |
-| Page reordered | `swapPageNumbers()` | `NavigationState.moveCurrentPageUp/Down()`, `ThumbnailSidebar.movePageUp/Down()` |
+| Page reordered | `renumberEntries()` | `NavigationState.setPageOrder()` (Move Up/Down, drag reorder, undo) |
 
 #### Key Methods
 ```swift
@@ -821,8 +822,8 @@ static func addEntries(for pages: [Page], to document: Document)
 // Remove page entry (call after page deletion)
 static func removeEntry(pageNumber: Int, from document: Document)
 
-// Swap page numbers (call after page reorder)
-static func swapPageNumbers(_ pageNumber1: Int, _ pageNumber2: Int, in document: Document)
+// Renumber entries after a reorder (old → new page number mapping, one write)
+static func renumberEntries(_ newNumbers: [Int: Int], in document: Document)
 
 // Raw load — mutation helpers only (see freshness note above)
 static func loadCache(from document: Document) -> TextExportCache?
@@ -835,7 +836,7 @@ nonisolated static func fingerprints(of document: Document) -> [Int: Date]
 nonisolated static func isFresh(_ cache: TextExportCache, against fingerprints: [Int: Date]) -> Bool
 ```
 
-Renumbering operations (`insertEntries`, `removeEntry`, `swapPageNumbers`) use `PageCacheEntry.renumbered(to:)`, which copies raw fields — no decode/encode. `PageCacheEntry.decodedText()` decodes an entry's RTF for removal operations.
+Renumbering operations (`insertEntries`, `removeEntry`, `renumberEntries`) use `PageCacheEntry.renumbered(to:)`, which copies raw fields — no decode/encode. `PageCacheEntry.decodedText()` decodes an entry's RTF for removal operations.
 
 #### Cache Resilience
 - **Version checking**: Cache includes version number; mismatches (including v1 caches) trigger automatic rebuild
@@ -856,25 +857,14 @@ var includeStatistics: Bool
 **Important**: Uses manual UserDefaults sync with `didSet` (not `@AppStorage`) to ensure `@Observable` reactivity works correctly.
 
 ### TextExporter (`Services/TextExporter.swift`)
-Builds a combined `NSAttributedString` from all pages, returning a `TextExportResult` (`attributedText` for preview + pre-encoded `rtfData`/`plainText` for sharing, exposed as `.richText`). Supports two modes:
-
-1. **Cache-based (preferred)**: Initialize with Document to enable fast single-file load
-2. **Direct page access (fallback)**: Triggers N external storage loads (slow for large docs)
-
-```swift
-// Preferred: Uses cache
-let exporter = TextExporter(document: document, settings: settings)
-
-// Fallback: Direct page loading (slow)
-let exporter = TextExporter(pages: pages, settings: settings)
-```
+Builds a combined `NSAttributedString` from all pages, returning a `TextExportResult` (`attributedText` for preview + pre-encoded `rtfData`/`plainText` for sharing, exposed as `.richText`). `TextExporter(document:settings:)` reads the export cache when it is fresh (one file) and falls back to the pages' raw `richTextData` otherwise (N external-storage reads). The static `buildResult(from:…)` is `@concurrent` so `ProjectStore` (App Intents / Transferable exports) shares the same combine code off the main actor.
 
 ### Export Pipeline (with cache)
 ```
 1. Load document.textExportCache (single file read — fast!)
    → Sendable PageSnapshots (raw RTF bytes + pre-computed stats)
 
-2. Build on background thread (Task.detached)
+2. Build off the main actor (`@concurrent static buildResult`)
    → Decode each page's RTF, append into NSMutableAttributedString — O(n),
      the old SwiftUI AttributedString.append() O(n²) issue is gone
    → RTF-encode the combined result there too
@@ -940,7 +930,6 @@ PDF File → PDFImportService → [HEIC images per page] → OCRService → Page
 
 Key methods:
 ```swift
-static func isPDF(url: URL) -> Bool           // Check if URL is a PDF
 static func pageCount(for url: URL) -> Int    // Quick page count without rendering
 func renderPDF(at url: URL, dpi: CGFloat = 300) async throws -> [(data: Data, fileName: String)]
 ```
@@ -1040,7 +1029,7 @@ Note: Document-wide section header removal was removed (too many false positives
 - Analysis runs after user lingers on a page for **3 seconds** (debounces rapid page flips)
 - Only runs when the Smart Cleanup pane is visible (macOS/iPad); always runs on iPhone (More menu)
 - After a cleanup action, re-analyzes immediately (no 3s delay)
-- Analysis runs **off the MainActor**: the raw cache `Data` is handed to a detached task, decoded via the nonisolated `TextExportCacheService.decodeCache(from:)`, and only the resulting options are applied back on the main actor
+- Analysis runs **off the MainActor**: the raw cache `Data` and page fingerprints go to the `@concurrent` `SmartCleanupModel.computeOptions`, which decodes via the nonisolated `TextExportCacheService.decodeCache(from:)`; only the resulting options come back to the main actor. (Off-main work in this project uses `@concurrent nonisolated` functions rather than `Task.detached`; the one remaining `Task.detached` is the fire-and-forget donation cleanup in `ProjectMaintenance`.)
 
 ### Removal Behavior
 
@@ -1055,7 +1044,7 @@ Note: Document-wide section header removal was removed (too many false positives
 - Removes the entire line containing the header text (including newline)
 - Supports `stripNumbers: true` for matching mixed header+number lines
 
-Both compute a removal range on plain text (`removalRange(forPageNumberToken:in:)` / `lineRemovalRange(matching:in:stripNumbers:)`) and delete it from an `NSMutableAttributedString` — formatting on surrounding text is preserved automatically. In-place (`removePageNumberToken(_:in:)`) and non-mutating (`removingPageNumberToken(_:from:)`) variants exist for each.
+Both compute a removal range on plain text (`removalRange(forPageNumberToken:in:)` / `lineRemovalRange(matching:in:stripNumbers:)`) and delete it from an `NSMutableAttributedString` — formatting on surrounding text is preserved automatically (`removePageNumberToken(_:in:)` / `removeLine(matching:in:stripNumbers:)`, both in place).
 
 - **Current page**: Goes through `PageTextController.performEdit` — applied in the live editor **with undo**, then saved
 - **Other single page**: `RichTextSidebar.applyEdit(toPage:)` decodes the cache entry (no page external-storage load), writes page + cache entry

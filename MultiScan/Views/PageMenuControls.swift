@@ -69,7 +69,7 @@ struct PageAdjustmentToggles: View {
 
 /// Marks the current page reviewed / not reviewed.
 struct PageReviewStatusButton: View {
-    @ObservedObject var navigationState: NavigationState
+    let navigationState: NavigationState
 
     var body: some View {
         let isDone = navigationState.currentPage?.isDone == true
@@ -86,7 +86,7 @@ struct PageReviewStatusButton: View {
 
 /// Switches between sequential and shuffled page order.
 struct PageOrderButton: View {
-    @ObservedObject var navigationState: NavigationState
+    let navigationState: NavigationState
 
     var body: some View {
         let isRandomized = navigationState.isRandomized
@@ -97,6 +97,24 @@ struct PageOrderButton: View {
                 isRandomized ? "Sequential Order" : "Shuffled Order",
                 systemImage: isRandomized ? "shuffle.circle.fill" : "shuffle.circle"
             )
+        }
+    }
+}
+
+// MARK: - Delete
+
+extension View {
+    /// The one "Delete Page N?" confirmation, shared by the thumbnail context menu, the iPhone page grid, and the Edit ▸ Delete Page… command.
+    func deletePageConfirmation(isPresented: Binding<Bool>, pageNumber: Int, onDelete: @escaping () -> Void) -> some View {
+        confirmationDialog(
+            "Delete Page \(pageNumber)?",
+            isPresented: isPresented,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive, action: onDelete)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will permanently delete the page from your project. This cannot be undone.")
         }
     }
 }

@@ -11,7 +11,7 @@ import UniformTypeIdentifiers
 
 struct RichTextSidebar: View {
     let document: Document
-    @ObservedObject var navigationState: NavigationState
+    let navigationState: NavigationState
 
     /// Hides the Statistics and Smart Cleanup panes. Used by the compact (iPhone) layout, where this view is a bottom sheet and those features live in the More menu.
     var hideBottomPanels = false
@@ -32,20 +32,6 @@ struct RichTextSidebar: View {
     /// Accessibility focus state for VoiceOver navigation
     @AccessibilityFocusState private var isHeaderFocused: Bool
 
-    /// Tracks hover state for the page header share button
-    @State private var isPageHeaderHovered = false
-
-    /// Shows a checkmark confirmation after copying page text
-    @State private var showCopyConfirmation = false
-
-    /// Tracks keyboard focus on the share button
-    @FocusState private var isShareButtonFocused: Bool
-
-    /// Whether the share button should be visible (hovered or focused)
-    private var isShareButtonVisible: Bool {
-        isPageHeaderHovered || isShareButtonFocused
-    }
-
     var currentPage: Page? {
         navigationState.currentPage
     }
@@ -55,85 +41,19 @@ struct RichTextSidebar: View {
             // Header with page info and formatting "toolbar"
             VStack(alignment: .leading, spacing: 6) {
                 if let page = currentPage {
-                    Button {
-                        copyCurrentPageText(page)
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text("Page \(page.pageNumber) of \(document.totalPages)")
-                                .font(.headline)
-                                .foregroundStyle(.secondary)
-
-                            Image(systemName: showCopyConfirmation ? "checkmark" : "doc.on.doc")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .contentTransition(.symbolEffect(.replace))
-                                .opacity(showCopyConfirmation || isShareButtonVisible ? 1 : 0)
-                                .animation(.easeInOut(duration: 0.15), value: isShareButtonVisible)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .focusable()
-                    .focused($isShareButtonFocused)
-                    .onHover { hovering in
-                        isPageHeaderHovered = hovering
-                    }
-                    .accessibilityAddTraits(.isHeader)
-                    .accessibilityLabel("Text Editor, Page \(page.pageNumber) of \(document.totalPages). Select to copy the page text.")
-                    .accessibilityFocused($isHeaderFocused)
-                    .help("Copy the Current Page's Text")
+                    PageTextHeader(
+                        pageNumber: page.pageNumber,
+                        totalPages: document.totalPages,
+                        isHeaderFocused: $isHeaderFocused,
+                        onCopy: { copyCurrentPageText(page) }
+                    )
                 }
 
                 // Formatting "toolbar" (macOS only — on iOS/iPadOS the system provides formatting controls in UITextView's edit menu / keyboard)
                 #if os(macOS)
                 if let textController = textController {
-                    HStack(spacing: 12) {
-                        Group {
-                            Button(action: { textController.toggleBold() }) {
-                                Image(systemName: "bold")
-                                    .frame(width: 24, height: 24)
-                            }
-                            .buttonStyle(.borderless)
-                            .accessibilityLabel("Bold")
-                            .help("Bold (⌘B)")
-
-                            Button(action: { textController.toggleItalic() }) {
-                                Image(systemName: "italic")
-                                    .frame(width: 24, height: 24)
-                            }
-                            .buttonStyle(.borderless)
-                            .accessibilityLabel("Italic")
-                            .help("Italic (⌘I)")
-
-                            Button(action: { textController.toggleUnderline() }) {
-                                Image(systemName: "underline")
-                                    .frame(width: 24, height: 24)
-                            }
-                            .buttonStyle(.borderless)
-                            .accessibilityLabel("Underline")
-                            .help("Underline (⌘U)")
-
-                            Button(action: { textController.toggleStrikethrough() }) {
-                                Image(systemName: "strikethrough")
-                                    .frame(width: 24, height: 24)
-                            }
-                            .buttonStyle(.borderless)
-                            .accessibilityLabel("Strikethrough")
-                            .help("Strikethrough (⌘⇧X)")
-                        }
-                        .accessibilityElement(children: .combine)
-                        .accessibilityLabel("Text formatting: Bold, Italic, Underline, Strikethrough")
-
-                        Spacer()
-
-                        Button(action: { textController.removeLineBreaks() }) {
-                            Image(systemName: "line.3.horizontal")
-                                .frame(width: 24, height: 24)
-                        }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel("Remove Line Breaks")
-                        .help("Replace line breaks with spaces")
-                    }
-                    .padding(.top, 4)
+                    TextFormattingToolbar(controller: textController)
+                        .padding(.top, 4)
                 }
                 #endif
             }
@@ -172,75 +92,18 @@ struct RichTextSidebar: View {
             if !hideBottomPanels, showStatisticsPane, let textController = textController {
                 Divider()
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Statistics")
-                        .font(.caption)
-                        .fontWeight(.semibold)
-
-                    HStack {
-                        Label("\(textController.wordCount) words", systemImage: "textformat")
-                            .font(.caption)
-                        Spacer()
-                        Label("\(textController.charCount) characters", systemImage: "character")
-                            .font(.caption)
-                    }
-                    .foregroundStyle(.secondary)
-                }
-                .padding()
+                TextStatisticsPane(controller: textController)
             }
 
             // Smart Cleanup pane
             if !hideBottomPanels, showSmartCleanup, currentPage != nil {
                 Divider()
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Smart Cleanup")
-                        .font(.caption)
-                        .fontWeight(.semibold)
-
-                    #if os(iOS)
-                    // On iOS the header has no formatting toolbar, so Remove Line Breaks lives here
-                    if let textController = textController {
-                        Button(action: { textController.removeLineBreaks() }) {
-                            Label("Remove Line Breaks", systemImage: "line.3.horizontal")
-                                .font(.caption)
-                        }
-                        .buttonStyle(.borderless)
-                    }
-                    #endif
-
-                    let isAnalyzing = cleanup?.isAnalyzing ?? false
-                    let options = cleanup?.options ?? []
-
-                    Menu {
-                        if !isAnalyzing {
-                            ForEach(options) { option in
-                                Button(option.label) {
-                                    applyCleanupOption(option)
-                                }
-                            }
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            if isAnalyzing {
-                                ProgressView()
-                                    .controlSize(.small)
-                                Text("Checking\u{2026}")
-                                    .font(.caption)
-                            } else if options.isEmpty {
-                                Text("No suggestions")
-                                    .font(.caption)
-                            } else {
-                                Text("\(options.count) suggestions")
-                                    .font(.caption)
-                            }
-                        }
-                    }
-                    .disabled(isAnalyzing || options.isEmpty)
-                    .menuStyle(.borderlessButton)
-                    .accessibilityLabel("Smart Cleanup suggestions")
-                }
-                .padding()
+                SmartCleanupPane(
+                    cleanup: cleanup,
+                    textController: textController,
+                    onApply: applyCleanupOption
+                )
             }
         }
         .focusedValue(\.pageTextController, textController)
@@ -357,12 +220,6 @@ struct RichTextSidebar: View {
         pasteboard.string = exportText.string
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         #endif
-
-        showCopyConfirmation = true
-        Task {
-            try? await Task.sleep(for: .seconds(3))
-            showCopyConfirmation = false
-        }
     }
 
     /// Padding above the header. The compact layout presents this view as a sheet, so extra clearance is needed for the drag indicator.
@@ -370,6 +227,205 @@ struct RichTextSidebar: View {
         hideBottomPanels ? 30 : 12
     }
 
+}
+
+// MARK: - Page Header
+
+/// Owns the hover / focus / copy-confirmation state. Keeping it out of
+/// RichTextSidebar means pointing at the header doesn't re-run the editor.
+struct PageTextHeader: View {
+    let pageNumber: Int
+    let totalPages: Int
+    @AccessibilityFocusState.Binding var isHeaderFocused: Bool
+    let onCopy: () -> Void
+
+    @State private var isHovered = false
+    @State private var showCopyConfirmation = false
+    @FocusState private var isFocused: Bool
+
+    /// Whether the share button should be visible (hovered or focused)
+    private var isShareButtonVisible: Bool {
+        isHovered || isFocused
+    }
+
+    var body: some View {
+        Button {
+            onCopy()
+            showCopyConfirmation = true
+            Task {
+                try? await Task.sleep(for: .seconds(3))
+                showCopyConfirmation = false
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text("Page \(pageNumber) of \(totalPages)")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+
+                Image(systemName: showCopyConfirmation ? "checkmark" : "doc.on.doc")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .contentTransition(.symbolEffect(.replace))
+                    .opacity(showCopyConfirmation || isShareButtonVisible ? 1 : 0)
+                    .animation(.easeInOut(duration: 0.15), value: isShareButtonVisible)
+            }
+        }
+        .buttonStyle(.plain)
+        .focusable()
+        .focused($isFocused)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityLabel("Text Editor, Page \(pageNumber) of \(totalPages). Select to copy the page text.")
+        .accessibilityFocused($isHeaderFocused)
+        .help("Copy the Current Page's Text")
+    }
+}
+
+// MARK: - Formatting Toolbar
+
+#if os(macOS)
+struct TextFormattingToolbar: View {
+    let controller: PageTextController
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Group {
+                Button(action: { controller.toggleBold() }) {
+                    Image(systemName: "bold")
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Bold")
+                .help("Bold (⌘B)")
+
+                Button(action: { controller.toggleItalic() }) {
+                    Image(systemName: "italic")
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Italic")
+                .help("Italic (⌘I)")
+
+                Button(action: { controller.toggleUnderline() }) {
+                    Image(systemName: "underline")
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Underline")
+                .help("Underline (⌘U)")
+
+                Button(action: { controller.toggleStrikethrough() }) {
+                    Image(systemName: "strikethrough")
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Strikethrough")
+                .help("Strikethrough (⌘⇧X)")
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Text formatting: Bold, Italic, Underline, Strikethrough")
+
+            Spacer()
+
+            Button(action: { controller.removeLineBreaks() }) {
+                Image(systemName: "line.3.horizontal")
+                    .frame(width: 24, height: 24)
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Remove Line Breaks")
+            .help("Replace line breaks with spaces")
+        }
+    }
+}
+#endif
+
+// MARK: - Statistics Pane
+
+/// `wordCount`/`charCount` update on every keystroke. Reading them here instead
+/// of in RichTextSidebar's body keeps typing from re-running PageTextEditor's
+/// representable update on each character.
+struct TextStatisticsPane: View {
+    let controller: PageTextController
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Statistics")
+                .font(.caption)
+                .fontWeight(.semibold)
+
+            HStack {
+                Label("\(controller.wordCount) words", systemImage: "textformat")
+                    .font(.caption)
+                Spacer()
+                Label("\(controller.charCount) characters", systemImage: "character")
+                    .font(.caption)
+            }
+            .foregroundStyle(.secondary)
+        }
+        .padding()
+    }
+}
+
+// MARK: - Smart Cleanup Pane
+
+/// Reads the analysis state, so a cleanup pass finishing doesn't re-run the editor.
+struct SmartCleanupPane: View {
+    let cleanup: SmartCleanupModel?
+    let textController: PageTextController?
+    let onApply: (TextManipulationService.CleanupOption) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Smart Cleanup")
+                .font(.caption)
+                .fontWeight(.semibold)
+
+            #if os(iOS)
+            // On iOS the header has no formatting toolbar, so Remove Line Breaks lives here
+            if let textController {
+                Button(action: { textController.removeLineBreaks() }) {
+                    Label("Remove Line Breaks", systemImage: "line.3.horizontal")
+                        .font(.caption)
+                }
+                .buttonStyle(.borderless)
+            }
+            #endif
+
+            let isAnalyzing = cleanup?.isAnalyzing ?? false
+            let options = cleanup?.options ?? []
+
+            Menu {
+                if !isAnalyzing {
+                    ForEach(options) { option in
+                        Button(option.label) {
+                            onApply(option)
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    if isAnalyzing {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("Checking\u{2026}")
+                            .font(.caption)
+                    } else if options.isEmpty {
+                        Text("No suggestions")
+                            .font(.caption)
+                    } else {
+                        Text("\(options.count) suggestions")
+                            .font(.caption)
+                    }
+                }
+            }
+            .disabled(isAnalyzing || options.isEmpty)
+            .menuStyle(.borderlessButton)
+            .accessibilityLabel("Smart Cleanup suggestions")
+        }
+        .padding()
+    }
 }
 
 // MARK: - Previews

@@ -1,26 +1,29 @@
 import SwiftUI
 
 struct ProgressPopover: View {
-    @ObservedObject var navigationState: NavigationState
-    
+    let donePageCount: Int
+    let totalPageCount: Int
+
+    private var progress: Double {
+        guard totalPageCount > 0 else { return 0 }
+        return Double(donePageCount) / Double(totalPageCount)
+    }
+
     var body: some View {
-        VStack(spacing: 16) {
-            
-            VStack(spacing: 8) {
-                ProgressView(value: navigationState.progress)
-                    .progressViewStyle(.linear)
-                
-                HStack {
-                    Text("\(navigationState.donePageCount) of \(navigationState.totalPageCount) pages completed", comment: "Progress indicator showing amount of reviewed pages that are considered 'completed'")
-                        .font(.caption)
-                        .foregroundStyle(Color.secondary)
-                    
-                    Spacer()
-                    
-                    Text(Int(navigationState.progress * 100), format: .percent)
-                        .font(.caption)
-                        .foregroundStyle(Color.secondary)
-                }
+        VStack(spacing: 8) {
+            ProgressView(value: progress)
+                .progressViewStyle(.linear)
+
+            HStack {
+                Text("\(donePageCount) of \(totalPageCount) pages completed", comment: "Progress indicator showing amount of reviewed pages that are considered 'completed'")
+                    .font(.caption)
+                    .foregroundStyle(Color.secondary)
+
+                Spacer()
+
+                Text(Int(progress * 100), format: .percent)
+                    .font(.caption)
+                    .foregroundStyle(Color.secondary)
             }
         }
         .padding()
@@ -29,28 +32,11 @@ struct ProgressPopover: View {
 }
 
 #Preview("English") {
-    class PreviewState: NavigationState {
-        override var donePageCount: Int { 1 }
-        override var totalPageCount: Int { 100 }
-        override var progress: Double { Double(donePageCount) / Double(totalPageCount) }
-    }
-    
-    return ProgressPopover(
-        navigationState: PreviewState()
-    )
-    .environment(\.locale, Locale(identifier: "en"))
+    ProgressPopover(donePageCount: 1, totalPageCount: 100)
+        .environment(\.locale, Locale(identifier: "en"))
 }
 
 #Preview("es-419") {
-    class PreviewState: NavigationState {
-        override var donePageCount: Int { 1 }
-        override var totalPageCount: Int { 100 }
-        override var progress: Double { Double(donePageCount) / Double(totalPageCount) }
-    }
-    
-    return ProgressPopover(
-        navigationState: PreviewState()
-    )
-    .environment(\.locale, Locale(identifier: "es-419"))
+    ProgressPopover(donePageCount: 1, totalPageCount: 100)
+        .environment(\.locale, Locale(identifier: "es-419"))
 }
-

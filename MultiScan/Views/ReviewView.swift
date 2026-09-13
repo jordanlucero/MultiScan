@@ -11,14 +11,14 @@ struct ReviewView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.undoManager) private var undoManager
     @Environment(AppRouter.self) private var router
-    @StateObject private var navigationState = NavigationState()
+    @State private var navigationState = NavigationState()
 
     /// Shared import → OCR pipeline (also used by Home and the "Start New Project" intent).
     private let pipeline = ProjectImportPipeline.shared
 
-    @State private var selectedPageNumber: Int?
     @State private var showProgress: Bool = false
     @State private var showExportPanel: Bool = false
+    @State private var showDeletePageConfirmation: Bool = false
 
     // Add pages state
     @State private var showAddFromPhotos: Bool = false
@@ -29,25 +29,22 @@ struct ReviewView: View {
     /// Page number to insert new pages after (nil = append to end). Set by iOS insert menus.
     @State private var insertAfterPageNumber: Int?
 
-    // Use proper NavigationSplitViewVisibility type for animated sidebar transitions
-    @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    // AppStorage-backed so the View menu toggles and the toolbar buttons share one source of truth.
     @AppStorage("showThumbnails") private var showThumbnails = true
+    @AppStorage("showTextPanel") private var showTextPanel = true
     @AppStorage("optimizeImagesOnImport") private var optimizeImagesOnImport = false
 
-    // Use AppStorage directly for inspector to sync with menu commands
-    @AppStorage("showTextPanel") private var showTextPanel = true
-
-    // Access the text editing controller for save-before-export
-    @FocusedValue(\.pageTextController) private var pageTextController
+    /// The split view's column visibility, derived from `showThumbnails` so the sidebar toggle animates and the setting persists without a second copy of the state.
+    private var columnVisibility: Binding<NavigationSplitViewVisibility> {
+        Binding(
+            get: { showThumbnails ? .all : .detailOnly },
+            set: { showThumbnails = $0 != .detailOnly }
+        )
+    }
 
     /// Sorted pages for rotor navigation
     private var sortedPages: [Page] {
         document.unwrappedPages.sorted(by: { $0.pageNumber < $1.pageNumber })
-    }
-
-    /// Unreviewed pages for rotor navigation
-    private var unreviewedPages: [Page] {
-        document.unwrappedPages.filter { !$0.isDone }.sorted(by: { $0.pageNumber < $1.pageNumber })
     }
 
     var body: some View {
@@ -55,14 +52,27 @@ struct ReviewView: View {
             #if os(iOS)
             // On iOS the progress button lives inside the More menu, so the popover can't anchor to it — attach it to the root instead.
             .popover(isPresented: $showProgress) {
-                ProgressPopover(navigationState: navigationState)
+                ProgressPopover(
+                    donePageCount: navigationState.donePageCount,
+                    totalPageCount: navigationState.totalPageCount
+                )
             }
             #endif
             .sheet(isPresented: $showExportPanel) {
                 ExportPanelView(document: document)
             }
             .sheet(isPresented: $showAddFromPhotos) {
-                addFromPhotosSheet
+                AddPagesFromPhotosSheet(
+                    selectedPhotos: $selectedPhotos,
+                    isAddingPages: isAddingPages,
+                    onCancel: {
+                        showAddFromPhotos = false
+                        selectedPhotos = []
+                    },
+                    onSelectionChanged: { items in
+                        Task { await processSelectedPhotos(items) }
+                    }
+                )
             }
             .fileImporter(
                 isPresented: $showAddFromFiles,
@@ -71,14 +81,13 @@ struct ReviewView: View {
             ) { result in
                 handleFileImport(result)
             }
+            .deletePageConfirmation(isPresented: $showDeletePageConfirmation, pageNumber: navigationState.currentPageNumber ?? 0) {
+                navigationState.deleteCurrentPage(modelContext: modelContext)
+            }
             .onAppear {
                 navigationState.setupNavigation(for: document)
                 navigationState.undoManager = undoManager
-                if let firstPage = navigationState.currentPage {
-                    selectedPageNumber = firstPage.pageNumber
-                }
-                columnVisibility = showThumbnails ? .all : .detailOnly
-                fulfillOpenRequest()
+                router.fulfillOpenRequest(for: document, navigationState: navigationState)
 
                 // Announce document opening for VoiceOver users
                 Task {
@@ -86,24 +95,12 @@ struct ReviewView: View {
                     AccessibilityNotification.Announcement(String(localized: "\(document.name) opened. \(document.totalPages) pages.")).post()
                 }
             }
-            .onChange(of: navigationState.currentPageNumber) { _, newPageNumber in
-                selectedPageNumber = newPageNumber
-            }
-            .onChange(of: router.openRequest) { _, _ in
-                fulfillOpenRequest()
+            .onChange(of: router.openRequest) {
+                // Deep link (Spotlight page result, Open Page intent, search hit)
+                router.fulfillOpenRequest(for: document, navigationState: navigationState)
             }
             .onChange(of: undoManager) { _, newValue in
                 navigationState.undoManager = newValue
-            }
-            .onChange(of: showThumbnails) { _, newValue in
-                columnVisibility = newValue ? .all : .detailOnly
-            }
-            .focusedSceneValue(\.isRandomized, $navigationState.isRandomized)
-            .onChange(of: columnVisibility) { _, newValue in
-                let shouldShow = (newValue != .detailOnly)
-                if showThumbnails != shouldShow {
-                    showThumbnails = shouldShow
-                }
             }
     }
 
@@ -112,44 +109,29 @@ struct ReviewView: View {
     @ViewBuilder
     private var mainContent: some View {
         splitView
-            .focusedSceneValue(\.document, document)
+            // Menu bar commands (MultiScanCommands) act on the focused window through these.
             .focusedSceneValue(\.navigationState, navigationState)
-            .focusedSceneValue(\.currentPage, navigationState.currentPage)
             .focusedSceneValue(\.showExportPanel, $showExportPanel)
-            .focusedSceneValue(\.fullDocumentText, navigationState.fullDocumentPlainText)
             .focusedSceneValue(\.showAddFromPhotos, $showAddFromPhotos)
             .focusedSceneValue(\.showAddFromFiles, $showAddFromFiles)
+            .focusedSceneValue(\.showDeletePageConfirmation, $showDeletePageConfirmation)
             // Onscreen awareness: lets Siri/Apple Intelligence refer to "this page".
             .appEntityIdentifier(currentPageEntityIdentifier)
             .navigationTitle(navigationTitle)
             .navigationSubtitle(Text(document.totalPages == 1 ? "1 page" : "\(document.totalPages) pages"))
             .toolbarRole(.editor)
             .toolbar { toolbarContent }
-            .accessibilityRotor("Pages") {
-                ForEach(sortedPages) { page in
-                    AccessibilityRotorEntry(page.rotorLabel, id: page.pageNumber) {
-                        navigationState.goToPage(pageNumber: page.pageNumber)
-                        selectedPageNumber = page.pageNumber
-                    }
-                }
-            }
-            .accessibilityRotor("Unreviewed") {
-                ForEach(unreviewedPages) { page in
-                    AccessibilityRotorEntry(page.rotorLabel, id: page.pageNumber) {
-                        navigationState.goToPage(pageNumber: page.pageNumber)
-                        selectedPageNumber = page.pageNumber
-                    }
-                }
-            }
+            .modifier(PageRotors(pages: sortedPages) { pageNumber in
+                navigationState.goToPage(pageNumber: pageNumber)
+            })
     }
 
     private var splitView: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
+        NavigationSplitView(columnVisibility: columnVisibility) {
             #if os(iOS)
             ThumbnailSidebar(
                 document: document,
                 navigationState: navigationState,
-                selectedPageNumber: $selectedPageNumber,
                 onInsertFromPhotos: { insertAfter in
                     insertAfterPageNumber = insertAfter
                     showAddFromPhotos = true
@@ -161,12 +143,8 @@ struct ReviewView: View {
             )
             .navigationSplitViewColumnWidth(min: 150, ideal: 200, max: 400)
             #else
-            ThumbnailSidebar(
-                document: document,
-                navigationState: navigationState,
-                selectedPageNumber: $selectedPageNumber
-            )
-            .navigationSplitViewColumnWidth(min: 150, ideal: 200, max: 400)
+            ThumbnailSidebar(document: document, navigationState: navigationState)
+                .navigationSplitViewColumnWidth(min: 150, ideal: 200, max: 400)
             #endif
         } detail: {
             ImageViewer(navigationState: navigationState)
@@ -182,13 +160,6 @@ struct ReviewView: View {
 
     private var currentPageEntityIdentifier: EntityIdentifier? {
         navigationState.currentPage?.uuid.map { EntityIdentifier(for: PageEntity.self, identifier: $0) }
-    }
-
-    /// Jumps to the page requested by a deep link (Spotlight page result, Open Page intent, search hit).
-    private func fulfillOpenRequest() {
-        if let pageNumber = router.fulfillOpenRequest(for: document, navigationState: navigationState) {
-            selectedPageNumber = pageNumber
-        }
     }
 
     private var navigationTitle: String {
@@ -339,7 +310,10 @@ struct ReviewView: View {
                     .labelStyle(.iconOnly)
             }
             .popover(isPresented: $showProgress, arrowEdge: .bottom) {
-                ProgressPopover(navigationState: navigationState)
+                ProgressPopover(
+                    donePageCount: navigationState.donePageCount,
+                    totalPageCount: navigationState.totalPageCount
+                )
             }
             .accessibilityLabel("View Progress")
             .accessibilityValue("\(navigationState.donePageCount) of \(navigationState.totalPageCount) reviewed")
@@ -360,40 +334,6 @@ struct ReviewView: View {
         }
     }
     #endif
-
-    // MARK: - Add Pages from Photos Sheet
-
-    private var addFromPhotosSheet: some View {
-        VStack(spacing: 20) {
-            Text("Append Pages from Photos")
-                .font(.headline)
-
-            if isAddingPages {
-                ProgressView("Processing \(Int(pipeline.progress * 100), format: .percent)")
-                    .progressViewStyle(.linear)
-            } else {
-                PhotosPicker(
-                    selection: $selectedPhotos,
-                    maxSelectionCount: nil,
-                    matching: .images
-                ) {
-                    Label("Select Photos", systemImage: "photo.on.rectangle")
-                }
-                .controlSize(.large)
-                .buttonStyle(.borderedProminent)
-                .onChange(of: selectedPhotos) { _, items in
-                    Task { await processSelectedPhotos(items) }
-                }
-            }
-
-            Button("Cancel") {
-                showAddFromPhotos = false
-                selectedPhotos = []
-            }
-            .disabled(isAddingPages)
-        }
-        .padding(40)
-    }
 
     // MARK: - File Import Handling
 
@@ -464,11 +404,80 @@ struct ReviewView: View {
             // Navigate to the first inserted page so the user sees the result
             if !result.isAppend, let firstNew = result.firstNewPageNumber {
                 navigationState.goToPage(pageNumber: firstNew)
-                selectedPageNumber = firstNew
             }
         } catch {
             print("Failed to add pages: \(error)")
         }
+    }
+}
+
+// MARK: - Accessibility Rotors
+
+/// Both rotors derive from one sorted array
+private struct PageRotors: ViewModifier {
+    let pages: [Page]
+    let onSelect: (Int) -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .accessibilityRotor("Pages") {
+                ForEach(pages) { page in
+                    AccessibilityRotorEntry(page.rotorLabel, id: page.pageNumber) {
+                        onSelect(page.pageNumber)
+                    }
+                }
+            }
+            .accessibilityRotor("Unreviewed") {
+                // `pages` is already sorted, so filtering preserves page order.
+                ForEach(pages.filter { !$0.isDone }) { page in
+                    AccessibilityRotorEntry(page.rotorLabel, id: page.pageNumber) {
+                        onSelect(page.pageNumber)
+                    }
+                }
+            }
+    }
+}
+
+// MARK: - Add Pages from Photos Sheet
+
+struct AddPagesFromPhotosSheet: View {
+    @Binding var selectedPhotos: [PhotosPickerItem]
+    let isAddingPages: Bool
+    let onCancel: () -> Void
+    let onSelectionChanged: ([PhotosPickerItem]) -> Void
+
+    /// Read here rather than in ReviewView's body so import progress ticks don't invalidate the split view behind the sheet.
+    private let pipeline = ProjectImportPipeline.shared
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Append Pages from Photos")
+                .font(.headline)
+
+            if isAddingPages {
+                ProgressView("Processing \(Int(pipeline.progress * 100), format: .percent)")
+                    .progressViewStyle(.linear)
+            } else {
+                PhotosPicker(
+                    selection: $selectedPhotos,
+                    maxSelectionCount: nil,
+                    matching: .images
+                ) {
+                    Label("Select Photos", systemImage: "photo.on.rectangle")
+                }
+                .controlSize(.large)
+                .buttonStyle(.borderedProminent)
+                .onChange(of: selectedPhotos) { _, items in
+                    onSelectionChanged(items)
+                }
+            }
+
+            Button("Cancel") {
+                onCancel()
+            }
+            .disabled(isAddingPages)
+        }
+        .padding(40)
     }
 }
 

@@ -4,10 +4,7 @@
 //
 //  Print-panel-style export view with preview and options.
 //
-//  Uses `TextExporter` with document-based initialization to enable cache-based export.
-//  The preview is a read-only TextKit 2 view (`RichTextPreview`), so the full combined
-//  document is displayed without truncation — viewport-based layout keeps even very
-//  large exports responsive.
+//  Cache-based export.
 //
 
 import SwiftUI
@@ -31,11 +28,8 @@ struct ExportPanelView: View {
     var body: some View {
         panelContent
             .onAppear { schedulePreviewUpdate(immediate: true) }
-            .onChange(of: settings.createVisualSeparation) { schedulePreviewUpdate() }
-            .onChange(of: settings.separatorStyle) { schedulePreviewUpdate() }
-            .onChange(of: settings.includePageNumber) { schedulePreviewUpdate() }
-            .onChange(of: settings.includeFilename) { schedulePreviewUpdate() }
-            .onChange(of: settings.includeStatistics) { schedulePreviewUpdate() }
+            // The settings reads live in a modifier: reading them here would make every toggle invalidate the (expensive) preview pane as well.
+            .modifier(ExportSettingsObserver(settings: settings) { schedulePreviewUpdate() })
             .onDisappear {
                 exportTask?.cancel()
                 debounceTask?.cancel()
@@ -48,11 +42,16 @@ struct ExportPanelView: View {
         // Vertical sheet layout: preview on top, options below, actions in the toolbar
         NavigationStack {
             VStack(spacing: 0) {
-                previewPane
+                ExportPreviewPane(
+                    attributedText: exportResult.attributedText,
+                    hasContent: !exportResult.plainText.isEmpty,
+                    isLoading: isLoading,
+                    pageCount: pageCount
+                )
 
                 Divider()
 
-                optionsPane
+                ExportOptionsPane(settings: settings)
             }
             .navigationTitle("Export")
             .navigationBarTitleDisplayMode(.inline)
@@ -75,167 +74,21 @@ struct ExportPanelView: View {
         #else
         // Print-panel-style layout: preview on the left, options on the right
         HStack(spacing: 0) {
-            previewPane
-                .frame(minWidth: 350, idealWidth: 450)
+            ExportPreviewPane(
+                attributedText: exportResult.attributedText,
+                hasContent: !exportResult.plainText.isEmpty,
+                isLoading: isLoading,
+                pageCount: pageCount
+            )
+            .frame(minWidth: 350, idealWidth: 450)
 
             Divider()
 
-            optionsPane
+            ExportOptionsPane(settings: settings, richText: exportResult.richText)
                 .frame(width: 280)
         }
         #endif
     }
-
-    // MARK: - Preview Pane
-
-    private var previewPane: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("Preview")
-                    .font(.headline)
-                Spacer()
-                if isLoading {
-                    ProgressView()
-                        .scaleEffect(0.6)
-                }
-                Text(pageCount == 1 ? "1 page" : "\(pageCount) pages", comment: "Page count in export panel")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .padding()
-
-            Divider()
-
-            ZStack {
-                RichTextPreview(text: exportResult.attributedText)
-                #if os(macOS)
-                    .background(Color(nsColor: .textBackgroundColor))
-                #else
-                    .background(Color(.secondarySystemBackground))
-                #endif
-
-                if isLoading && exportResult.plainText.isEmpty {
-                    VStack(spacing: 12) {
-                        ProgressView()
-                        Text("Preparing export…")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    #if os(macOS)
-                    .background(Color(nsColor: .textBackgroundColor))
-                    #else
-                    .background(Color(.secondarySystemBackground))
-                    #endif
-                }
-            }
-        }
-    }
-
-    // MARK: - Options Pane
-
-    #if os(iOS)
-    private var optionsPane: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                // Visual separation toggle
-                Toggle("Add visual separation", isOn: $settings.createVisualSeparation)
-
-                // Separator style picker (only shown when visual separation is enabled)
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Separator Style")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-
-                    Picker("", selection: $settings.separatorStyle) {
-                        ForEach(SeparatorStyle.allCases, id: \.self) { style in
-                            Text(style.label).tag(style)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                }
-                .disabled(!settings.createVisualSeparation)
-                .opacity(settings.createVisualSeparation ? 1.0 : 0.5)
-
-                // Separator mods (metadata options)
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Separator Mods")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-
-                    Toggle("Page number", isOn: $settings.includePageNumber)
-                    Toggle("Filename", isOn: $settings.includeFilename)
-                    Toggle("Statistics", isOn: $settings.includeStatistics)
-                }
-                .disabled(!settings.createVisualSeparation)
-                .opacity(settings.createVisualSeparation ? 1.0 : 0.5)
-            }
-            .padding()
-        }
-        .frame(maxHeight: 320)
-    }
-    #else
-    private var optionsPane: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("Export Options")
-                .font(.headline)
-
-            // Visual separation toggle
-            Toggle("Add visual separation", isOn: $settings.createVisualSeparation)
-
-            // Separator style picker (only shown when visual separation is enabled)
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Separator Style")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                Picker("", selection: $settings.separatorStyle) {
-                    ForEach(SeparatorStyle.allCases, id: \.self) { style in
-                        Text(style.label).tag(style)
-                    }
-                }
-                .pickerStyle(.radioGroup)
-                .labelsHidden()
-            }
-            .disabled(!settings.createVisualSeparation)
-            .opacity(settings.createVisualSeparation ? 1.0 : 0.5)
-
-            // Separator mods (metadata options)
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Separator Mods")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                Toggle("Page number", isOn: $settings.includePageNumber)
-                Toggle("Filename", isOn: $settings.includeFilename)
-                Toggle("Statistics", isOn: $settings.includeStatistics)
-            }
-            .disabled(!settings.createVisualSeparation)
-            .opacity(settings.createVisualSeparation ? 1.0 : 0.5)
-
-            Spacer()
-
-            // Action buttons
-            HStack {
-                Button("Cancel") {
-                    dismiss()
-                }
-                .keyboardShortcut(.cancelAction)
-
-                Spacer()
-
-                // TODO: Dismiss panel after successful share. SwiftUI's ShareLink has no completion callback as of now (double-check)
-                ShareLink(item: exportResult.richText, preview: SharePreview("Project Text")) {
-                    Text("Export…")
-                }
-                .keyboardShortcut(.defaultAction)
-            }
-            .padding(.top, 8)
-        }
-        .padding()
-    }
-    #endif
 
     // MARK: - Logic
 
@@ -270,6 +123,181 @@ struct ExportPanelView: View {
             guard !Task.isCancelled else { return }
             exportResult = result
         }
+    }
+}
+
+// MARK: - Preview Pane
+
+/// Takes the combined text as a class reference (cheap pointer comparison) plus three scalars, so flipping an export option doesn't re-run the TextKit preview.
+struct ExportPreviewPane: View {
+    let attributedText: NSAttributedString
+    let hasContent: Bool
+    let isLoading: Bool
+    let pageCount: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Preview")
+                    .font(.headline)
+                Spacer()
+                if isLoading {
+                    ProgressView()
+                        .scaleEffect(0.6)
+                }
+                Text(pageCount == 1 ? "1 page" : "\(pageCount) pages", comment: "Page count in export panel")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .padding()
+
+            Divider()
+
+            ZStack {
+                RichTextPreview(text: attributedText)
+                #if os(macOS)
+                    .background(Color(nsColor: .textBackgroundColor))
+                #else
+                    .background(Color(.secondarySystemBackground))
+                #endif
+
+                if isLoading && !hasContent {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                        Text("Preparing export…")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    #if os(macOS)
+                    .background(Color(nsColor: .textBackgroundColor))
+                    #else
+                    .background(Color(.secondarySystemBackground))
+                    #endif
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Options Pane
+
+struct ExportOptionsPane: View {
+    @Bindable var settings: ExportSettings
+    #if os(macOS)
+    let richText: RichText
+    #endif
+
+    var body: some View {
+        #if os(iOS)
+        ScrollView {
+            ExportOptionControls(settings: settings)
+                .padding()
+        }
+        .frame(maxHeight: 320)
+        #else
+        VStack(alignment: .leading, spacing: 20) {
+            Text("Export Options")
+                .font(.headline)
+
+            ExportOptionControls(settings: settings)
+
+            Spacer()
+
+            ExportActionButtons(richText: richText)
+        }
+        .padding()
+        #endif
+    }
+}
+
+/// The toggles and separator picker. Reads only `settings`, so it invalidates on option changes without dragging the preview or the share link along.
+struct ExportOptionControls: View {
+    @Bindable var settings: ExportSettings
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            // Visual separation toggle
+            Toggle("Add visual separation", isOn: $settings.createVisualSeparation)
+
+            // Separator style picker (only shown when visual separation is enabled)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Separator Style")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                Picker("", selection: $settings.separatorStyle) {
+                    ForEach(SeparatorStyle.allCases, id: \.self) { style in
+                        Text(style.label).tag(style)
+                    }
+                }
+                #if os(iOS)
+                .pickerStyle(.segmented)
+                #else
+                .pickerStyle(.radioGroup)
+                #endif
+                .labelsHidden()
+            }
+            .disabled(!settings.createVisualSeparation)
+            .opacity(settings.createVisualSeparation ? 1.0 : 0.5)
+
+            // Separator mods (metadata options)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Separator Mods")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                Toggle("Page number", isOn: $settings.includePageNumber)
+                Toggle("Filename", isOn: $settings.includeFilename)
+                Toggle("Statistics", isOn: $settings.includeStatistics)
+            }
+            .disabled(!settings.createVisualSeparation)
+            .opacity(settings.createVisualSeparation ? 1.0 : 0.5)
+        }
+    }
+}
+
+#if os(macOS)
+/// Separate so toggling an export option doesn't rebuild the ShareLink.
+struct ExportActionButtons: View {
+    let richText: RichText
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        HStack {
+            Button("Cancel") {
+                dismiss()
+            }
+            .keyboardShortcut(.cancelAction)
+
+            Spacer()
+
+            // TODO: Dismiss panel after successful share. SwiftUI's ShareLink has no completion callback as of now (double-check)
+            ShareLink(item: richText, preview: SharePreview("Project Text")) {
+                Text("Export…")
+            }
+            .keyboardShortcut(.defaultAction)
+        }
+        .padding(.top, 8)
+    }
+}
+#endif
+
+// MARK: - Settings Side Effects
+
+/// Owns the reads of the individual export settings so the panel's body doesn't depend on them — otherwise each toggle invalidates the whole panel.
+private struct ExportSettingsObserver: ViewModifier {
+    let settings: ExportSettings
+    let onChange: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: settings.createVisualSeparation) { onChange() }
+            .onChange(of: settings.separatorStyle) { onChange() }
+            .onChange(of: settings.includePageNumber) { onChange() }
+            .onChange(of: settings.includeFilename) { onChange() }
+            .onChange(of: settings.includeStatistics) { onChange() }
     }
 }
 

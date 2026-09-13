@@ -17,7 +17,9 @@ struct ContentView: View {
         Group {
             if let document = selectedDocument {
                 documentView(for: document)
-                .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    // A deep link can switch straight from one project to another; new identity gives the review view fresh `@State` (navigation, controllers) for the new document.
+                    .id(document.persistentModelID)
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
             } else {
                 HomeView(onDocumentSelected: { document in
                     withAnimation(.easeInOut(duration: 0.25)) {

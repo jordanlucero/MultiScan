@@ -50,7 +50,6 @@ enum AppModelContainer {
                 for: Document.self, Page.self, SchemaMetadata.self,
                 configurations: modelConfiguration
             )
-            SchemaValidationService.markHasLaunched()
             // Don't record a successful load when the store is ahead of this build — that would clear the pre-load gate and let the next launch past the update gate.
             if case .newerThanApp = preLoadResult {} else {
                 SchemaValidationService.recordSuccessfulLoad()
@@ -72,6 +71,42 @@ enum AppModelContainer {
             }
         }
     }()
+
+    // MARK: - Post-load maintenance
+
+    /// Runs once the UI is up: validates the store against `SchemaMetadata` (catching data CloudKit synced from a newer build), self-heals minor integrity issues, backfills identity/plain-text columns, refreshes App Shortcuts, and brings the Spotlight index up to date.
+    /// - Returns: the newer schema version found in the store, if any — the caller shows the "Update Required" screen.
+    static func performPostLoadMaintenance() async -> Int? {
+        let context = shared.mainContext
+
+        let result = await SchemaValidationService.validatePostLoad(context: context)
+
+        for issue in result.issues {
+            if case .newerSchemaVersion(let stored, _) = issue {
+                return stored
+            }
+        }
+
+        if result.hasMinorIssues {
+            let unfixable = SchemaValidationService.attemptSelfHeal(issues: result.issues, context: context)
+            if !unfixable.isEmpty {
+                print("Some integrity issues could not be auto-fixed: \(unfixable.map { $0.description })")
+            }
+        }
+
+        await ProjectMaintenance.backfillIdentityAndPlainText(context: context)
+        MultiScanShortcuts.updateAppShortcutParameters()
+        await SpotlightIndexer.shared.scheduleReconcile()
+        return nil
+    }
+
+    /// Deletes the on-disk store and clears the version gate. The user must relaunch afterwards.
+    static func resetStore() {
+        if let url = shared.configurations.first?.url {
+            _ = SchemaValidationService.resetDatabase(containerURL: url)
+        }
+        UserDefaults.standard.removeObject(forKey: SchemaVersioning.userDefaultsKey)
+    }
 
     #if DEBUG
     /// Pushes the current model layer to the CloudKit **development** environment, and validates it for CloudKit compatibility along the way.

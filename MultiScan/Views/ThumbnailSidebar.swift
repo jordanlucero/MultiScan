@@ -9,8 +9,7 @@ private let searchBarEdge: VerticalEdge = .top
 
 struct ThumbnailSidebar: View {
     let document: Document
-    @ObservedObject var navigationState: NavigationState
-    @Binding var selectedPageNumber: Int?
+    let navigationState: NavigationState
 
     #if os(iOS)
     /// Callbacks for inserting pages at a position (iOS only).
@@ -40,11 +39,6 @@ struct ThumbnailSidebar: View {
         document.unwrappedPages.count
     }
 
-    /// Number of pages currently visible after filtering
-    private var visiblePageCount: Int {
-        filteredPages.count
-    }
-
     /// Builds a descriptive string for the current filter state
     private var filterDescription: String {
         var parts: [String] = []
@@ -67,7 +61,7 @@ struct ThumbnailSidebar: View {
 
     /// Announces filter changes to VoiceOver users
     private func announceFilterChange() {
-        let visible = visiblePageCount
+        let visible = filteredPages.count
         let total = totalPageCount
 
         if !isAnyFilterActive {
@@ -85,105 +79,45 @@ struct ThumbnailSidebar: View {
     }
     
     var body: some View {
+        // Filter once per body evaluation. Reading `filteredPages` from the ForEach, the visible-page count, and the scroll-to handler ran the whole filter three times on every keystroke and page change.
+        let pages = filteredPages
+
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 10) {
-                    ForEach(filteredPages) { page in
-                        #if os(iOS)
-                        ThumbnailView(
-                            page: page,
-                            document: document,
-                            isSelected: selectedPageNumber == page.pageNumber,
-                            navigationState: navigationState,
-                            onInsertFromPhotos: onInsertFromPhotos,
-                            onInsertFromFiles: onInsertFromFiles
-                        ) {
-                            navigationState.goToPage(pageNumber: page.pageNumber)
-                            selectedPageNumber = page.pageNumber
-                        }
-                        .id(page.persistentModelID)  // Use stable model ID for animation
-                        #else
-                        ThumbnailView(
-                            page: page,
-                            document: document,
-                            isSelected: selectedPageNumber == page.pageNumber,
-                            navigationState: navigationState
-                        ) {
-                            navigationState.goToPage(pageNumber: page.pageNumber)
-                            selectedPageNumber = page.pageNumber
-                        }
-                        .id(page.persistentModelID)  // Use stable model ID for animation
-                        #endif
-                    }
-                    .reorderable()
-                }
-                .padding()
-                .animation(.easeInOut(duration: 0.3), value: navigationState.pageOrderVersion)
-                .reorderContainer(for: Page.self, isEnabled: !isAnyFilterActive) { difference in
-                    let targetID: PersistentIdentifier?
-                    switch difference.destination.position {
-                    case .before(let id): targetID = id
-                    case .end: targetID = nil
-                    }
-                    navigationState.applyReorder(of: difference.sources, before: targetID)
-                }
+                #if os(iOS)
+                ThumbnailPageList(
+                    pages: pages,
+                    document: document,
+                    navigationState: navigationState,
+                    isReorderEnabled: !isAnyFilterActive,
+                    onInsertFromPhotos: onInsertFromPhotos,
+                    onInsertFromFiles: onInsertFromFiles
+                )
+                #else
+                ThumbnailPageList(
+                    pages: pages,
+                    document: document,
+                    navigationState: navigationState,
+                    isReorderEnabled: !isAnyFilterActive
+                )
+                #endif
             }
-            .onChange(of: selectedPageNumber) { _, newValue in
+            .onChange(of: navigationState.currentPageNumber) { _, newValue in
                 // Scroll to page by finding its stable ID
                 if let pageNumber = newValue,
-                   let page = filteredPages.first(where: { $0.pageNumber == pageNumber }) {
+                   let page = pages.first(where: { $0.pageNumber == pageNumber }) {
                     withAnimation {
                         proxy.scrollTo(page.persistentModelID, anchor: .center)
                     }
                 }
             }
             .safeAreaInset(edge: searchBarEdge, spacing: 0) {
-                HStack(spacing: 8) {
-                    Menu {
-                        Picker(selection: $filterOptionString, label: Text("Filter by status")) {
-                            ForEach(PageFilterOption.allCases, id: \.self) { option in
-                                Text(option.label).tag(option.rawValue)
-                            }
-                        }
-                        .pickerStyle(.inline)
-                    } label: {
-                        Image(systemName: "line.3.horizontal.decrease")
-                    }
-                    .menuStyle(.borderlessButton)
-                    .background {
-                        Capsule()
-                            .fill(isFilterActive ? Color.accentColor : .clear)
-                            .stroke(.tertiary.opacity(isFilterActive ? 0 : 1), lineWidth: 1)
-                    }
-                    .fixedSize()
-                    .accessibilityLabel("Filter by status")
-                    .accessibilityValue(isFilterActive
-                        ? "\(String(localized: filterOption.label)), \(visiblePageCount) of \(totalPageCount) pages visible"
-                        : "All \(totalPageCount) pages")
-                    .help(isFilterActive ? "Filtering: \(String(localized: filterOption.label))" : "Filter pages")
-
-                    TextField("Search project", text: $searchText)
-                        .textFieldStyle(.plain)
-                        .accessibilityLabel("Search project")
-                        .accessibilityHint("Search by page number, filename, or content")
-
-                    if !searchText.isEmpty {
-                        Button {
-                            searchText = ""
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Clear text filter")
-                        .help("Clear search filter")
-                    }
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
-                .glassEffect()
-                .padding(8)
-
+                ThumbnailFilterBar(
+                    filterOptionString: $filterOptionString,
+                    searchText: $searchText,
+                    visiblePageCount: pages.count,
+                    totalPageCount: totalPageCount
+                )
             }
             .onChange(of: filterOptionString) { _, _ in
                 // Announce immediately when status filter changes
@@ -212,6 +146,130 @@ struct ThumbnailSidebar: View {
                 navigationState.activeSearchText = searchText
             }
         }
+    }
+}
+
+// MARK: - Page List
+
+/// The scrolling thumbnail column. Takes an already-filtered page array so the filter doesn't re-run here, and keeps the reorder plumbing out of the sidebar's own body.
+struct ThumbnailPageList: View {
+    let pages: [Page]
+    let document: Document
+    let navigationState: NavigationState
+    let isReorderEnabled: Bool
+
+    #if os(iOS)
+    var onInsertFromPhotos: ((Int) -> Void)?
+    var onInsertFromFiles: ((Int) -> Void)?
+    #endif
+
+    var body: some View {
+        let currentPageNumber = navigationState.currentPageNumber
+
+        LazyVStack(spacing: 10) {
+            ForEach(pages) { page in
+                #if os(iOS)
+                ThumbnailView(
+                    page: page,
+                    document: document,
+                    isSelected: currentPageNumber == page.pageNumber,
+                    navigationState: navigationState,
+                    onInsertFromPhotos: onInsertFromPhotos,
+                    onInsertFromFiles: onInsertFromFiles
+                ) {
+                    navigationState.goToPage(pageNumber: page.pageNumber)
+                }
+                .id(page.persistentModelID)  // Use stable model ID for animation
+                #else
+                ThumbnailView(
+                    page: page,
+                    document: document,
+                    isSelected: currentPageNumber == page.pageNumber,
+                    navigationState: navigationState
+                ) {
+                    navigationState.goToPage(pageNumber: page.pageNumber)
+                }
+                .id(page.persistentModelID)  // Use stable model ID for animation
+                #endif
+            }
+            .reorderable()
+        }
+        .padding()
+        .animation(.easeInOut(duration: 0.3), value: navigationState.pageOrderVersion)
+        .reorderContainer(for: Page.self, isEnabled: isReorderEnabled) { difference in
+            let targetID: PersistentIdentifier?
+            switch difference.destination.position {
+            case .before(let id): targetID = id
+            case .end: targetID = nil
+            }
+            navigationState.applyReorder(of: difference.sources, before: targetID)
+        }
+    }
+}
+
+// MARK: - Filter Bar
+
+/// Status filter + text search. Its inputs are just the filter state and the two counts, so page navigation and reordering don't rebuild its localized strings.
+struct ThumbnailFilterBar: View {
+    @Binding var filterOptionString: String
+    @Binding var searchText: String
+    let visiblePageCount: Int
+    let totalPageCount: Int
+
+    private var filterOption: PageFilterOption {
+        PageFilterOption(rawValue: filterOptionString) ?? .all
+    }
+
+    private var isFilterActive: Bool {
+        filterOption != .all
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Menu {
+                Picker(selection: $filterOptionString, label: Text("Filter by status")) {
+                    ForEach(PageFilterOption.allCases, id: \.self) { option in
+                        Text(option.label).tag(option.rawValue)
+                    }
+                }
+                .pickerStyle(.inline)
+            } label: {
+                Image(systemName: "line.3.horizontal.decrease")
+            }
+            .menuStyle(.borderlessButton)
+            .background {
+                Capsule()
+                    .fill(isFilterActive ? Color.accentColor : .clear)
+                    .stroke(.tertiary.opacity(isFilterActive ? 0 : 1), lineWidth: 1)
+            }
+            .fixedSize()
+            .accessibilityLabel("Filter by status")
+            .accessibilityValue(isFilterActive
+                ? "\(String(localized: filterOption.label)), \(visiblePageCount) of \(totalPageCount) pages visible"
+                : "All \(totalPageCount) pages")
+            .help(isFilterActive ? "Filtering: \(String(localized: filterOption.label))" : "Filter pages")
+
+            TextField("Search project", text: $searchText)
+                .textFieldStyle(.plain)
+                .accessibilityLabel("Search project")
+                .accessibilityHint("Search by page number, filename, or content")
+
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear text filter")
+                .help("Clear search filter")
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .glassEffect()
+        .padding(8)
     }
 }
 
@@ -411,34 +469,23 @@ struct ThumbnailView: View {
                     .disabled(document.totalPages <= 1)
                 }
             }
-            .confirmationDialog(
-                "Delete Page \(page.pageNumber)?",
-                isPresented: $showDeleteConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("Delete", role: .destructive) {
-                    withAnimation {
-                        deletePage()
-                    }
+            .deletePageConfirmation(isPresented: $showDeleteConfirmation, pageNumber: page.pageNumber) {
+                withAnimation {
+                    deletePage()
                 }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("This will permanently delete the page from your project. This cannot be undone.")
             }
 
             Text(pageLabel)
                 .font(.caption)
                 .lineLimit(1)
                 .truncationMode(.middle)
-                .foregroundColor(isSelected ? .accentColor : .secondary)
+                .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
                 .accessibilityHidden(true)
         }
     }
 }
 
 #Preview("English") {
-    @Previewable @State var selectedPageNumber: Int? = 1
-
     let container = previewContainer()
     let document = Document(name: "Sample Document", totalPages: 3)
     let page1 = Page(pageNumber: 1, text: "Here's to the crazy ones.", imageData: nil, originalFileName: "page1.jpg")
@@ -450,19 +497,13 @@ struct ThumbnailView: View {
     let navigationState = NavigationState()
     navigationState.setupNavigation(for: document)
 
-    return ThumbnailSidebar(
-        document: document,
-        navigationState: navigationState,
-        selectedPageNumber: $selectedPageNumber
-    )
+    return ThumbnailSidebar(document: document, navigationState: navigationState)
     .modelContainer(container)
     .environment(\.locale, Locale(identifier: "en"))
     .frame(width: 200, height: 600)
 }
 
 #Preview("es-419") {
-    @Previewable @State var selectedPageNumber: Int? = 1
-
     let container = previewContainer()
     let document = Document(name: "Documento de Ejemplo", totalPages: 3)
     let page1 = Page(pageNumber: 1, text: "Texto de ejemplo para la página 1", imageData: nil, originalFileName: "pagina1.jpg")
@@ -474,11 +515,7 @@ struct ThumbnailView: View {
     let navigationState = NavigationState()
     navigationState.setupNavigation(for: document)
 
-    return ThumbnailSidebar(
-        document: document,
-        navigationState: navigationState,
-        selectedPageNumber: $selectedPageNumber
-    )
+    return ThumbnailSidebar(document: document, navigationState: navigationState)
     .modelContainer(container)
     .environment(\.locale, Locale(identifier: "es-419"))
     .frame(width: 200, height: 600)

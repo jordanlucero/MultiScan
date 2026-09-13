@@ -13,12 +13,7 @@
 //
 //  In both modes the expensive work — decoding page RTF and appending into the combined string — happens off the main actor. `NSMutableAttributedString.append` is O(n) per page (unlike the old SwiftUI `AttributedString.append`, which was O(n²) overall).
 //
-//  ## Usage
-//  ```swift
-//  let exporter = TextExporter(document: document, settings: settings)
-//  let result = await exporter.buildCombinedTextAsync()
-//  // result.attributedText → preview, result.rtfData/plainText → RichText for sharing
-//  ```
+//  `result.attributedText` feeds the preview; `result.rtfData`/`plainText` feed `RichText` for sharing.
 //
 
 import SwiftUI
@@ -40,35 +35,10 @@ struct TextExportResult: @unchecked Sendable {
     }
 }
 
+@MainActor
 struct TextExporter {
-    /// Document to export from (enables cache-based export)
-    private let document: Document?
-
-    /// Direct page access (fallback when document/cache unavailable)
-    private let pages: [Page]
-
+    let document: Document
     let settings: ExportSettings
-
-    // MARK: - Initializers
-
-    /// Initialize with a Document to enable cache-based export (preferred).
-    ///
-    /// This mode loads page data from a single cached file instead of N external storage files, dramatically improving performance for large documents.
-    init(document: Document, settings: ExportSettings) {
-        self.document = document
-        self.pages = document.unwrappedPages
-        self.settings = settings
-    }
-
-    /// Initialize with pages directly (legacy, triggers N external storage loads).
-    ///
-    /// **Warning**: For large documents, this can freeze the UI while loading.
-    /// Prefer using `init(document:settings:)` when possible.
-    init(pages: [Page], settings: ExportSettings) {
-        self.document = nil
-        self.pages = pages
-        self.settings = settings
-    }
 
     // MARK: - Page Snapshot
 
@@ -88,12 +58,10 @@ struct TextExporter {
     /// Builds the combined export result from all pages.
     ///
     /// Uses the cache when available (fast single-file load), falls back to direct page access if the cache is unavailable (slow N-file load).
-    @MainActor
     func buildCombinedTextAsync() async -> TextExportResult {
         let snapshots: [PageSnapshot]
 
-        if let document = document,
-           let cache = TextExportCacheService.loadFreshCache(from: document) {
+        if let cache = TextExportCacheService.loadFreshCache(from: document) {
             // Cache path: one external-storage read for the whole document
             snapshots = cache.pages
                 .sorted { $0.pageNumber < $1.pageNumber }
@@ -108,7 +76,7 @@ struct TextExporter {
                 }
         } else {
             // Fallback path: N external-storage reads (raw Data only — decode happens off-main)
-            snapshots = pages
+            snapshots = document.unwrappedPages
                 .sorted { $0.pageNumber < $1.pageNumber }
                 .map {
                     PageSnapshot(
@@ -123,36 +91,28 @@ struct TextExporter {
 
         guard !snapshots.isEmpty else { return .empty }
 
-        // Capture settings on the main actor for background use
-        let createVisualSeparation = settings.createVisualSeparation
-        let separatorStyle = settings.separatorStyle
-        let includePageNumber = settings.includePageNumber
-        let includeFilename = settings.includeFilename
-        let includeStatistics = settings.includeStatistics
-
-        // Decode, combine, and encode on a background thread
-        return await Task.detached(priority: .userInitiated) {
-            Self.buildResult(
-                from: snapshots,
-                createVisualSeparation: createVisualSeparation,
-                separatorStyle: separatorStyle,
-                includePageNumber: includePageNumber,
-                includeFilename: includeFilename,
-                includeStatistics: includeStatistics
-            )
-        }.value
+        // Decode, combine, and encode off the main actor
+        return await Self.buildResult(
+            from: snapshots,
+            createVisualSeparation: settings.createVisualSeparation,
+            separatorStyle: settings.separatorStyle,
+            includePageNumber: settings.includePageNumber,
+            includeFilename: settings.includeFilename,
+            includeStatistics: settings.includeStatistics
+        )
     }
 
-    // MARK: - Combining (background thread)
+    // MARK: - Combining (off the main actor)
 
-    static func buildResult(
+    @concurrent
+    nonisolated static func buildResult(
         from snapshots: [PageSnapshot],
         createVisualSeparation: Bool,
         separatorStyle: SeparatorStyle,
         includePageNumber: Bool,
         includeFilename: Bool,
         includeStatistics: Bool
-    ) -> TextExportResult {
+    ) async -> TextExportResult {
         let combined = NSMutableAttributedString()
         let separatorAttributes: [NSAttributedString.Key: Any] = [.font: PageTextStyle.storageFont]
         let totalPages = snapshots.count
@@ -197,7 +157,7 @@ struct TextExporter {
     }
 
     /// Builds the separator text between pages (empty string = no separator).
-    private static func separatorString(
+    nonisolated private static func separatorString(
         pageNumber: Int,
         fileName: String?,
         wordCount: Int,

@@ -10,19 +10,11 @@ struct DocumentCard: View {
     let onDelete: () -> Void
     let onOptimize: () -> Void
 
-    @Environment(\.modelContext) private var modelContext
-
-    /// Delay before focusing text fields to ensure they're in the view hierarchy
-    private static let focusDelay: TimeInterval = 0.1
-
-    // Inline rename state
+    // Inline rename state. `editedName` lives in DocumentCardName
     @State private var isEditingName = false
-    @State private var editedName: String = ""
     @FocusState private var isNameFieldFocused: Bool
 
-    // Emoji picker state
-    @State private var showingEmojiPopover = false
-    @State private var emojiInput: String = ""
+    // Emoji picker state. `emojiInput` lives in DocumentCardEmojiButton.
     @FocusState private var isEmojiFieldFocused: Bool
     @FocusState private var isMenuButtonFocused: Bool
 
@@ -34,28 +26,51 @@ struct DocumentCard: View {
 
     // Export panel state
     @State private var showingExportPanel = false
-    private var menuButtonVisible: Bool {
-          showEncompassingContainer || isMenuButtonFocused
-      }
 
-    /// Whether to show the encompassing container (when hovered or keyboard-focused)
-    private var showEncompassingContainer: Bool {
-        isHovered || isCardFocused
+    /// The ellipsis menu shows while the card is hovered or keyboard-focused (or the menu itself has focus).
+    private var menuButtonVisible: Bool {
+        isHovered || isCardFocused || isMenuButtonFocused
     }
 
     var body: some View {
         // Encompassing container
         VStack(spacing: 12) {
-            thumbnailSection
-            titleSection
-        }
-        .background {
-            if showEncompassingContainer {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(.clear)
+            DocumentCardThumbnail(
+                document: document,
+                isProcessing: isProcessing,
+                ocrProgress: ocrProgress
+            )
+
+            HStack(alignment: .top, spacing: 8) {
+                DocumentCardEmojiButton(
+                    document: document,
+                    isProcessing: isProcessing,
+                    isFieldFocused: $isEmojiFieldFocused
+                )
+
+                VStack(alignment: .leading, spacing: 4) {
+                    DocumentCardName(
+                        document: document,
+                        isEditing: $isEditingName,
+                        isFieldFocused: $isNameFieldFocused,
+                        onBeginEditing: startEditing
+                    )
+                    DocumentCardMetadata(document: document)
+                }
+
+                DocumentCardMenuButton(
+                    document: document,
+                    isProcessing: isProcessing,
+                    isVisible: menuButtonVisible,
+                    isFocused: $isMenuButtonFocused,
+                    onRename: startEditing,
+                    onExport: { showingExportPanel = true },
+                    onOptimize: onOptimize,
+                    onDelete: onDelete
+                )
+                .padding(.vertical, 2)
             }
         }
-//        .animation(.easeInOut(duration: 0.15), value: showEncompassingContainer)
         .frame(maxHeight: .infinity, alignment: .top)
         .contentShape(Rectangle())
         .onHover { hovering in
@@ -74,7 +89,16 @@ struct DocumentCard: View {
             openProject()
         }
         #endif
-        .contextMenu { contextMenuContent }
+        .contextMenu {
+            DocumentCardActions(
+                document: document,
+                isProcessing: isProcessing,
+                onRename: startEditing,
+                onExport: { showingExportPanel = true },
+                onOptimize: onOptimize,
+                onDelete: onDelete
+            )
+        }
         .focusable()
         .focused($isCardFocused)
         .onKeyPress(.return) {
@@ -98,8 +122,12 @@ struct DocumentCard: View {
         .appEntityIdentifier(document.uuid.map { EntityIdentifier(for: ProjectEntity.self, identifier: $0) })
     }
 
-    /// Opens the project and donates the matching intent.
-    /// For predicition learning.
+    private func startEditing() {
+        guard !isProcessing else { return }
+        isEditingName = true
+    }
+
+    /// Opens the project and donates the matching intent for predicition learning.
     private func openProject() {
         onOpen()
         guard let uuid = document.uuid else { return }
@@ -110,18 +138,29 @@ struct DocumentCard: View {
             _ = try? await IntentDonationManager.shared.donate(intent: intent)
         }
     }
+}
 
-    // MARK: - Context Menu Content
+/// Delay before focusing text fields to ensure they're in the view hierarchy
+private let focusDelay: TimeInterval = 0.1
 
-    @ViewBuilder
-    private var contextMenuContent: some View {
+// MARK: - Actions (shared by the context menu and the ellipsis menu)
+
+struct DocumentCardActions: View {
+    let document: Document
+    let isProcessing: Bool
+    let onRename: () -> Void
+    let onExport: () -> Void
+    let onOptimize: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
         Button("Rename…", systemImage: "pencil") {
-            startEditing()
+            onRename()
         }
         .disabled(isProcessing)
 
         Button("Export Project Text…", systemImage: "square.and.arrow.up") {
-            showingExportPanel = true
+            onExport()
         }
         .disabled(isProcessing)
 
@@ -141,44 +180,86 @@ struct DocumentCard: View {
         }
         .disabled(isProcessing)
     }
+}
 
-    // MARK: - Thumbnail Section
+// MARK: - Thumbnail Section
 
-    private var thumbnailSection: some View {
-        ZStack(alignment: .topTrailing) {
-            // Main thumbnail with 8.5:11 aspect ratio (US Letter)
-            ZStack {
-                // Background
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.gray.opacity(0.1))
+struct DocumentCardThumbnail: View {
+    let document: Document
+    let isProcessing: Bool
+    let ocrProgress: Double
 
-                // Show processing indicator or thumbnail
-                if isProcessing {
-                    VStack(spacing: 8) {
-                        ProgressView()
-                            .controlSize(.regular)
-                        Text(Int(ocrProgress * 100), format: .percent)
-                            .font(.body)
-                            .foregroundStyle(Color.primary)
-                    }
-                } else if let lastPage = document.lastModifiedPage,
-                          let thumbData = lastPage.thumbnailData,
-                          let thumbnail = PlatformImage.from(data: thumbData) {
-                    thumbnail
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                }
+    var body: some View {
+        // Main thumbnail with 8.5:11 aspect ratio (US Letter)
+        ZStack {
+            // Background
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.gray.opacity(0.1))
+
+            // Show processing indicator or thumbnail
+            if isProcessing {
+                DocumentCardProgressIndicator(ocrProgress: ocrProgress)
+            } else {
+                DocumentCardPreviewImage(document: document)
             }
-            .aspectRatio(8.5/11, contentMode: .fit)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .aspectRatio(8.5/11, contentMode: .fit)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+/// Isolated so OCR progress ticks don't invalidate anything else on the card.
+struct DocumentCardProgressIndicator: View {
+    let ocrProgress: Double
+
+    var body: some View {
+        VStack(spacing: 8) {
+            ProgressView()
+                .controlSize(.regular)
+            Text(Int(ocrProgress * 100), format: .percent)
+                .font(.body)
+                .foregroundStyle(Color.primary)
         }
     }
+}
 
-    // MARK: - Menu Button
+/// Owns the `lastModifiedPage` scan and the thumbnail decode, so neither runs when the card invalidates for hover, focus, or rename.
+struct DocumentCardPreviewImage: View {
+    let document: Document
 
-    private var menuButton: some View {
+    var body: some View {
+        if let lastPage = document.lastModifiedPage,
+           let thumbData = lastPage.thumbnailData,
+           let thumbnail = PlatformImage.from(data: thumbData) {
+            thumbnail
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+        }
+    }
+}
+
+// MARK: - Menu Button
+
+struct DocumentCardMenuButton: View {
+    let document: Document
+    let isProcessing: Bool
+    let isVisible: Bool
+    @FocusState.Binding var isFocused: Bool
+    let onRename: () -> Void
+    let onExport: () -> Void
+    let onOptimize: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
         Menu {
-            contextMenuContent
+            DocumentCardActions(
+                document: document,
+                isProcessing: isProcessing,
+                onRename: onRename,
+                onExport: onExport,
+                onOptimize: onOptimize,
+                onDelete: onDelete
+            )
         } label: {
             Image(systemName: "ellipsis.circle.fill")
                 .font(.title3)
@@ -186,59 +267,81 @@ struct DocumentCard: View {
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
-        .focused($isMenuButtonFocused)
+        .focused($isFocused)
+        .opacity(isVisible ? 1 : 0)
+        .animation(.easeInOut(duration: 0.15), value: isVisible)
         .accessibilityLabel("Project options")
         .accessibilityHint("Opens menu with rename, optimize, and delete options")
     }
+}
 
-    // MARK: - Title Section (with emoji to the left)
+// MARK: - Title (inline editable)
 
-    private var titleSection: some View {
-        HStack(alignment: .top, spacing: 8) {
-            // Emoji/Icon button to the left of the title
-            emojiIconButton
+struct DocumentCardName: View {
+    let document: Document
+    @Binding var isEditing: Bool
+    @FocusState.Binding var isFieldFocused: Bool
+    let onBeginEditing: () -> Void
 
-            // Title and metadata in a VStack, aligned with the title
-            VStack(alignment: .leading, spacing: 4) {
-                // Title (inline editable)
-                Group {
-                    if isEditingName {
-                        TextField("Project Name", text: $editedName)
-                            .textFieldStyle(.plain)
-                            .font(.headline)
-                            .focused($isNameFieldFocused)
-                            .onSubmit { commitRename() }
-                        #if os(macOS)
-                            .onExitCommand { cancelRename() }
-                        #endif
-                    } else {
-                        Text(document.name)
-                            .font(.headline)
-                            .lineLimit(2)
-                            .truncationMode(.tail)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                            .onTapGesture(count: 2) {
-                                startEditing()
-                            }
+    @Environment(\.modelContext) private var modelContext
+
+    /// Local to this view so each keystroke invalidates only the name field.
+    @State private var editedName: String = ""
+
+    var body: some View {
+        if isEditing {
+            TextField("Project Name", text: $editedName)
+                .textFieldStyle(.plain)
+                .font(.headline)
+                .focused($isFieldFocused)
+                .onSubmit { commitRename() }
+            #if os(macOS)
+                .onExitCommand { isEditing = false }
+            #endif
+                .onAppear {
+                    editedName = document.name
+                    // Delay to ensure the TextField is mounted before focusing
+                    Task {
+                        try? await Task.sleep(for: .seconds(focusDelay))
+                        isFieldFocused = true
                     }
                 }
-
-                // Metadata below title
-                metadataSection
-            }
-            // Project context menu on trailing
-            menuButton
-                .padding(.vertical, 2)
-                .opacity(menuButtonVisible ? 1 : 0)
-                .animation(.easeInOut(duration: 0.15), value: menuButtonVisible)
+        } else {
+            Text(document.name)
+                .font(.headline)
+                .lineLimit(2)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) {
+                    onBeginEditing()
+                }
         }
     }
 
-    // MARK: - Emoji/Icon Button
+    private func commitRename() {
+        let trimmed = editedName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            document.name = trimmed
+            document.lastModified = Date()
+            saveDocument(modelContext)
+            MultiScanShortcuts.updateAppShortcutParameters()
+        }
+        isEditing = false
+    }
+}
 
-    private var emojiIconButton: some View {
-        Button(action: { showingEmojiPopover = true }) {
+// MARK: - Emoji/Icon Button
+
+struct DocumentCardEmojiButton: View {
+    let document: Document
+    let isProcessing: Bool
+    @FocusState.Binding var isFieldFocused: Bool
+
+    @State private var showingPopover = false
+
+    var body: some View {
+        Button(action: { showingPopover = true }) {
             Group {
                 if let emoji = document.emoji, !emoji.isEmpty {
                     Text(emoji)
@@ -256,15 +359,30 @@ struct DocumentCard: View {
         .accessibilityLabel("Project icon")
         .accessibilityValue(document.emoji ?? "Default document icon")
         .accessibilityHint("Activate to change the project emoji")
-        .popover(isPresented: $showingEmojiPopover) {
-            emojiPickerPopover
+        .popover(isPresented: $showingPopover) {
+            DocumentCardEmojiPicker(
+                document: document,
+                isPresented: $showingPopover,
+                isFieldFocused: $isFieldFocused
+            )
         }
     }
+}
 
-    // MARK: - Emoji Picker Popover (Temporary Solution)
-    // Replace with system emoji picker when SwiftUI provides native API
+// MARK: - Emoji Picker Popover (Temporary Solution)
+// Replace with system emoji picker when SwiftUI provides native API
 
-    private var emojiPickerPopover: some View {
+struct DocumentCardEmojiPicker: View {
+    let document: Document
+    @Binding var isPresented: Bool
+    @FocusState.Binding var isFieldFocused: Bool
+
+    @Environment(\.modelContext) private var modelContext
+
+    /// Local to this view so typing doesn't invalidate the card.
+    @State private var emojiInput: String = ""
+
+    var body: some View {
         VStack(spacing: 12) {
             Text("Add an emoji")
                 .font(.headline)
@@ -273,16 +391,12 @@ struct DocumentCard: View {
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 60)
                 .multilineTextAlignment(.center)
-                .focused($isEmojiFieldFocused)
+                .focused($isFieldFocused)
                 .accessibilityLabel("Enter emoji")
                 .onChange(of: emojiInput) { _, newValue in
                     // Auto-accept when user types an emoji
                     if let firstChar = newValue.first, firstChar.isEmoji {
-                        document.emoji = String(firstChar)
-                        document.lastModified = Date()
-                        saveDocument()
-                        emojiInput = ""
-                        showingEmojiPopover = false
+                        setEmoji(String(firstChar))
                     }
                 }
                 .onSubmit {
@@ -291,11 +405,7 @@ struct DocumentCard: View {
 
             HStack(spacing: 8) {
                 Button("Clear") {
-                    document.emoji = nil
-                    document.lastModified = Date()
-                    saveDocument()
-                    emojiInput = ""
-                    showingEmojiPopover = false
+                    setEmoji(nil)
                 }
                 .buttonStyle(.bordered)
 
@@ -311,52 +421,36 @@ struct DocumentCard: View {
             emojiInput = ""
             // Small delay to ensure popover is ready
             Task {
-                try? await Task.sleep(for: .seconds(Self.focusDelay))
-                isEmojiFieldFocused = true
+                try? await Task.sleep(for: .seconds(focusDelay))
+                isFieldFocused = true
             }
         }
     }
 
     private func commitEmoji() {
         if let firstChar = emojiInput.first, firstChar.isEmoji {
-            document.emoji = String(firstChar)
-            document.lastModified = Date()
-            saveDocument()
+            setEmoji(String(firstChar))
+        } else {
+            emojiInput = ""
+            isPresented = false
         }
+    }
+
+    private func setEmoji(_ emoji: String?) {
+        document.emoji = emoji
+        document.lastModified = Date()
+        saveDocument(modelContext)
         emojiInput = ""
-        showingEmojiPopover = false
+        isPresented = false
     }
+}
 
-    private func startEditing() {
-        guard !isProcessing else { return }
-        editedName = document.name
-        isEditingName = true
-        // Delay to ensure TextField is mounted
-        Task {
-            try? await Task.sleep(for: .seconds(Self.focusDelay))
-            isNameFieldFocused = true
-        }
-    }
+// MARK: - Metadata Section
 
-    private func commitRename() {
-        let trimmed = editedName.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty {
-            document.name = trimmed
-            document.lastModified = Date()
-            saveDocument()
-            MultiScanShortcuts.updateAppShortcutParameters()
-        }
-        isEditingName = false
-    }
+struct DocumentCardMetadata: View {
+    let document: Document
 
-    private func cancelRename() {
-        isEditingName = false
-        editedName = document.name
-    }
-
-    // MARK: - Metadata Section
-
-    private var metadataSection: some View {
+    var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             // Last edited date (absolute format with timezone support)
             Text(document.lastModifiedDate, format: .dateTime.month(.wide).day().year().hour().minute())
@@ -369,15 +463,15 @@ struct DocumentCard: View {
                 .foregroundStyle(Color.secondary)
         }
     }
+}
 
-    // MARK: - Helpers
+// MARK: - Helpers
 
-    private func saveDocument() {
-        do {
-            try modelContext.save()
-        } catch {
-            print("Failed to save document: \(error)")
-        }
+private func saveDocument(_ modelContext: ModelContext) {
+    do {
+        try modelContext.save()
+    } catch {
+        print("Failed to save document: \(error)")
     }
 }
 
@@ -396,7 +490,6 @@ private struct DocumentCardPreviewHelper: View {
     let documentName: String
     let emoji: String
     let isProcessing: Bool
-    let isSelected: Bool
     let locale: String
 
     var body: some View {
@@ -435,7 +528,6 @@ private struct DocumentCardPreviewHelper: View {
         documentName: "Sample Project",
         emoji: "📄",
         isProcessing: false,
-        isSelected: false,
         locale: "en"
     )
 }
@@ -445,7 +537,6 @@ private struct DocumentCardPreviewHelper: View {
         documentName: "Proyecto de ejemplo",
         emoji: "📄",
         isProcessing: false,
-        isSelected: false,
         locale: "es-419"
     )
 }
@@ -455,7 +546,6 @@ private struct DocumentCardPreviewHelper: View {
         documentName: "Processing Document",
         emoji: "⏳",
         isProcessing: true,
-        isSelected: false,
         locale: "en"
     )
 }
@@ -465,7 +555,6 @@ private struct DocumentCardPreviewHelper: View {
         documentName: "Procesando proyecto",
         emoji: "⏳",
         isProcessing: true,
-        isSelected: false,
         locale: "es-419"
     )
 }

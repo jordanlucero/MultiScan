@@ -51,17 +51,11 @@ final class AppRouter {
     }
 
     /// Consumes a pending open request that targets `document`, navigating to the requested page. Requests for other projects are left alone for the view showing that project.
-    /// - Returns: the page number navigated to, or `nil` if nothing changed.
-    @discardableResult
-    func fulfillOpenRequest(for document: Document, navigationState: NavigationState) -> Int? {
-        guard let request = openRequest, request.projectUUID == document.uuid else { return nil }
-
-        var navigatedTo: Int?
+    func fulfillOpenRequest(for document: Document, navigationState: NavigationState) {
+        guard let request = openRequest, request.projectUUID == document.uuid else { return }
         if let pageNumber = request.pageNumber, navigationState.currentPageNumber != pageNumber {
             navigationState.goToPage(pageNumber: pageNumber)
-            navigatedTo = pageNumber
         }
         consumeOpenRequest()
-        return navigatedTo
     }
 }

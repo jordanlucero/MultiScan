@@ -41,16 +41,6 @@ private final class SendablePDFDocument: @unchecked Sendable {
 /// Service for importing PDF documents by rendering pages to images
 final class PDFImportService: @unchecked Sendable {
 
-    /// Check if a URL points to a PDF file
-    /// - Parameter url: File URL to check
-    /// - Returns: true if the file is a PDF
-    static func isPDF(url: URL) -> Bool {
-        guard let contentType = try? url.resourceValues(forKeys: [.contentTypeKey]).contentType else {
-            return false
-        }
-        return contentType.conforms(to: .pdf)
-    }
-
     /// Quickly get the page count from a PDF without rendering
     /// - Parameter url: PDF file URL
     /// - Returns: Number of pages, or 0 if the PDF couldn't be loaded

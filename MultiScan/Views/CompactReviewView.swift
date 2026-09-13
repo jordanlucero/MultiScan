@@ -19,12 +19,10 @@ struct CompactReviewView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.undoManager) private var undoManager
     @Environment(AppRouter.self) private var router
-    @StateObject private var navigationState = NavigationState()
+    @State private var navigationState = NavigationState()
 
     /// Shared import → OCR pipeline (also used by Home and the "Start New Project" intent).
     private let pipeline = ProjectImportPipeline.shared
-
-    @State private var selectedPageNumber: Int?
 
     /// Smart Cleanup analysis + edits (shared with the RichTextSidebar pane on macOS/iPad).
     /// The compact layout has no reachable text controller, so its edits go model-side and the text sheet is reloaded afterwards.
@@ -33,6 +31,7 @@ struct CompactReviewView: View {
     @State private var textSheetRefreshID = UUID()
     @State private var showSlideGrid = false
     @State private var showExportPanel = false
+    @State private var showDeletePageConfirmation = false
 
     @AppStorage("optimizeImagesOnImport") private var optimizeImagesOnImport = false
 
@@ -61,7 +60,6 @@ struct CompactReviewView: View {
                 SlideGridView(
                     document: document,
                     navigationState: navigationState,
-                    selectedPageNumber: $selectedPageNumber,
                     onAddPhotos: { insertAfter, items in
                         Task { await processSelectedPhotos(items, insertAfter: insertAfter) }
                     },
@@ -72,6 +70,12 @@ struct CompactReviewView: View {
             }
             .sheet(isPresented: $showExportPanel, onDismiss: restoreTextSheet) {
                 ExportPanelView(document: document)
+            }
+            // Edit ▸ Delete Page… (⌘⌫ on a hardware keyboard)
+            .focusedSceneValue(\.navigationState, navigationState)
+            .focusedSceneValue(\.showDeletePageConfirmation, $showDeletePageConfirmation)
+            .deletePageConfirmation(isPresented: $showDeletePageConfirmation, pageNumber: navigationState.currentPageNumber ?? 0) {
+                navigationState.deleteCurrentPage(modelContext: modelContext)
             }
             .onChange(of: showSlideGrid) { _, showing in
                 if showing { showTextSheet = false }
@@ -88,18 +92,15 @@ struct CompactReviewView: View {
             .onAppear {
                 navigationState.setupNavigation(for: document)
                 navigationState.undoManager = undoManager
-                if let firstPage = navigationState.currentPage {
-                    selectedPageNumber = firstPage.pageNumber
-                }
-                fulfillOpenRequest()
+                router.fulfillOpenRequest(for: document, navigationState: navigationState)
                 setUpCleanupModel()
             }
-            .onChange(of: navigationState.currentPageNumber) { _, newPageNumber in
-                selectedPageNumber = newPageNumber
+            .onChange(of: navigationState.currentPageNumber) {
                 scheduleCleanupAnalysis()
             }
-            .onChange(of: router.openRequest) { _, _ in
-                fulfillOpenRequest()
+            .onChange(of: router.openRequest) {
+                // Deep link (Spotlight page result, Open Page intent, search hit)
+                router.fulfillOpenRequest(for: document, navigationState: navigationState)
             }
             .onChange(of: undoManager) { _, newValue in
                 navigationState.undoManager = newValue
@@ -109,13 +110,6 @@ struct CompactReviewView: View {
 
     private func restoreTextSheet() {
         showTextSheet = true
-    }
-
-    /// Jumps to the page requested by a deep link (Spotlight page result, Open Page intent, search hit).
-    private func fulfillOpenRequest() {
-        if let pageNumber = router.fulfillOpenRequest(for: document, navigationState: navigationState) {
-            selectedPageNumber = pageNumber
-        }
     }
 
     // MARK: - Smart Cleanup
@@ -290,7 +284,6 @@ struct CompactReviewView: View {
             // Navigate to the first new page
             if let firstNew = result.firstNewPageNumber {
                 navigationState.goToPage(pageNumber: firstNew)
-                selectedPageNumber = firstNew
             }
         } catch {
             print("Failed to add pages: \(error)")

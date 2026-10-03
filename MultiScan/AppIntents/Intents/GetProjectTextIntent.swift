@@ -7,12 +7,14 @@
 
 import AppIntents
 
-nonisolated struct GetProjectTextIntent: AppIntent {
-    static let title: LocalizedStringResource = "Get Project Text"
-    static let description = IntentDescription(
+struct GetProjectTextIntent: AppIntent {
+    nonisolated static let title: LocalizedStringResource = "Get Project Text"
+    nonisolated static let description = IntentDescription(
         "Returns the recognized text of a project, optionally separated by page.",
         categoryName: "Projects"
     )
+
+    nonisolated init() {}
 
     @Parameter(title: "Project", requestValueDialog: "Which project?")
     var project: ProjectEntity
@@ -20,7 +22,7 @@ nonisolated struct GetProjectTextIntent: AppIntent {
     @Parameter(title: "Separate Pages", description: "Insert a “Page X of Y” line between pages.", default: true)
     var separatePages: Bool
 
-    static var parameterSummary: some ParameterSummary {
+    nonisolated static var parameterSummary: some ParameterSummary {
         Summary("Get text of \(\.$project)") {
             \.$separatePages
         }

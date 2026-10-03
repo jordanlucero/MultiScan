@@ -9,6 +9,7 @@
 //
 //  `id` is the CloudKit-synced `Document.uuid`, so it is already stable across devices and launches.
 //
+//  Isolation: main-actor isolated struct (project default) with `nonisolated` on the members the framework calls synchronously — see the note in `PageEntity` for why the wrapped properties are read through `_name.wrappedValue` there.
 //
 
 import AppIntents
@@ -17,15 +18,15 @@ import CoreTransferable
 import Foundation
 import UniformTypeIdentifiers
 
-nonisolated struct ProjectEntity: IndexedEntity, SyncableEntity {
-    static let typeDisplayRepresentation = TypeDisplayRepresentation(
+struct ProjectEntity: IndexedEntity, SyncableEntity {
+    nonisolated static let typeDisplayRepresentation = TypeDisplayRepresentation(
         name: LocalizedStringResource("Project", comment: "App Intents type name for a MultiScan project"),
         numericFormat: LocalizedStringResource("\(placeholder: .int) projects", comment: "App Intents plural type name")
     )
 
-    static let defaultQuery = ProjectEntityQuery()
+    nonisolated static let defaultQuery = ProjectEntityQuery()
 
-    var id: UUID
+    let id: UUID
 
     @Property(title: "Name", indexingKey: \.displayName)
     var name: String
@@ -50,9 +51,9 @@ nonisolated struct ProjectEntity: IndexedEntity, SyncableEntity {
     var summary: String
 
     /// Small JPEG cover for display representations (not a `@Property`).
-    var coverThumbnail: Data?
+    let coverThumbnail: Data?
 
-    init(
+    nonisolated init(
         id: UUID,
         name: String,
         emoji: String?,
@@ -76,18 +77,20 @@ nonisolated struct ProjectEntity: IndexedEntity, SyncableEntity {
 
     // MARK: Display
 
-    var displayTitle: String {
-        let emoji = emoji ?? ""
+    nonisolated var displayTitle: String {
+        let emoji = _emoji.wrappedValue ?? ""
+        let name = _name.wrappedValue
         return emoji.isEmpty ? name : "\(emoji) \(name)"
     }
 
-    var completionPercentage: Int {
+    nonisolated var completionPercentage: Int {
+        let pageCount = _pageCount.wrappedValue
         guard pageCount > 0 else { return 0 }
-        return Int(Double(reviewedPageCount) / Double(pageCount) * 100)
+        return Int(Double(_reviewedPageCount.wrappedValue) / Double(pageCount) * 100)
     }
 
-    var displayRepresentation: DisplayRepresentation {
-        let pages = LocalizedStringResource("\(pageCount) pages", comment: "Project page count in App Intents/Spotlight")
+    nonisolated var displayRepresentation: DisplayRepresentation {
+        let pages = LocalizedStringResource("\(_pageCount.wrappedValue) pages", comment: "Project page count in App Intents/Spotlight")
         let subtitle = LocalizedStringResource("\(pages) · \(completionPercentage.formatted(.percent)) reviewed", comment: "Project subtitle in App Intents/Spotlight")
         if let coverThumbnail {
             return DisplayRepresentation(
@@ -105,14 +108,14 @@ nonisolated struct ProjectEntity: IndexedEntity, SyncableEntity {
 
     // MARK: Spotlight
 
-    var attributeSet: CSSearchableItemAttributeSet {
+    nonisolated var attributeSet: CSSearchableItemAttributeSet {
         let attributes = defaultAttributeSet
-        attributes.keywords = [name, emoji].compactMap { $0 }.filter { !$0.isEmpty }
+        attributes.keywords = [_name.wrappedValue, _emoji.wrappedValue].compactMap { $0 }.filter { !$0.isEmpty }
         attributes.domainIdentifier = Self.domainIdentifier(for: id)
         return attributes
     }
 
-    static func domainIdentifier(for projectID: UUID) -> String {
+    nonisolated static func domainIdentifier(for projectID: UUID) -> String {
         "project.\(projectID.uuidString)"
     }
 }
@@ -120,7 +123,7 @@ nonisolated struct ProjectEntity: IndexedEntity, SyncableEntity {
 // MARK: - Transferable
 
 extension ProjectEntity: Transferable {
-    static var transferRepresentation: some TransferRepresentation {
+    nonisolated static var transferRepresentation: some TransferRepresentation {
         FileRepresentation(exportedContentType: .rtf) { entity in
             let data = try await entity.exportedText().rtfDataOrThrow()
             let url = FileManager.default.temporaryDirectory
@@ -141,13 +144,13 @@ extension ProjectEntity: Transferable {
         }
     }
 
-    private var exportFileName: String {
-        let cleaned = name.replacingOccurrences(of: "/", with: "-").trimmingCharacters(in: .whitespacesAndNewlines)
+    private nonisolated var exportFileName: String {
+        let cleaned = _name.wrappedValue.replacingOccurrences(of: "/", with: "-").trimmingCharacters(in: .whitespacesAndNewlines)
         return cleaned.isEmpty ? "Project" : cleaned
     }
 
     /// Builds the combined text with the user's current export separators.
-    private func exportedText() async throws -> ProjectTextExport {
+    private nonisolated func exportedText() async throws -> ProjectTextExport {
         let options = await ExportSettings.currentOptions
         return try await ProjectStore.shared.projectText(uuid: id, options: options)
     }

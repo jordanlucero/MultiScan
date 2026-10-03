@@ -6,6 +6,8 @@
 //
 //  `id` is the CloudKit-synced `Page.uuid` — stable across devices. `SyncableEntity` is declarative only; see the note in `ProjectEntity` for why the id stays a bare `UUID`.
 //
+//  Isolation: the struct is main-actor isolated (project default) because `nonisolated` on the type would propagate onto the `@Property` storage, which the compiler rejects. The members App Intents, Spotlight, and Transferable call synchronously are `nonisolated`; they read the wrapped properties through their backing storage (`_pageNumber.wrappedValue`), which is a plain Sendable stored property and therefore readable from any isolation (SE-0434).
+//
 
 import AppIntents
 import CoreSpotlight
@@ -13,16 +15,16 @@ import CoreTransferable
 import Foundation
 import UniformTypeIdentifiers
 
-nonisolated struct PageEntity: IndexedEntity, SyncableEntity {
-    static let typeDisplayRepresentation = TypeDisplayRepresentation(
+struct PageEntity: IndexedEntity, SyncableEntity {
+    nonisolated static let typeDisplayRepresentation = TypeDisplayRepresentation(
         name: LocalizedStringResource("Page", comment: "App Intents type name for a scanned page"),
         numericFormat: LocalizedStringResource("\(placeholder: .int) pages", comment: "App Intents plural type name")
     )
 
-    static let defaultQuery = PageEntityQuery()
+    nonisolated static let defaultQuery = PageEntityQuery()
 
-    var id: UUID
-    var projectID: UUID
+    let id: UUID
+    let projectID: UUID
 
     @Property(title: "Page Number")
     var pageNumber: Int
@@ -44,9 +46,9 @@ nonisolated struct PageEntity: IndexedEntity, SyncableEntity {
     var lastModified: Date
 
     /// Small JPEG thumbnail for display representations (not a `@Property`).
-    var thumbnail: Data?
+    let thumbnail: Data?
 
-    init(
+    nonisolated init(
         id: UUID,
         projectID: UUID,
         pageNumber: Int,
@@ -70,21 +72,22 @@ nonisolated struct PageEntity: IndexedEntity, SyncableEntity {
 
     // MARK: Display
 
-    var displayRepresentation: DisplayRepresentation {
-        let title = LocalizedStringResource("Page \(pageNumber)", comment: "Page title in App Intents/Spotlight")
+    nonisolated var displayRepresentation: DisplayRepresentation {
+        let title = LocalizedStringResource("Page \(_pageNumber.wrappedValue)", comment: "Page title in App Intents/Spotlight")
+        let subtitle = _projectName.wrappedValue
         if let thumbnail {
-            return DisplayRepresentation(title: title, subtitle: "\(projectName)", image: .init(data: thumbnail))
+            return DisplayRepresentation(title: title, subtitle: "\(subtitle)", image: .init(data: thumbnail))
         }
-        return DisplayRepresentation(title: title, subtitle: "\(projectName)", image: .init(systemName: "doc.text"))
+        return DisplayRepresentation(title: title, subtitle: "\(subtitle)", image: .init(systemName: "doc.text"))
     }
 
     // MARK: Spotlight
 
-    var attributeSet: CSSearchableItemAttributeSet {
+    nonisolated var attributeSet: CSSearchableItemAttributeSet {
         let attributes = defaultAttributeSet
-        attributes.contentDescription = ProjectStore.summary(of: text)
+        attributes.contentDescription = ProjectStore.summary(of: _text.wrappedValue)
         attributes.domainIdentifier = ProjectEntity.domainIdentifier(for: projectID)
-        attributes.keywords = [projectName, fileName].compactMap { $0 }.filter { !$0.isEmpty }
+        attributes.keywords = [_projectName.wrappedValue, _fileName.wrappedValue].compactMap { $0 }.filter { !$0.isEmpty }
         return attributes
     }
 }
@@ -92,13 +95,13 @@ nonisolated struct PageEntity: IndexedEntity, SyncableEntity {
 // MARK: - Transferable
 
 extension PageEntity: Transferable {
-    static var transferRepresentation: some TransferRepresentation {
+    nonisolated static var transferRepresentation: some TransferRepresentation {
         DataRepresentation(exportedContentType: .rtf) { entity in
             try await ProjectStore.shared.pageRTF(uuid: entity.id)
         }
 
         DataRepresentation(exportedContentType: .utf8PlainText) { entity in
-            Data(entity.text.utf8)
+            Data(entity._text.wrappedValue.utf8)
         }
 
         DataRepresentation(exportedContentType: .jpeg) { entity in

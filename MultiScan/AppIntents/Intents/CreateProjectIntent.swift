@@ -9,14 +9,16 @@ import AppIntents
 import Foundation
 import UniformTypeIdentifiers
 
-nonisolated struct CreateProjectIntent: AppIntent, LongRunningIntent, CancellableIntent {
-    static let title: LocalizedStringResource = "Start New Project"
-    static let description = IntentDescription(
+struct CreateProjectIntent: AppIntent, LongRunningIntent, CancellableIntent {
+    nonisolated static let title: LocalizedStringResource = "Start New Project"
+    nonisolated static let description = IntentDescription(
         "Creates a MultiScan project from images or PDFs and recognizes their text.",
         categoryName: "Projects"
     )
-    static var supportedModes: IntentModes { .background }
-    static var allowedExecutionTargets: IntentExecutionTargets { .main }
+    nonisolated static var supportedModes: IntentModes { .background }
+    nonisolated static var allowedExecutionTargets: IntentExecutionTargets { .main }
+
+    nonisolated init() {}
 
     @Parameter(
         title: "Files",
@@ -28,7 +30,7 @@ nonisolated struct CreateProjectIntent: AppIntent, LongRunningIntent, Cancellabl
     @Parameter(title: "Name", description: "Project name. Defaults to the folder or file name.")
     var name: String?
 
-    static var parameterSummary: some ParameterSummary {
+    nonisolated static var parameterSummary: some ParameterSummary {
         Summary("Scan \(\.$files) into a new project") {
             \.$name
         }
@@ -38,7 +40,7 @@ nonisolated struct CreateProjectIntent: AppIntent, LongRunningIntent, Cancellabl
 
     /// Conforms to `CustomLocalizedStringResourceConvertible` so Siri/Shortcuts show the real
     /// message — the framework routes thrown errors by type and genericizes a plain `Error`.
-    enum CreateProjectError: Error, CustomLocalizedStringResourceConvertible {
+    nonisolated enum CreateProjectError: Error, CustomLocalizedStringResourceConvertible {
         case nothingToScan
         case projectUnavailable
 
@@ -50,7 +52,6 @@ nonisolated struct CreateProjectIntent: AppIntent, LongRunningIntent, Cancellabl
         }
     }
 
-    @MainActor
     func perform() async throws -> some ReturnsValue<ProjectEntity> & ProvidesDialog {
         let stagingDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("intent-import-\(UUID().uuidString)", isDirectory: true)
@@ -97,7 +98,7 @@ nonisolated struct CreateProjectIntent: AppIntent, LongRunningIntent, Cancellabl
 
     /// Copies the incoming `IntentFile`s into a staging directory. Plain disk I/O — `@concurrent` so a large PDF handed in by Shortcuts doesn't block the main actor.
     @concurrent
-    private static func stageFiles(_ files: [IntentFile], in directory: URL) async throws -> [URL] {
+    private nonisolated static func stageFiles(_ files: [IntentFile], in directory: URL) async throws -> [URL] {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         var urls: [URL] = []
         for (index, file) in files.enumerated() {

@@ -3,6 +3,13 @@
 
 import Foundation
 
+/// Single source of truth for word/character counting across editor, cache, and export.
+nonisolated enum TextStatistics {
+    static func wordCount(of text: String) -> Int {
+        text.split(whereSeparator: { $0.isWhitespace }).count
+    }
+}
+
 /// Service for programmatic text transformations on NSAttributedString and for
 /// Smart Cleanup analysis of plain text.
 ///
@@ -10,7 +17,9 @@ import Foundation
 /// attributed string decoding). Removal operations compute ranges on plain text
 /// and delete them from `NSMutableAttributedString`, which preserves formatting
 /// attributes on the surrounding text automatically.
-enum TextManipulationService {
+///
+/// `nonisolated`: pure functions, run on the cooperative pool by Smart Cleanup analysis and on the main actor by the editor.
+nonisolated enum TextManipulationService {
 
     // MARK: - Line Break Removal
 
@@ -150,8 +159,6 @@ enum TextManipulationService {
 
     // MARK: - Page Number Detection
 
-    /// Attempts to extract a page number from a single line of text.
-    /// Matches standalone numbers, "Page X", "p. X", and "- X -" patterns.
     /// Attempts to extract a page number from a single line of text.
     /// Matches standalone numbers, "Page X", "p. X", and "- X -" patterns.
     /// Also returns the text of the matched number portion for token-level removal.
@@ -317,80 +324,21 @@ enum TextManipulationService {
             return SmartCleanupResult(pageNumbers: [], sectionHeaders: [], consecutiveNumbers: [], totalPages: 0)
         }
 
-        // Detect page numbers (standalone patterns AND mixed header+number lines)
+        // Detect page numbers (standalone patterns AND mixed header+number lines) on the first and last non-empty line of each page
         var pageNumberDetections: [PageNumberDetection] = []
         for entry in sortedEntries {
-            let plainText = entry.plainText
-            let lines = plainText.components(separatedBy: .newlines)
-            let nonEmptyLines = lines.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+            let nonEmptyLines = entry.plainText
+                .components(separatedBy: .newlines)
+                .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
 
-            // Check first non-empty line
-            if let firstLine = nonEmptyLines.first {
-                let trimmed = firstLine.trimmingCharacters(in: .whitespaces)
-                let normalized = normalize(trimmed)
-
-                if let result = extractPageNumber(from: trimmed) {
-                    // Standalone page number pattern (e.g., "42", "Page 42")
-                    pageNumberDetections.append(PageNumberDetection(
-                        pageNumber: entry.pageNumber,
-                        detectedNumber: result.number,
-                        numberText: result.numberText,
-                        lineText: trimmed,
-                        normalizedLine: normalized,
-                        position: .firstLine
-                    ))
-                } else {
-                    // Check for trailing/leading number in mixed line (e.g., "Chapter 1  42")
-                    let decomposed = decomposeHeaderLine(normalized)
-                    if let num = decomposed.pageNumber, !decomposed.coreText.isEmpty {
-                        // Find the actual number text from the original tokens
-                        let tokens = normalized.split(separator: " ").map(String.init)
-                        let numText = tokens.last.flatMap({ parseNumericToken($0) != nil ? tokens.last! : nil })
-                            ?? tokens.first.flatMap({ parseNumericToken($0) != nil ? tokens.first! : nil })
-                            ?? String(num)
-                        pageNumberDetections.append(PageNumberDetection(
-                            pageNumber: entry.pageNumber,
-                            detectedNumber: num,
-                            numberText: numText,
-                            lineText: trimmed,
-                            normalizedLine: normalized,
-                            position: .firstLine
-                        ))
-                    }
-                }
+            if let firstLine = nonEmptyLines.first,
+               let detection = detectPageNumber(in: firstLine, position: .firstLine, pageNumber: entry.pageNumber) {
+                pageNumberDetections.append(detection)
             }
-
-            // Check last non-empty line (only if page has more than one line)
-            if let lastLine = nonEmptyLines.last, nonEmptyLines.count > 1 {
-                let trimmed = lastLine.trimmingCharacters(in: .whitespaces)
-                let normalized = normalize(trimmed)
-
-                if let result = extractPageNumber(from: trimmed) {
-                    pageNumberDetections.append(PageNumberDetection(
-                        pageNumber: entry.pageNumber,
-                        detectedNumber: result.number,
-                        numberText: result.numberText,
-                        lineText: trimmed,
-                        normalizedLine: normalized,
-                        position: .lastLine
-                    ))
-                } else {
-                    let decomposed = decomposeHeaderLine(normalized)
-                    if let num = decomposed.pageNumber, !decomposed.coreText.isEmpty {
-                        let tokens = normalized.split(separator: " ").map(String.init)
-                        let numText = tokens.last.flatMap({ parseNumericToken($0) != nil ? tokens.last! : nil })
-                            ?? tokens.first.flatMap({ parseNumericToken($0) != nil ? tokens.first! : nil })
-                            ?? String(num)
-                        pageNumberDetections.append(PageNumberDetection(
-                            pageNumber: entry.pageNumber,
-                            detectedNumber: num,
-                            numberText: numText,
-                            lineText: trimmed,
-                            normalizedLine: normalized,
-                            position: .lastLine
-                        ))
-                    }
-                }
+            // The last line only counts when the page has more than one line
+            if nonEmptyLines.count > 1, let lastLine = nonEmptyLines.last,
+               let detection = detectPageNumber(in: lastLine, position: .lastLine, pageNumber: entry.pageNumber) {
+                pageNumberDetections.append(detection)
             }
         }
 
@@ -405,6 +353,40 @@ enum TextManipulationService {
             sectionHeaders: sectionHeaders,
             consecutiveNumbers: consecutiveNumbers,
             totalPages: sortedEntries.count
+        )
+    }
+
+    /// Detects a page number on one line: either a standalone pattern (`42`, `Page 42`, `- 42 -`) or a number at the edge of a mixed header line (`Chapter 1    42`).
+    static func detectPageNumber(in line: String, position: LinePosition, pageNumber: Int) -> PageNumberDetection? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        let normalized = normalize(trimmed)
+
+        if let result = extractPageNumber(from: trimmed) {
+            return PageNumberDetection(
+                pageNumber: pageNumber,
+                detectedNumber: result.number,
+                numberText: result.numberText,
+                lineText: trimmed,
+                normalizedLine: normalized,
+                position: position
+            )
+        }
+
+        let decomposed = decomposeHeaderLine(normalized)
+        guard let number = decomposed.pageNumber, !decomposed.coreText.isEmpty else { return nil }
+
+        // The exact edge token, so removal matches the text as written (e.g., "1,234")
+        let tokens = normalized.split(separator: " ").map(String.init)
+        let numberText = tokens.last.flatMap { parseNumericToken($0) != nil ? $0 : nil }
+            ?? tokens.first.flatMap { parseNumericToken($0) != nil ? $0 : nil }
+            ?? String(number)
+        return PageNumberDetection(
+            pageNumber: pageNumber,
+            detectedNumber: number,
+            numberText: numberText,
+            lineText: trimmed,
+            normalizedLine: normalized,
+            position: position
         )
     }
 
@@ -452,16 +434,8 @@ enum TextManipulationService {
                 // Skip very short core texts
                 guard coreText.count >= 3 else { continue }
 
-                // Use the core text (without number) for display
-                let displayCore: String
-                if decomposed.coreText.isEmpty {
-                    displayCore = trimmed
-                } else if decomposed.pageNumber != nil {
-                    let originalDecomposed = decomposeHeaderLine(normalized)
-                    displayCore = originalDecomposed.coreText
-                } else {
-                    displayCore = trimmed
-                }
+                // Display the core text (without its page number) when the line carried one
+                let displayCore = decomposed.pageNumber != nil && !decomposed.coreText.isEmpty ? decomposed.coreText : trimmed
 
                 let ocrKey = ocrNormalize(coreText)
                 lineOccurrences[ocrKey, default: []].append(

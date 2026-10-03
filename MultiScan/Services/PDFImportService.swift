@@ -4,11 +4,12 @@
 import Foundation
 import PDFKit
 import CoreGraphics
+import CoreImage
 import UniformTypeIdentifiers
 import ImageIO
 
 /// Errors that can occur during PDF import
-enum PDFImportError: LocalizedError {
+nonisolated enum PDFImportError: LocalizedError {
     case cannotLoad
     case passwordProtected
     case noPages
@@ -30,7 +31,7 @@ enum PDFImportError: LocalizedError {
 
 /// Wrapper to make PDFDocument usable across concurrent contexts
 /// PDFKit is documented as thread-safe for read operations like page access and rendering
-private final class SendablePDFDocument: @unchecked Sendable {
+private nonisolated final class SendablePDFDocument: @unchecked Sendable {
     let document: PDFDocument
 
     init(_ document: PDFDocument) {
@@ -38,17 +39,14 @@ private final class SendablePDFDocument: @unchecked Sendable {
     }
 }
 
-/// Service for importing PDF documents by rendering pages to images
-final class PDFImportService: @unchecked Sendable {
+/// Renders PDF pages to HEIC images for the OCR pipeline. Stateless; `renderPDF` is `@concurrent` so a long document never touches the main actor.
+nonisolated enum PDFImportService {
 
     /// Quickly get the page count from a PDF without rendering
     /// - Parameter url: PDF file URL
     /// - Returns: Number of pages, or 0 if the PDF couldn't be loaded
     static func pageCount(for url: URL) -> Int {
-        guard let document = PDFDocument(url: url) else {
-            return 0
-        }
-        return document.pageCount
+        PDFDocument(url: url)?.pageCount ?? 0
     }
 
     /// Render all pages of a PDF to HEIC image data using parallel processing
@@ -57,10 +55,8 @@ final class PDFImportService: @unchecked Sendable {
     ///   - dpi: Rendering resolution (default 300 for good OCR quality)
     /// - Returns: Array of (imageData, fileName) tuples ready for OCR pipeline
     /// - Note: Always outputs HEIC for optimal size since we're creating new images, not preserving originals
-    func renderPDF(
-        at url: URL,
-        dpi: CGFloat = 300
-    ) async throws -> [(data: Data, fileName: String)] {
+    @concurrent
+    static func renderPDF(at url: URL, dpi: CGFloat = 300) async throws -> [(data: Data, fileName: String)] {
         guard let document = PDFDocument(url: url) else {
             throw PDFImportError.cannotLoad
         }
@@ -106,8 +102,8 @@ final class PDFImportService: @unchecked Sendable {
                     let fileName = String(localized: "Page \(pageNumber)")
 
                     return autoreleasepool {
-                        guard let cgImage = self.renderPage(pdfPage, dpi: dpi),
-                              let imageData = self.convertToHEIC(cgImage) else {
+                        guard let cgImage = renderPage(pdfPage, dpi: dpi),
+                              let imageData = PlatformImage.encode(cgImage, as: .heic, quality: 0.8) else {
                             return nil
                         }
                         return (pageIndex, imageData, fileName)
@@ -146,7 +142,7 @@ final class PDFImportService: @unchecked Sendable {
     ///   - page: PDF page to render
     ///   - dpi: Target resolution in dots per inch
     /// - Returns: Rendered CGImage, or nil if rendering failed
-    private func renderPage(_ page: PDFPage, dpi: CGFloat) -> CGImage? {
+    private static func renderPage(_ page: PDFPage, dpi: CGFloat) -> CGImage? {
         guard let cgPDFPage = page.pageRef else { return nil }
 
         let pageRotation = page.rotation // 0, 90, 180, or 270
@@ -155,8 +151,8 @@ final class PDFImportService: @unchecked Sendable {
         let rawBox = cgPDFPage.getBoxRect(.cropBox)
         var scale = dpi / 72.0 // PDF points are 72 per inch
         let pixelCount = rawBox.width * rawBox.height * scale * scale
-        if pixelCount > Self.maxPixelsPerPage {
-            scale *= (Self.maxPixelsPerPage / pixelCount).squareRoot()
+        if pixelCount > maxPixelsPerPage {
+            scale *= (maxPixelsPerPage / pixelCount).squareRoot()
         }
 
         let width = Int(rawBox.width * scale)
@@ -208,33 +204,6 @@ final class PDFImportService: @unchecked Sendable {
         default: .up
         }
         let rotated = CIImage(cgImage: cgImage).oriented(orientation)
-        return Self.ciContext.createCGImage(rotated, from: rotated.extent)
-    }
-
-    /// Convert CGImage to HEIC data with good compression
-    /// - Parameter cgImage: Source image
-    /// - Returns: HEIC image data, or nil if conversion failed
-    private func convertToHEIC(_ cgImage: CGImage) -> Data? {
-        let mutableData = NSMutableData()
-
-        guard let destination = CGImageDestinationCreateWithData(
-            mutableData,
-            UTType.heic.identifier as CFString,
-            1,
-            nil
-        ) else {
-            return nil
-        }
-
-        let options: [CFString: Any] = [
-            kCGImageDestinationLossyCompressionQuality: 0.8
-        ]
-        CGImageDestinationAddImage(destination, cgImage, options as CFDictionary)
-
-        guard CGImageDestinationFinalize(destination) else {
-            return nil
-        }
-
-        return mutableData as Data
+        return ciContext.createCGImage(rotated, from: rotated.extent)
     }
 }

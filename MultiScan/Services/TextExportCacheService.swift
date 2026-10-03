@@ -27,7 +27,7 @@
 //  - **Page reorder**: Swap pageNumbers in affected entries
 //
 //  ## Thread Safety
-//  All operations are `@MainActor` since they interact with SwiftData models. `decodeCache(from:)` is nonisolated so raw cache Data can be decoded on background threads (Smart Cleanup analysis, export building).
+//  The mutation helpers are main-actor isolated (the project default) since they write SwiftData models on the main context. The cache value types and the decode/freshness primitives are `nonisolated` so raw cache Data can be decoded and checked off the main actor (Smart Cleanup analysis, export building, `ProjectStore`).
 //
 
 import Foundation
@@ -37,7 +37,7 @@ import SwiftData
 
 /// Container for all cached page text data.
 /// Serialized to `Document.textExportCache` as binary-plist-encoded `Data`.
-struct TextExportCache: Codable, Sendable {
+nonisolated struct TextExportCache: Codable, Sendable {
     /// Version number for cache format migrations.
     /// Increment this when changing the structure to trigger automatic rebuild.
     /// - v1: JSON container, entries held Codable AttributedString (pre-TextKit 2)
@@ -53,7 +53,7 @@ struct TextExportCache: Codable, Sendable {
 }
 
 /// Cached data for a single page, containing everything needed for export and analysis.
-struct PageCacheEntry: Codable, Sendable {
+nonisolated struct PageCacheEntry: Codable, Sendable {
     let pageNumber: Int
     let fileName: String?
 
@@ -77,7 +77,6 @@ struct PageCacheEntry: Codable, Sendable {
 
     /// Creates an entry from a Page's current data.
     /// Call this when the page's text is already loaded in memory.
-    @MainActor
     init(from page: Page) {
         self.init(
             pageNumber: page.pageNumber,
@@ -145,11 +144,10 @@ struct PageCacheEntry: Codable, Sendable {
 ///
 /// // After page is deleted: TextExportCacheService.removeEntry(pageNumber: 5, from: document)
 ///
-/// // For export: if let cache = TextExportCacheService.loadCache(from: document) {
+/// // For export: if let cache = TextExportCacheService.loadFreshCache(from: document) {
 ///     // Use cache.pages for export
 /// }
 /// ```
-@MainActor
 enum TextExportCacheService {
 
     // MARK: - Cache Building
@@ -318,6 +316,12 @@ enum TextExportCacheService {
     static func loadCache(from document: Document) -> TextExportCache? {
         guard let data = document.textExportCache else { return nil }
         return Self.decodeCache(from: data)
+    }
+
+    /// Decodes raw cache data on the cooperative pool — for main-actor callers that must not block on a large cache (the launch backfill).
+    @concurrent
+    nonisolated static func decodeCacheInBackground(from data: Data) async -> TextExportCache? {
+        decodeCache(from: data)
     }
 
     /// Decodes a cache from raw data without requiring MainActor isolation.

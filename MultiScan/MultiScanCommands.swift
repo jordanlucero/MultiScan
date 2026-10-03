@@ -8,12 +8,12 @@
 import SwiftUI
 
 struct MultiScanCommands: Commands {
-    @AppStorage("showStatisticsPane") private var showStatisticsPane = false
-    @AppStorage("showSmartCleanup") private var showSmartCleanup = false
-    @AppStorage("showThumbnails") private var showThumbnails = true
-    @AppStorage("showTextPanel") private var showTextPanel = true
-    @AppStorage("filterOption") private var filterOption = PageFilterOption.all.rawValue
-    @AppStorage("viewerShowsHDR") private var viewerShowsHDR = true
+    @AppStorage(DefaultsKey.showStatisticsPane) private var showStatisticsPane = false
+    @AppStorage(DefaultsKey.showSmartCleanup) private var showSmartCleanup = false
+    @AppStorage(DefaultsKey.showThumbnails) private var showThumbnails = true
+    @AppStorage(DefaultsKey.showTextPanel) private var showTextPanel = true
+    @AppStorage(DefaultsKey.filterOption) private var filterOption = PageFilterOption.all.rawValue
+    @AppStorage(DefaultsKey.viewerShowsHDR) private var viewerShowsHDR = true
 
     @FocusedValue(\.navigationState) private var navigationState
     @FocusedValue(\.pageTextController) private var textController

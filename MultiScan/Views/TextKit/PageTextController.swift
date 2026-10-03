@@ -23,7 +23,6 @@ import AppKit
 import UIKit
 #endif
 
-@MainActor
 @Observable
 final class PageTextController {
 
@@ -119,7 +118,7 @@ final class PageTextController {
 
     private func scheduleDebouncedSave() {
         saveTask?.cancel()
-        saveTask = Task { @MainActor [weak self] in
+        saveTask = Task { [weak self] in
             do {
                 try await Task.sleep(for: Self.saveDebounceInterval)
                 self?.saveNow()
@@ -326,14 +325,5 @@ final class PageTextController {
         #else
         textView.findInteraction?.presentFindNavigator(showingReplace: false)
         #endif
-    }
-}
-
-// MARK: - Text Statistics
-
-/// Single source of truth for word/character counting across editor, cache, and export.
-enum TextStatistics {
-    static func wordCount(of text: String) -> Int {
-        text.split(whereSeparator: { $0.isWhitespace }).count
     }
 }

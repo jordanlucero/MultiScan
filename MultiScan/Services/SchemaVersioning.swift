@@ -45,8 +45,8 @@ import SwiftData
 
 // MARK: - Schema Version Constants
 
-/// Constants for schema version tracking
-enum SchemaVersioning {
+/// Constants for schema version tracking. Pure constants, read from every isolation domain (including the nonisolated `SchemaMetadata` model).
+nonisolated enum SchemaVersioning {
     // ────────────────────────────────────────────────────────────────────────
     // MARK: Version Numbers
     // ────────────────────────────────────────────────────────────────────────
@@ -126,7 +126,7 @@ enum SchemaVersioning {
 /// Device B shows "Please update the app" warning instead of corrupting data
 ///
 @Model
-final class SchemaMetadata {
+nonisolated final class SchemaMetadata {
     // MARK: - CloudKit Compatibility
     // All properties must have default values for CloudKit sync.
 
@@ -206,26 +206,10 @@ enum PreLoadCheckResult {
     case newerThanApp(storedVersion: Int)
 }
 
-/// Errors that can occur during container loading.
-enum ContainerLoadError: Error, Sendable {
-    /// The ModelContainer failed to initialize.
-    case containerCreationFailed(String)
-}
-
-extension ContainerLoadError: LocalizedError {
-    var errorDescription: String? {
-        switch self {
-        case .containerCreationFailed(let message):
-            return String(localized: "Failed to load data: \(message)")
-        }
-    }
-}
-
 // MARK: - Preview Support
 
-/// Creates an in-memory ModelContainer for SwiftUI previews.
+/// Creates an in-memory ModelContainer for SwiftUI previews (and unit tests).
 /// Explicitly disables CloudKit to avoid schema validation crashes in preview context.
-@MainActor
 func previewContainer() -> ModelContainer {
     let config = ModelConfiguration(
         isStoredInMemoryOnly: true,

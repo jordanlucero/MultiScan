@@ -22,7 +22,8 @@ struct ContentView: View {
 
         Group {
             if let document = selectedDocument {
-                documentView(for: document)
+                // ReviewView adapts to the size class itself (split view vs. compact stack).
+                ReviewView(document: document, onDismiss: dismissDocument)
                     // A deep link can switch straight from one project to another; new identity gives the review view fresh `@State` (navigation, controllers) for the new document.
                     .id(document.persistentModelID)
                     // ⚠️ Opacity only — no `.scale`. A scale transition lays the AppKit-hosted views (the TextKit 2 editor's scroll view) out at fractional, per-frame sizes; the text view re-fits its content size on every pass, each re-fit invalidates SwiftUI's host layout mid-layout, and when it fails to settle within one display cycle AppKit throws "more Update Constraints in Window passes than there are views in the window".
@@ -78,16 +79,6 @@ struct ContentView: View {
         withAnimation(.easeInOut(duration: 0.25)) {
             selectedDocument = document
         }
-    }
-
-    /// Routes to the size-class-adaptive layout on iOS; macOS always uses ReviewView.
-    @ViewBuilder
-    private func documentView(for document: Document) -> some View {
-        #if os(iOS)
-        AdaptiveReviewView(document: document, onDismiss: dismissDocument)
-        #else
-        ReviewView(document: document, onDismiss: dismissDocument)
-        #endif
     }
 
     private func dismissDocument() {

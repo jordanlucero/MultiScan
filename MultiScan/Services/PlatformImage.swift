@@ -1,13 +1,21 @@
-//  Cross-platform image loading utilities
+//
+//  PlatformImage.swift
+//  MultiScan
+//
+//  Cross-platform image decoding and encoding on CGImage/ImageIO — the one place that knows about EXIF orientation, HEIC/JPEG encoding, and thumbnail generation.
+//  `nonisolated`: called from the main actor (thumbnails), `@concurrent` work (OCR, PDF rendering, the viewer decode), and `ProjectStore`.
+//
 
 import SwiftUI
 import CoreGraphics
 import CoreImage
 import ImageIO
+import UniformTypeIdentifiers
 
-/// Cross-platform image loading from Data to SwiftUI Image
-/// Uses CGImage which is available on all Apple platforms
-enum PlatformImage {
+nonisolated enum PlatformImage {
+
+    // MARK: - SwiftUI Image (thumbnails)
+
     /// Create SwiftUI Image from raw image Data
     /// - Parameters:
     ///   - data: Image data in any system-supported format
@@ -25,12 +33,14 @@ enum PlatformImage {
         return Image(decorative: cgImage, scale: 1.0, orientation: finalOrientation)
     }
 
+    // MARK: - Orientation
+
     /// Combine EXIF orientation with user-applied rotation
     /// - Parameters:
     ///   - exif: The EXIF orientation from the image metadata
     ///   - userRotation: User rotation in degrees (0, 90, 180, 270)
     /// - Returns: The combined orientation
-    private static func combinedOrientation(exif: Image.Orientation, userRotation: Int) -> Image.Orientation {
+    static func combinedOrientation(exif: Image.Orientation, userRotation: Int) -> Image.Orientation {
         // Normalize rotation to 0, 1, 2, or 3 (representing 0°, 90°, 180°, 270°)
         let rotationSteps = ((userRotation % 360) + 360) % 360 / 90
 
@@ -75,6 +85,20 @@ enum PlatformImage {
         case 7: return .rightMirrored
         case 8: return .left
         default: return .up
+        }
+    }
+
+    /// Convert SwiftUI Image.Orientation to CGImagePropertyOrientation
+    private static func cgImagePropertyOrientation(from orientation: Image.Orientation) -> CGImagePropertyOrientation {
+        switch orientation {
+        case .up: .up
+        case .upMirrored: .upMirrored
+        case .down: .down
+        case .downMirrored: .downMirrored
+        case .left: .left
+        case .leftMirrored: .leftMirrored
+        case .right: .right
+        case .rightMirrored: .rightMirrored
         }
     }
 
@@ -148,17 +172,51 @@ enum PlatformImage {
         return ciContext.createCGImage(ciImage, from: ciImage.extent)
     }
 
-    /// Convert SwiftUI Image.Orientation to CGImagePropertyOrientation
-    private static func cgImagePropertyOrientation(from orientation: Image.Orientation) -> CGImagePropertyOrientation {
-        switch orientation {
-        case .up: .up
-        case .upMirrored: .upMirrored
-        case .down: .down
-        case .downMirrored: .downMirrored
-        case .left: .left
-        case .leftMirrored: .leftMirrored
-        case .right: .right
-        case .rightMirrored: .rightMirrored
+    // MARK: - Encoding
+
+    /// Encodes a CGImage as `type` (HEIC or JPEG) at the given lossy quality.
+    static func encode(_ image: CGImage, as type: UTType, quality: CGFloat) -> Data? {
+        let output = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(output, type.identifier as CFString, 1, nil) else {
+            return nil
         }
+        CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: quality] as CFDictionary)
+        guard CGImageDestinationFinalize(destination) else { return nil }
+        return output as Data
+    }
+
+    /// Re-encodes image data as HEIC ("Optimize images on import" / "Optimize Images…"). Returns nil if the data can't be decoded or encoded.
+    static func heicReencoding(_ data: Data, quality: CGFloat = 0.8) -> Data? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+            return nil
+        }
+        return encode(cgImage, as: .heic, quality: quality)
+    }
+
+    /// `heicReencoding(_:quality:)` on the cooperative pool, for main-actor callers.
+    @concurrent
+    static func heicReencodingInBackground(_ data: Data, quality: CGFloat = 0.8) async -> Data? {
+        heicReencoding(data, quality: quality)
+    }
+
+    // MARK: - Thumbnails
+
+    /// A downscaled, EXIF-corrected thumbnail of the source's first image.
+    static func thumbnail(from source: CGImageSource, maxPixelSize: Int) -> CGImage? {
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+            kCGImageSourceCreateThumbnailWithTransform: true
+        ]
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+    }
+
+    /// Encoded thumbnail of `data`: HEIC at 400 px for page thumbnails, small JPEGs for the Spotlight index.
+    static func thumbnailData(from data: Data?, maxPixelSize: Int, as type: UTType, quality: CGFloat) -> Data? {
+        guard let data,
+              let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let thumbnail = thumbnail(from: source, maxPixelSize: maxPixelSize) else { return nil }
+        return encode(thumbnail, as: type, quality: quality)
     }
 }

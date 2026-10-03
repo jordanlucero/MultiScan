@@ -8,7 +8,7 @@
 import AppIntents
 
 @AppIntent(schema: .system.open)
-struct OpenProjectIntent: OpenIntent {
+nonisolated struct OpenProjectIntent: OpenIntent {
     var target: ProjectEntity
 
     /// Declared explicitly rather than left to the derived default: this intent drives `AppRouter`, so it must bring the app forward.

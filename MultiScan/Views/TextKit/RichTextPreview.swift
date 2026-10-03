@@ -38,7 +38,6 @@ struct RichTextPreview: NSViewRepresentable {
         Coordinator()
     }
 
-    @MainActor
     final class Coordinator {
         var lastText: NSAttributedString?
     }
@@ -69,7 +68,6 @@ struct RichTextPreview: UIViewRepresentable {
         Coordinator()
     }
 
-    @MainActor
     final class Coordinator {
         var lastText: NSAttributedString?
     }

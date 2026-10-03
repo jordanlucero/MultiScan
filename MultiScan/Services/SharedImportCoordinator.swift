@@ -12,7 +12,6 @@ import Observation
 import SwiftUI
 import notify
 
-@MainActor
 @Observable
 final class SharedImportCoordinator {
     static let shared = SharedImportCoordinator()
@@ -31,6 +30,7 @@ final class SharedImportCoordinator {
 
     /// Starts listening for the share extension and imports anything already waiting. Called once the store is known to be usable (from `ContentView`), never from the recovery screen.
     func start() {
+        guard !AppModelContainer.isRunningTests else { return }
         if !hasStarted {
             hasStarted = true
 
@@ -48,6 +48,7 @@ final class SharedImportCoordinator {
     }
 
     func drain() {
+        guard !AppModelContainer.isRunningTests else { return }
         guard !isDraining else {
             needsAnotherPass = true
             return
@@ -72,7 +73,7 @@ final class SharedImportCoordinator {
         AppRouter.shared.wantsHome = true
 
         let pipeline = ProjectImportPipeline.shared
-        let optimizeImages = UserDefaults.standard.bool(forKey: "optimizeImagesOnImport")
+        let optimizeImages = UserDefaults.standard.bool(forKey: DefaultsKey.optimizeImagesOnImport)
 
         do {
             isPreparing = true

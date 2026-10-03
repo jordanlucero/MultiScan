@@ -13,7 +13,7 @@ import CoreTransferable
 import Foundation
 import UniformTypeIdentifiers
 
-struct PageEntity: IndexedEntity, SyncableEntity {
+nonisolated struct PageEntity: IndexedEntity, SyncableEntity {
     static let typeDisplayRepresentation = TypeDisplayRepresentation(
         name: LocalizedStringResource("Page", comment: "App Intents type name for a scanned page"),
         numericFormat: LocalizedStringResource("\(placeholder: .int) pages", comment: "App Intents plural type name")
@@ -94,8 +94,7 @@ struct PageEntity: IndexedEntity, SyncableEntity {
 extension PageEntity: Transferable {
     static var transferRepresentation: some TransferRepresentation {
         DataRepresentation(exportedContentType: .rtf) { entity in
-            let store = await MainActor.run { ProjectStore.shared }
-            return try await store.pageRTF(uuid: entity.id)
+            try await ProjectStore.shared.pageRTF(uuid: entity.id)
         }
 
         DataRepresentation(exportedContentType: .utf8PlainText) { entity in
@@ -103,8 +102,7 @@ extension PageEntity: Transferable {
         }
 
         DataRepresentation(exportedContentType: .jpeg) { entity in
-            let store = await MainActor.run { ProjectStore.shared }
-            return try await store.pageJPEG(uuid: entity.id)
+            try await ProjectStore.shared.pageJPEG(uuid: entity.id)
         }
     }
 }

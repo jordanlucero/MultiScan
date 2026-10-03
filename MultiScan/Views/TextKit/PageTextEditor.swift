@@ -38,7 +38,6 @@ struct PageTextEditor: NSViewRepresentable {
         Coordinator()
     }
 
-    @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         var controller: PageTextController?
 
@@ -73,7 +72,6 @@ struct PageTextEditor: UIViewRepresentable {
         Coordinator()
     }
 
-    @MainActor
     final class Coordinator: NSObject, UITextViewDelegate {
         var controller: PageTextController?
 

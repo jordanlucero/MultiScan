@@ -17,7 +17,7 @@ import CoreTransferable
 import Foundation
 import UniformTypeIdentifiers
 
-struct ProjectEntity: IndexedEntity, SyncableEntity {
+nonisolated struct ProjectEntity: IndexedEntity, SyncableEntity {
     static let typeDisplayRepresentation = TypeDisplayRepresentation(
         name: LocalizedStringResource("Project", comment: "App Intents type name for a MultiScan project"),
         numericFormat: LocalizedStringResource("\(placeholder: .int) projects", comment: "App Intents plural type name")
@@ -148,8 +148,8 @@ extension ProjectEntity: Transferable {
 
     /// Builds the combined text with the user's current export separators.
     private func exportedText() async throws -> ProjectTextExport {
-        let (store, options) = await MainActor.run { (ProjectStore.shared, ExportOptions.current()) }
-        return try await store.projectText(uuid: id, options: options)
+        let options = await ExportSettings.currentOptions
+        return try await ProjectStore.shared.projectText(uuid: id, options: options)
     }
 }
 

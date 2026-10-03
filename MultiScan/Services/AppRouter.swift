@@ -12,7 +12,6 @@
 import Foundation
 import Observation
 
-@MainActor
 @Observable
 final class AppRouter {
     static let shared = AppRouter()

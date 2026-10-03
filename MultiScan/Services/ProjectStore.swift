@@ -11,21 +11,19 @@
 import AppIntents
 import Foundation
 import SwiftData
-import ImageIO
-import CoreGraphics
 import UniformTypeIdentifiers
 import os
 
 // MARK: - Sendable results
 
-struct ProjectSearchHit: Identifiable, Hashable, Sendable {
+nonisolated struct ProjectSearchHit: Identifiable, Hashable, Sendable {
     let id: UUID
     let name: String
     let emoji: String?
     let pageCount: Int
 }
 
-struct PageSearchHit: Identifiable, Hashable, Sendable {
+nonisolated struct PageSearchHit: Identifiable, Hashable, Sendable {
     let id: UUID
     let projectID: UUID
     let projectName: String
@@ -35,7 +33,7 @@ struct PageSearchHit: Identifiable, Hashable, Sendable {
     let snippet: String
 }
 
-struct SearchResults: Sendable {
+nonisolated struct SearchResults: Sendable {
     let term: String
     let projects: [ProjectSearchHit]
     let pages: [PageSearchHit]
@@ -45,53 +43,20 @@ struct SearchResults: Sendable {
 }
 
 /// Deterministic per-row fingerprints the Spotlight indexer diffs against its manifest.
-struct IndexFingerprints: Sendable {
+nonisolated struct IndexFingerprints: Sendable {
     var projects: [UUID: String] = [:]
     var pages: [UUID: String] = [:]
     /// Page → owning project, so changed pages can be re-fetched by project.
     var pageProject: [UUID: UUID] = [:]
 }
 
-/// Separator settings for text export, captured as a value so they can cross actors.
-struct ExportOptions: Sendable {
-    var createVisualSeparation: Bool
-    var separatorStyle: SeparatorStyle
-    var includePageNumber: Bool
-    var includeFilename: Bool
-    var includeStatistics: Bool
-
-    /// The user's current in-app export preferences.
-    @MainActor
-    static func current() -> ExportOptions {
-        let settings = ExportSettings()
-        return ExportOptions(
-            createVisualSeparation: settings.createVisualSeparation,
-            separatorStyle: settings.separatorStyle,
-            includePageNumber: settings.includePageNumber,
-            includeFilename: settings.includeFilename,
-            includeStatistics: settings.includeStatistics
-        )
-    }
-
-    /// Plain "Page X of Y" separators (or none) — used by the Get Project Text intent.
-    static func simple(separatePages: Bool) -> ExportOptions {
-        ExportOptions(
-            createVisualSeparation: separatePages,
-            separatorStyle: .lineBreak,
-            includePageNumber: true,
-            includeFilename: false,
-            includeStatistics: false
-        )
-    }
-}
-
-struct ProjectTextExport: Sendable {
+nonisolated struct ProjectTextExport: Sendable {
     let rtfData: Data?
     let plainText: String
 }
 
 /// Conforms to `CustomLocalizedStringResourceConvertible` as well as `LocalizedError`: these errors escape into App Intents (`GetProjectTextIntent`, the entities' `Transferable` exports), and the framework routes thrown errors by type — a `LocalizedError` alone shows as a generic failure.
-enum ProjectStoreError: LocalizedError, CustomLocalizedStringResourceConvertible {
+nonisolated enum ProjectStoreError: LocalizedError, CustomLocalizedStringResourceConvertible {
     case projectNotFound
     case pageNotFound
     case noImage
@@ -115,10 +80,10 @@ enum ProjectStoreError: LocalizedError, CustomLocalizedStringResourceConvertible
 actor ProjectStore {
     @MainActor static let shared = ProjectStore(modelContainer: AppModelContainer.shared)
 
-    private static let logger = Logger(subsystem: "co.jservices.MultiScan", category: "ProjectStore")
+    private nonisolated static let logger = Logger(subsystem: "co.jservices.MultiScan", category: "ProjectStore")
 
     /// Characters of page text used for summaries / Spotlight descriptions.
-    private static let summaryLength = 200
+    private nonisolated static let summaryLength = 200
 
     // MARK: Lookup
 
@@ -349,28 +314,7 @@ actor ProjectStore {
     /// Combined project text (RTF + plain) built from the export cache — one external read.
     func projectText(uuid: UUID, options: ExportOptions) async throws -> ProjectTextExport {
         guard let document = document(uuid: uuid) else { throw ProjectStoreError.projectNotFound }
-
-        let snapshots: [TextExporter.PageSnapshot]
-        if let data = document.textExportCache,
-           let cache = TextExportCacheService.decodeCache(from: data),
-           TextExportCacheService.isFresh(cache, against: TextExportCacheService.fingerprints(of: document)) {
-            snapshots = cache.pages
-                .sorted { $0.pageNumber < $1.pageNumber }
-                .map { TextExporter.PageSnapshot(pageNumber: $0.pageNumber, fileName: $0.fileName, textData: $0.rtfData, wordCount: $0.wordCount, charCount: $0.charCount) }
-        } else {
-            snapshots = document.unwrappedPages
-                .sorted { $0.pageNumber < $1.pageNumber }
-                .map { TextExporter.PageSnapshot(pageNumber: $0.pageNumber, fileName: $0.originalFileName, textData: $0.richTextData, wordCount: nil, charCount: nil) }
-        }
-
-        let result = await TextExporter.buildResult(
-            from: snapshots,
-            createVisualSeparation: options.createVisualSeparation,
-            separatorStyle: options.separatorStyle,
-            includePageNumber: options.includePageNumber,
-            includeFilename: options.includeFilename,
-            includeStatistics: options.includeStatistics
-        )
+        let result = await TextExporter.export(document, options: options)
         return ProjectTextExport(rtfData: result.rtfData, plainText: result.plainText)
     }
 
@@ -391,7 +335,7 @@ actor ProjectStore {
                 increaseContrast: page.increaseContrast,
                 increaseBlackPoint: page.increaseBlackPoint
               ),
-              let jpeg = Self.encodeJPEG(cgImage, quality: 0.85) else {
+              let jpeg = PlatformImage.encode(cgImage, as: .jpeg, quality: 0.85) else {
             throw ProjectStoreError.noImage
         }
         return jpeg
@@ -444,7 +388,7 @@ actor ProjectStore {
             createdAt: document.createdAt,
             lastModified: document.lastModifiedDate,
             summary: Self.summary(of: pages.first?.plainText ?? ""),
-            coverThumbnail: Self.downscaledJPEG(cover, maxPixelSize: 200)
+            coverThumbnail: PlatformImage.thumbnailData(from: cover, maxPixelSize: 200, as: .jpeg, quality: 0.6)
         )
     }
 
@@ -459,44 +403,21 @@ actor ProjectStore {
             fileName: page.originalFileName,
             text: page.plainText,
             lastModified: page.lastModified,
-            thumbnail: Self.downscaledJPEG(page.thumbnailData, maxPixelSize: 128)
+            thumbnail: PlatformImage.thumbnailData(from: page.thumbnailData, maxPixelSize: 128, as: .jpeg, quality: 0.6)
         )
     }
 
     nonisolated static func summary(of text: String) -> String {
         String(text.prefix(summaryLength)).collapsingWhitespace()
     }
-
-    // MARK: Image helpers
-
-    /// Re-encodes a stored (HEIC) thumbnail as a small JPEG for the Spotlight index.
-    nonisolated static func downscaledJPEG(_ data: Data?, maxPixelSize: Int, quality: CGFloat = 0.6) -> Data? {
-        guard let data, let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
-        let options: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
-            kCGImageSourceCreateThumbnailWithTransform: true
-        ]
-        guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
-        return encodeJPEG(thumbnail, quality: quality)
-    }
-
-    nonisolated static func encodeJPEG(_ image: CGImage, quality: CGFloat) -> Data? {
-        let output = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(output, UTType.jpeg.identifier as CFString, 1, nil) else { return nil }
-        CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: quality] as CFDictionary)
-        guard CGImageDestinationFinalize(destination) else { return nil }
-        return output as Data
-    }
 }
 
 // MARK: - Main-context maintenance & commands
 
 /// Writes that App Intents and the launch sequence perform. Everything here runs on the main
-/// context so the UI's in-memory objects and `@Query` results update immediately.
-@MainActor
+/// context (main-actor isolated, the project default) so the UI's in-memory objects and `@Query` results update immediately.
 enum ProjectMaintenance {
-    private static let logger = Logger(subsystem: "co.jservices.MultiScan", category: "ProjectMaintenance")
+    private nonisolated static let logger = Logger(subsystem: "co.jservices.MultiScan", category: "ProjectMaintenance")
 
     /// Assigns missing `uuid`s and (re)derives stale `plainText` mirrors. Idempotent; runs after schema self-healing on every launch and is a no-op once all rows are current.
     /// - Returns: number of pages updated.
@@ -523,7 +444,7 @@ enum ProjectMaintenance {
             var cachedText: [Int: String] = [:]
             if let data = document.textExportCache {
                 let fingerprints = TextExportCacheService.fingerprints(of: document)
-                let cache = await Task.detached(priority: .utility) { TextExportCacheService.decodeCache(from: data) }.value
+                let cache = await TextExportCacheService.decodeCacheInBackground(from: data)
                 if let cache, TextExportCacheService.isFresh(cache, against: fingerprints) {
                     for entry in cache.pages { cachedText[entry.pageNumber] = entry.plainText }
                 }
@@ -592,7 +513,7 @@ enum ProjectMaintenance {
 
 // MARK: - String helpers
 
-private extension String {
+private nonisolated extension String {
     /// Collapses runs of whitespace/newlines into single spaces (for one-line snippets).
     func collapsingWhitespace() -> String {
         split(whereSeparator: { $0.isWhitespace || $0.isNewline }).joined(separator: " ")

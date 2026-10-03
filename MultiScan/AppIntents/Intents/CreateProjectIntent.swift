@@ -9,7 +9,7 @@ import AppIntents
 import Foundation
 import UniformTypeIdentifiers
 
-struct CreateProjectIntent: AppIntent, LongRunningIntent, CancellableIntent {
+nonisolated struct CreateProjectIntent: AppIntent, LongRunningIntent, CancellableIntent {
     static let title: LocalizedStringResource = "Start New Project"
     static let description = IntentDescription(
         "Creates a MultiScan project from images or PDFs and recognizes their text.",
@@ -59,10 +59,10 @@ struct CreateProjectIntent: AppIntent, LongRunningIntent, CancellableIntent {
         let files = self.files
         let requestedName = self.name
         let progress = self.progress
-        let optimizeImages = UserDefaults.standard.bool(forKey: "optimizeImagesOnImport")
+        let optimizeImages = UserDefaults.standard.bool(forKey: DefaultsKey.optimizeImagesOnImport)
 
         let projectID: UUID = try await performBackgroundTask { @MainActor @Sendable in
-            // `stageFiles` is nonisolated, so the copy/write loop runs off the main actor.
+            // `stageFiles` is `@concurrent`, so the copy/write loop runs off the main actor.
             let urls = try await Self.stageFiles(files, in: stagingDirectory)
 
             let pipeline = ProjectImportPipeline.shared
@@ -95,7 +95,8 @@ struct CreateProjectIntent: AppIntent, LongRunningIntent, CancellableIntent {
         )
     }
 
-    /// Copies the incoming `IntentFile`s into a staging directory. Plain disk I/O — deliberately nonisolated so a large PDF handed in by Shortcuts doesn't block the main actor.
+    /// Copies the incoming `IntentFile`s into a staging directory. Plain disk I/O — `@concurrent` so a large PDF handed in by Shortcuts doesn't block the main actor.
+    @concurrent
     private static func stageFiles(_ files: [IntentFile], in directory: URL) async throws -> [URL] {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         var urls: [URL] = []

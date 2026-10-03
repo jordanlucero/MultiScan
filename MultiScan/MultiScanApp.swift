@@ -55,12 +55,14 @@ struct MultiScanApp: App {
         AppDependencyManager.shared.add(dependency: store)
 
         // Spotlight: reconcile after saves / remote changes.
-        SpotlightIndexer.installTriggers()
+        if !AppModelContainer.isRunningTests {
+            SpotlightIndexer.installTriggers()
+        }
     }
 
     private static func initialRecoveryState() -> RecoveryState? {
         if let error = AppModelContainer.creationError {
-            return .failed(error: error.localizedDescription)
+            return .failed(error: error)
         }
         if case .newerThanApp(let version) = AppModelContainer.preLoadCheckResult {
             return .incompatible(version: version)
@@ -81,8 +83,8 @@ struct MultiScanApp: App {
             .windowToolbarFullScreenVisibility(.onHover)
             #endif
             .task {
-                // Post-load validation and self-healing. Skipped when already in recovery.
-                guard recoveryState == nil else { return }
+                // Post-load validation and self-healing. Skipped when already in recovery (and under test, where the store is a throwaway).
+                guard recoveryState == nil, !AppModelContainer.isRunningTests else { return }
                 if let newerVersion = await AppModelContainer.performPostLoadMaintenance() {
                     recoveryState = .incompatible(version: newerVersion)
                 }
@@ -90,7 +92,7 @@ struct MultiScanApp: App {
             .environment(AppRouter.shared)
             .onChange(of: scenePhase) { _, phase in
                 // Foregrounding is the reliable moment to pick up changes synced while inactive.
-                if phase == .active {
+                if phase == .active, !AppModelContainer.isRunningTests {
                     Task { await SpotlightIndexer.shared.scheduleReconcile() }
                 }
             }

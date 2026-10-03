@@ -26,8 +26,7 @@ import SwiftData
 
 // MARK: - Validation Service
 
-/// Service for schema version checking and data integrity validation.
-@MainActor
+/// Service for schema version checking and data integrity validation. Main-actor isolated (the default): it works on the main model context.
 enum SchemaValidationService {
 
     // MARK: - Pre-Load Checks
@@ -62,22 +61,9 @@ enum SchemaValidationService {
     /// Validates the container after successful load.
     ///
     /// Checks SchemaMetadata (if present) and runs integrity validation.
-    /// Returns issues found; minor issues will be auto-fixed.
-    ///
-    /// - Parameter context: The model context to validate
-    /// - Returns: Validation result with any issues found
-    static func validatePostLoad(context: ModelContext) async -> ValidationResult {
-        var issues: [IntegrityIssue] = []
-
-        // Check SchemaMetadata for version info
-        let metadataIssues = await checkSchemaMetadata(context: context)
-        issues.append(contentsOf: metadataIssues)
-
-        // Run integrity validation on all documents
-        let integrityIssues = await validateAllDocuments(context: context)
-        issues.append(contentsOf: integrityIssues)
-
-        return ValidationResult(issues: issues)
+    /// Returns the issues found; minor ones are auto-fixed by `attemptSelfHeal`.
+    static func validatePostLoad(context: ModelContext) async -> [IntegrityIssue] {
+        await checkSchemaMetadata(context: context) + validateAllDocuments(context: context)
     }
 
     /// Checks or creates SchemaMetadata for this device, returns any version-related issues.
@@ -346,18 +332,6 @@ enum SchemaValidationService {
         UserDefaults.standard.removeObject(forKey: SchemaVersioning.userDefaultsKey)
 
         return success
-    }
-}
-
-// MARK: - Validation Result
-
-/// Result of post-load validation.
-struct ValidationResult {
-    let issues: [IntegrityIssue]
-
-    /// Whether there are minor issues that can be auto-fixed.
-    var hasMinorIssues: Bool {
-        issues.contains { !$0.isCritical }
     }
 }
 

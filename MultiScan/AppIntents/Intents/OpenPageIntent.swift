@@ -7,7 +7,7 @@
 
 import AppIntents
 
-struct OpenPageIntent: OpenIntent {
+nonisolated struct OpenPageIntent: OpenIntent {
     static let title: LocalizedStringResource = "Open Page"
     static let description = IntentDescription(
         "Opens a MultiScan project at a specific page.",

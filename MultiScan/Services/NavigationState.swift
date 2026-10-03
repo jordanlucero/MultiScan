@@ -4,12 +4,9 @@ import SwiftData
 
 /// Per-review-view navigation state.
 ///
-/// `@Observable` rather than `ObservableObject`: observation is tracked per
-/// property, so a view that reads only `pageOrderVersion` no longer re-renders
-/// when `currentPageNumber` changes. Note that the macro tracks *every* stored
-/// property — under `@Published` the ordering arrays below were silently
-/// untracked, so mutating them didn't invalidate views reading `hasNext`.
-@MainActor
+/// `@Observable`: observation is tracked per property, so a view that reads only
+/// `pageOrderVersion` doesn't re-render when `currentPageNumber` changes. The macro
+/// tracks *every* stored property, including the ordering arrays below.
 @Observable
 final class NavigationState {
     var isRandomized: Bool = false
@@ -33,14 +30,17 @@ final class NavigationState {
     /// Current text search query (synced from ThumbnailSidebar)
     var activeSearchText: String = ""
 
-    /// Navigation settings for filter-aware behavior. Shared with the Settings UI,
-    /// so toggling filter-aware navigation takes effect immediately.
-    let navigationSettings = NavigationSettings.shared
+    /// Navigation settings for filter-aware behavior. The app passes the shared instance (also bound to the Settings UI, so toggling filter-aware navigation takes effect immediately); tests inject their own.
+    let navigationSettings: NavigationSettings
 
-    /// The window's undo manager, wired in by ReviewView/CompactReviewView so page
-    /// order changes can register undo (⌘Z). Weak: the window owns its undo manager.
+    /// The window's undo manager, wired in by ReviewView so page order changes can
+    /// register undo (⌘Z). Weak: the window owns its undo manager.
     /// Not observed — no view reads it during `body`.
     @ObservationIgnored weak var undoManager: UndoManager?
+
+    init(settings: NavigationSettings = .shared) {
+        self.navigationSettings = settings
+    }
 
     /// Updated whenever navigation changes
     private(set) var currentPageNumber: Int?

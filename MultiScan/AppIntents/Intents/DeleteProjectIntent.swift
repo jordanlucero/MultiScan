@@ -7,7 +7,7 @@
 
 import AppIntents
 
-struct DeleteProjectIntent: DeleteIntent {
+nonisolated struct DeleteProjectIntent: DeleteIntent {
     static let title: LocalizedStringResource = "Delete Project"
     static let description = IntentDescription(
         "Permanently deletes projects and all of their pages.",

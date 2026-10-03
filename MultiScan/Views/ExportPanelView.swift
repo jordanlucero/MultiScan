@@ -105,7 +105,7 @@ struct ExportPanelView: View {
         debounceTask = Task {
             try? await Task.sleep(for: .milliseconds(300))
             guard !Task.isCancelled else { return }
-            await MainActor.run { runExport() }
+            runExport()
         }
     }
 
@@ -117,8 +117,7 @@ struct ExportPanelView: View {
             isLoading = true
             defer { isLoading = false }
 
-            let exporter = TextExporter(document: document, settings: settings)
-            let result = await exporter.buildCombinedTextAsync()
+            let result = await TextExporter.export(document, options: settings.options)
 
             guard !Task.isCancelled else { return }
             exportResult = result
@@ -286,18 +285,13 @@ struct ExportActionButtons: View {
 
 // MARK: - Settings Side Effects
 
-/// Owns the reads of the individual export settings so the panel's body doesn't depend on them — otherwise each toggle invalidates the whole panel.
+/// Owns the read of the export settings so the panel's body doesn't depend on them — otherwise each toggle invalidates the whole panel.
 private struct ExportSettingsObserver: ViewModifier {
     let settings: ExportSettings
     let onChange: () -> Void
 
     func body(content: Content) -> some View {
-        content
-            .onChange(of: settings.createVisualSeparation) { onChange() }
-            .onChange(of: settings.separatorStyle) { onChange() }
-            .onChange(of: settings.includePageNumber) { onChange() }
-            .onChange(of: settings.includeFilename) { onChange() }
-            .onChange(of: settings.includeStatistics) { onChange() }
+        content.onChange(of: settings.options) { onChange() }
     }
 }
 

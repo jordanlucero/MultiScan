@@ -2,7 +2,7 @@
 //  SmartCleanupModel.swift
 //  MultiScan
 //
-//  Owns Smart Cleanup for one project: the debounced background analysis, the resulting options, and the edits that apply them. Shared by `RichTextSidebar` (the Smart Cleanup pane on macOS/horizontal size classes) and `CompactReviewView` (the vertical size class "More" menu), which previously carried two independent implementations.
+//  Owns Smart Cleanup for one project: the debounced background analysis, the resulting options, and the edits that apply them. `ReviewView` owns one per project and surfaces it in the Smart Cleanup pane (macOS/iPad) or the "More" menu (iPhone).
 //
 //  ## Where edits land
 //  The current page may be open in a live `PageTextController`. When it is, its edits go through the controller so they join the editor's undo stack. Every other page is edited model-side, reading from the export cache entry rather than the page's external storage. Batch edits load the cache once, mutate every entry in memory, and save it once.
@@ -11,7 +11,6 @@
 import Foundation
 import Observation
 
-@MainActor
 @Observable
 final class SmartCleanupModel {
 
@@ -47,7 +46,7 @@ final class SmartCleanupModel {
         }
 
         isAnalyzing = true
-        analysisTask = Task { @MainActor in
+        analysisTask = Task {
             do {
                 try await Task.sleep(for: Self.lingerDelay)
             } catch {
@@ -68,7 +67,7 @@ final class SmartCleanupModel {
         }
 
         isAnalyzing = true
-        analysisTask = Task { @MainActor in
+        analysisTask = Task {
             // Flush pending editor edits so the cache reflects the latest text
             liveController?.saveNow()
             await analyze(pageNumber: pageNumber)

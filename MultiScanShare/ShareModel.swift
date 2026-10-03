@@ -11,7 +11,6 @@ import Observation
 import UniformTypeIdentifiers
 import notify
 
-@MainActor
 @Observable
 final class ShareModel {
     enum Phase: Equatable {
@@ -115,7 +114,7 @@ final class ShareModel {
 }
 
 /// A shared image or PDF, received as a file so large PDFs are copied rather than loaded into the extension's limited memory.
-private struct SharedFile: Transferable {
+private nonisolated struct SharedFile: Transferable {
     static let contentTypes: [UTType] = [.pdf, .image]
 
     let url: URL

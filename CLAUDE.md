@@ -20,13 +20,14 @@ MultiScan is a multiplatform SwiftUI application (macOS, iOS, iPadOS) that uses 
 
 1. **MultiScanApp.swift**: Entry point — the `FocusedValues` entries, the scene tree (main window, macOS Settings window), and the post-load maintenance hook. Deliberately small; the menu bar lives in **MultiScanCommands.swift** (`struct MultiScanCommands: Commands`) and the settings panes in **Views/SettingsView.swift**
 2. **HomeView.swift**: Document list with creation/import functionality
-3. **ReviewView.swift**: Main document editing UI with NavigationSplitView (macOS + iPad regular size class)
-4. **CompactReviewView.swift**: iPhone document editing UI (iOS-only file)
+3. **Views/ReviewView.swift**: The project review screen on every platform and size class — owns the per-project session (`NavigationState`, `PageTextController`, `SmartCleanupModel`, presentation flags), picks the regular (split view + inspector) or compact (stack + bottom sheet) layout by horizontal size class, and declares the one toolbar (see "Multiplatform Architecture")
+4. **Views/RichTextSidebar.swift / ThumbnailSidebar.swift / SlideGridView.swift / PageMenuControls.swift**: the text panel, the thumbnail column (macOS + iPad), the iPhone page grid, and the shared menu pieces (`pageContextMenu`, rotation/adjustment/review items, the delete confirmation)
 5. **Models.swift**: SwiftData models (`Document`, `Page`)
 6. **Views/TextKit/**: The TextKit 2 text engine — platform text views, SwiftUI representables, and the page editing controller (see "TextKit 2 Text Engine")
 7. **AppIntents/**: App Intents entities, queries, intents, and App Shortcuts (see "App Intents & Spotlight")
-8. **Services/AppModelContainer.swift / ProjectStore.swift / SpotlightIndexer.swift / AppRouter.swift / ProjectImportPipeline.swift**: process-wide container (+ post-load maintenance), read-side model actor, Spotlight reconciler, deep-link router, shared import→OCR pipeline
-9. **Services/ExportSettings.swift / NavigationSettings.swift**: `@Observable` UserDefaults-backed preference objects
+8. **Services/AppModelContainer.swift / ProjectStore.swift / SpotlightIndexer.swift / AppRouter.swift**: process-wide container (+ post-load maintenance), read-side model actor, Spotlight reconciler, deep-link router
+9. **Services/ProjectImportPipeline.swift / OCRService.swift / PDFImportService.swift / PlatformImage.swift**: the one import path (file/folder/Photos scanning lives in the pipeline), OCR and PDF rendering as stateless `nonisolated enum`s with `@concurrent` work, and the single image codec/orientation utility (HEIC/JPEG encoding, thumbnails, EXIF + rotation)
+10. **Services/Preferences.swift**: `DefaultsKey` (the `@AppStorage` keys shared across files) plus the `@Observable` UserDefaults-backed `ExportSettings` (→ `ExportOptions` value) and `NavigationSettings`
 
 ### Data Models
 - **Document**: Container for pages with metadata (name, emoji, storage size). Uses optional `pages` relationship with `unwrappedPages` accessor for CloudKit compatibility.
@@ -39,12 +40,31 @@ MultiScan is a multiplatform SwiftUI application (macOS, iOS, iPadOS) that uses 
 - `modelContext` from environment for CRUD operations
 - `NavigationState` (`@Observable`, one per review view) for page navigation state; `AppRouter` (`@Observable`, one per process) for app-level navigation requests (deep links, search)
 - **All observation is `@Observable`** — there is no `ObservableObject`/`@Published`/`@ObservedObject`/`@StateObject` anywhere in the project, and none should be reintroduced. Owners use `@State`, consumers take a plain `let`, and two-way access uses `@Bindable`/`Bindable(_:)`.
-- `NavigationSettings.shared` is a **single** app-wide instance (the initializer is private). It caches its values in stored properties and only writes through to UserDefaults, so separate instances would silently diverge until relaunch — `NavigationState` and the Settings UI both use `.shared`.
+- `NavigationSettings.shared` is a **single** app-wide instance. It caches its values in stored properties and only writes through to UserDefaults, so separate instances would silently diverge until relaunch — `NavigationState` (its `init(settings:)` default) and the Settings UI both use `.shared`; only tests pass their own `NavigationSettings(defaults:)`.
 - **`NavigationState.currentPageNumber` is the only copy of the current page.** The thumbnail sidebar, page grid, rotors, and deep links all read it / call `goToPage`; there is no mirrored `selectedPageNumber` `@State` in the review views (there used to be, kept in sync by `onChange` handlers in both directions). Likewise `ReviewView`'s split-view `columnVisibility` is a `Binding` derived from `@AppStorage("showThumbnails")`, not a second piece of state.
 - `ContentView` gives the review view `.id(document.persistentModelID)`, so a deep link that switches straight from one open project to another gets fresh `@State` (navigation, controllers) for the new document.
 - **`FocusedValues` entries use `@Entry`** (`MultiScanApp.swift`) — the macro synthesizes the key type and accessors. Don't reintroduce hand-written `FocusedValueKey` conformances. Every entry must be `Optional` with no initializer, since a focused value always defaults to `nil`.
 
+### Concurrency Model
+
+Both targets build with **`SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`** and **`SWIFT_APPROACHABLE_CONCURRENCY = YES`** (Swift 6 language mode). The rules that follow from that:
+
+- **Don't write `@MainActor`** on views, controllers, `@Observable` classes, enums of helpers, or functions — it is the default. The few that remain are deliberate: `perform()` on intents (the intent structs themselves are `nonisolated`), `ProjectStore.shared` (a static on an actor whose initializer reads the main-actor container), the Spotlight trigger installer, the share extension's `openApp` closure type.
+- **Mark `nonisolated` what must run off the main actor or satisfy framework protocols**: the `@Model` classes (`ProjectStore` reads them on its model actor), pure helpers (`RichTextArchiver`, `PageTextStyle`, `TextManipulationService`, `TextStatistics`, `PlatformImage`, `OCRService`, `PDFImportService`, `SharedImportInbox`, `SchemaVersioning`), every `Sendable`/`Codable`/`Transferable` value type that crosses actors (`TextExportCache`, `PageCacheEntry`, `TextExportResult`, `ExportOptions`, `RichText`, the search hits…), and every App Intents entity/query/intent/shortcuts provider (`AppIntent`/`AppEntity` are `Sendable` protocols with synchronous static requirements, so their conformers cannot be main-actor isolated). Actors (`ProjectStore`, `SpotlightIndexer`) keep their own isolation; their statics and nested types are marked `nonisolated` explicitly so the actor can use them synchronously.
+- **Background work is `@concurrent`**, never `Task.detached` (the one exception is the fire-and-forget donation cleanup in `ProjectMaintenance`): `OCRService.processImageData`, `PDFImportService.renderPDF`, `ProjectImportPipeline.scan`, `TextExporter.buildResult`, `SmartCleanupModel.computeOptions`, `ImageViewer.decode`, `PlatformImage.heicReencodingInBackground`, `TextExportCacheService.decodeCacheInBackground`, `CreateProjectIntent.stageFiles`. Under approachable concurrency a plain `nonisolated async` function runs on its *caller's* actor, which is what `OCRService.processImages` and `TextExporter.export` rely on: they take non-Sendable arguments (a progress closure, a `Document`) and only hand `Sendable` snapshots to the `@concurrent` stage.
+- **`@Model` objects never cross actors.** `ProjectStore` returns `Sendable` snapshots; the main actor passes `PersistentIdentifier`s or value snapshots the other way.
+
 ## Development Commands
+
+## Testing
+
+`MultiScanTests` is a Swift Testing unit-test bundle hosted by the app (`TEST_HOST`), so tests `@testable import MultiScan` and exercise the real types — SwiftData models in in-memory containers (`Fixtures.makeProject`, `TestSupport.swift`), `NavigationState`, `PageTextController` without a text view, `SmartCleanupModel` edits, the export cache and exporter, `RichTextArchiver`, `TextManipulationService`, `PlatformImage`, `ProjectStore` (its own `ModelActor` over the test container), `SchemaValidationService`, `AppRouter`, and the preference objects. Run with ⌘U or:
+
+```bash
+xcodebuild -scheme MultiScan -destination 'platform=macOS' test
+```
+
+Rules: every suite builds its own container (parallel-safe); suites that touch `UserDefaults.standard` are `.serialized` and restore what they change; preference objects are constructed with a throwaway suite (`Fixtures.defaults(_:)`). The hosted app launches with an in-memory store and skips every outward side effect (see "Container Load Flow"). Add a test alongside any change to the text algorithms, the cache bookkeeping, or page navigation/reordering — those are the parts that silently corrupt data when wrong.
 
 ## Xcode Integration
 
@@ -81,36 +101,32 @@ xcodebuild -scheme MultiScan clean
 
 ## Multiplatform Architecture (2.0)
 
-One app target builds for macOS, iPadOS, and iPhone. Platform differences are handled with `#if os(iOS)` / `#if os(macOS)` conditionals in shared files, plus a small set of iOS-only view files. **Guiding principle: the Mac experience stays as-is; iOS branches adapt around it.**
+One app target builds for macOS, iPadOS, and iPhone. **Guiding principle: the Mac experience stays as-is; iOS adapts around it.** Two kinds of difference, two mechanisms:
 
-### Layout Routing
+- **Per-OS differences are compile-time** (`#if os(iOS)` / `#if os(macOS)`): discrete Mac toolbar buttons vs. the iOS "More" menu, the macOS Settings window vs. the iOS sheet, AppKit vs. UIKit hosting.
+- **Per-size-class differences are runtime**, inside one view: `ReviewView` reads `\.horizontalSizeClass` (iOS only — size classes don't exist on macOS, so the read and the compact layout are wrapped in `#if os(iOS)` and `isCompact` is `false` on the Mac) and switches layouts; toolbar items that only make sense in one size class use `.hidden(_:)`.
+
+### ReviewView: one view, two layouts, one toolbar
 
 ```
-ContentView
-├─ macOS ──────────────► ReviewView (NavigationSplitView + inspector)
-└─ iOS ─► AdaptiveReviewView (routes by horizontalSizeClass)
-          ├─ regular (iPad) ─► ReviewView (same split view as Mac, iOS toolbar)
-          └─ compact (iPhone) ─► CompactReviewView
+ReviewView (owns NavigationState, PageTextController, SmartCleanupModel, all sheet flags)
+├─ regular (macOS, iPad, wide iPhone) ─► NavigationSplitView: ThumbnailSidebar | detail | .inspector { RichTextSidebar }
+└─ compact (iPhone)                    ─► NavigationStack { detail } + persistent RichTextSidebar sheet + SlideGridView sheet
+                                          detail = ImageViewer + navigationTitle + .toolbar { reviewToolbar } + rotors
 ```
 
-Size classes (`\.horizontalSizeClass`, `\.verticalSizeClass`) don't exist on macOS — any use must be wrapped in `#if os(iOS)`.
-
-### iOS-Only View Files (entire file wrapped in `#if os(iOS)`)
-
-| File | Purpose |
-|------|---------|
-| `Views/AdaptiveReviewView.swift` | Size-class router between ReviewView and CompactReviewView |
-| `Views/CompactReviewView.swift` | iPhone layout: NavigationStack + full-screen ImageViewer + persistent RichTextSidebar bottom sheet (`presentationDetents`, background interaction enabled) + "More" menu toolbar |
-| `Views/SlideGridView.swift` | Searchable page-grid sheet for iPhone: navigate, add pages before/after a position, reorder, delete |
-
-CompactReviewView presents the text sheet with `interactiveDismissDisabled()` and swaps it out temporarily when the page grid or export panel opens (`onChange` handlers toggle `showTextSheet`). It also runs its own Smart Cleanup analysis (the sidebar's panes are hidden via `hideBottomPanels`).
+- **The toolbar is declared once** (`reviewToolbar`) and attached to the detail content in both layouts. Back + Previous/Next carry `.visibilityPriority(.high)` so they outlast everything else when a window narrows (iOS 27 / macOS 26.1 overflow); the page-grid button is `.hidden(!isCompact)`; only the per-OS item sets (`macToolbarItems` vs. `moreMenu`) are split with `#if os`. Inside `moreMenu`, Smart Cleanup appears only on compact (iPad has the inspector pane) and the text-panel toggle only on regular.
+- **Back button placement**: `.navigation` on macOS, `.topBarLeading` on iOS. `.navigation` is swallowed by the sidebar toggle in an iPadOS split-view detail column — that was the long-standing missing Back button on iPad and regular-width iPhones.
+- **Session ownership**: `ReviewView` creates the `PageTextController` on every page switch (`loadTextController`, which detaches the outgoing controller first) and the `SmartCleanupModel` once. `RichTextSidebar` only displays them, so it serves as inspector and as bottom sheet unchanged, and the compact "More" menu edits through the same controller (Remove Line Breaks and Smart Cleanup get undo on iPhone too). After a batch Smart Cleanup rewrites the current page behind the editor, `reloadTextController()` rebuilds it.
+- **Compact sheet choreography**: the text sheet (`interactiveDismissDisabled`) steps aside while the page grid, export panel, or progress popover is up (`onChange` handlers clear `showTextSheet`, `onDismiss`/`onChange` restore it) — iOS allows one presented sheet per host.
+- `SlideGridView` (iOS-only file) is the iPhone's page grid sheet: navigate, add pages via its own pickers (presented from inside the sheet), reorder, and the shared `pageContextMenu`.
 
 ### Platform Behavior Differences in Shared Views
 
 | View | macOS | iOS/iPadOS |
 |------|-------|------------|
-| `ReviewView` toolbar | Discrete icon buttons (nav / review / progress / inspector) | Prev/Next + "More" (ellipsis) menu containing review, image, panel, export actions; progress popover attaches to the view root (can't anchor to a menu item) |
-| `ThumbnailSidebar` | Existing context menu | Adds "Insert Pages Before/After" context-menu section (insert-at-position is deliberately iOS-only) |
+| `ReviewView` toolbar | Back + Prev/Next, then discrete icon buttons (order / review / progress / inspector) | Back + Prev/Next + page grid (compact only) + "More" (ellipsis) menu containing Smart Cleanup (compact only), review, image, panel (regular only), export actions, statistics; progress popover attaches to the view root (can't anchor to a menu item) |
+| `pageContextMenu` (thumbnails + page grid) | Info, export, rotation, adjustments, move, delete | Same, plus "Insert Pages Before/After" (insert-at-position is deliberately iOS-only; `ReviewView` passes the callbacks on both platforms, the menu shows them under `#if os(iOS)`) |
 | `RichTextSidebar` header | Page # + copy button, B/I/U/S + remove-line-breaks toolbar | Page # + copy button only (see formatting note below); Remove Line Breaks moves into the Smart Cleanup pane (iPad) or the More menu (iPhone) |
 | `ExportPanelView` | Two-pane HStack (preview left, options right), radio-group picker | Vertical NavigationStack sheet (preview top, options below), segmented picker, share/dismiss in the nav bar |
 | `HomeView` | Bare content in the window toolbar | Wrapped in NavigationStack, "MultiScan" title, gear (Settings) + plus toolbar; grid is fixed 2 columns on iPhone portrait, adaptive otherwise |
@@ -127,11 +143,11 @@ Typing undo is native to the platform text views on **both** platforms (macOS `a
 
 ### Insert Pages at Position (iOS only)
 
-`ReviewView.addPagesToDocument` and CompactReviewView support inserting after a specific page number: existing pages/cache entries at or beyond the insertion point are shifted, then `TextExportCacheService.insertEntries(for:in:shiftingFrom:by:)` updates the cache in memory (no external-storage rebuild). Appending (the only path reachable on macOS) still uses `addEntries` as before.
+`ReviewView.addPages(images:insertAfter:)` → `ProjectImportPipeline.addPages(to:images:insertAfter:in:)` supports inserting after a specific page number: existing pages/cache entries at or beyond the insertion point are shifted, then `TextExportCacheService.insertEntries(for:in:shiftingFrom:by:)` updates the cache in memory (no external-storage rebuild). Appending (the only path reachable on macOS) still uses `addEntries`. After either, navigation refreshes with `refreshPageOrder()` (not `setupNavigation`, which would reset to page 1) and jumps to the first new page.
 
-### Save Protection on iOS
+### Save Protection beyond the debounce
 
-In addition to the shared debounce/page-switch/disappear saves, iOS adds `UIApplication.willTerminateNotification` (RichTextSidebar) and a `scenePhase == .background` save (CompactReviewView), since iOS apps are rarely quit explicitly.
+`ReviewView` saves the controller and the context on `scenePhase == .background` (iOS apps are rarely quit explicitly) and on `willTerminateNotification` (`NSApplication`/`UIApplication` per platform — catches a quit mid-debounce). Both are in `ReviewView`, not the text panel, because the panel can be off screen while a controller still has pending edits.
 
 ### Menu Commands on iPadOS
 
@@ -304,9 +320,11 @@ The app tracks schema versions to gracefully handle data incompatibilities and p
    └─ SpotlightIndexer.scheduleReconcile (bring the Spotlight index up to date)
 ```
 
-The container itself lives in `AppModelContainer.shared` (`@MainActor` static) so App Intents, entity
+The container itself lives in `AppModelContainer.shared` (a main-actor static) so App Intents, entity
 queries, and the indexer reach it outside the SwiftUI environment; `MultiScanApp.init()` forces its
 creation first, then registers `AppRouter.shared` / `ProjectStore.shared` with `AppDependencyManager`.
+
+**Under unit tests the container is in-memory** (`AppModelContainer.isRunningTests`, detected from the XCTest environment variables): the test bundle is hosted by the app, so the launch sequence runs — and the post-load maintenance, Spotlight triggers/reconcile, and the share-inbox drain are all skipped so a test run can never touch the user's real store, index, or pending shared imports.
 
 ### Integrity Validation & Self-Healing
 
@@ -378,7 +396,7 @@ Text handling is built directly on **TextKit 2** with `NSAttributedString` as th
 | `Services/RichTextSupport.swift` | `RichText` Transferable wrapper (Sendable, pre-encoded RTF + plain text) |
 | `Views/TextKit/PageTextView.swift` | `NSTextView`/`UITextView` subclasses on an explicit TextKit 2 stack |
 | `Views/TextKit/PageTextEditor.swift` | `NSViewRepresentable`/`UIViewRepresentable` hosting the editor |
-| `Views/TextKit/PageTextController.swift` | `@Observable` editing controller (load/save/format/cleanup/find/statistics) + `TextStatistics` |
+| `Views/TextKit/PageTextController.swift` | `@Observable` editing controller (load/save/format/cleanup/find/statistics); `TextStatistics` lives with the text algorithms in `Services/TextManipulationService.swift` |
 | `Views/TextKit/RichTextPreview.swift` | Read-only TextKit 2 view for large-document preview |
 
 ### The TextKit 2 Stack
@@ -502,7 +520,7 @@ enum RichTextExportError: LocalizedError {
 The app uses an always-editable text model with debounced auto-save. The editor is a TextKit 2 `PageTextView` hosted by `PageTextEditor`, driven by a `PageTextController`.
 
 ### PageTextController (`Views/TextKit/PageTextController.swift`)
-`@MainActor @Observable` controller, one per selected page (created on page switch by `RichTextSidebar`):
+`@Observable` controller (main-actor by default), one per selected page, created on page switch by `ReviewView` and handed to `RichTextSidebar`. Programmatic edits work without an attached text view (the controller keeps the authoritative snapshot), which is what lets the compact "More" menu and Smart Cleanup edit through it:
 - `init(page:)` decodes the page text once and normalizes it to the display font
 - `attach(_:)` loads content into the platform text view (called by the representable; the view instance is reused across page switches, only the controller changes)
 - `textDidChange()` (from the view delegate) refreshes the authoritative snapshot + live `wordCount`/`charCount`, schedules the debounced save
@@ -526,10 +544,10 @@ Changes are saved in these scenarios:
 | Event | Trigger |
 |-------|---------|
 | User stops typing | Debounce timer (1s) |
-| User switches pages | `onChange(of: currentPage)` → `detach()` |
-| User navigates away | `onDisappear` → `detach()` |
-| User opens export panel | `pageTextController?.saveNow()` before panel opens |
-| User quits app (⌘Q) | `willTerminateNotification` + `modelContext.save()` |
+| User switches pages | `ReviewView.loadTextController` → `detach()` |
+| User closes the project | `ReviewView.onDisappear` → `detach()` |
+| User opens export panel | `pageTextController?.saveNow()` before panel opens (menu command) |
+| App backgrounded / quit (⌘Q) | `scenePhase == .background` / `willTerminateNotification` → `saveNow()` + `modelContext.save()` |
 
 All save calls check `hasUnsavedChanges` first — no-op if no edits were made.
 
@@ -539,13 +557,13 @@ Every save also updates `Page.plainText`/`plainTextUpdatedAt` and `Document.last
 1. `saveNow()` normalizes the snapshot to the storage font (strips display colors) and assigns to `page.attributedText`
 2. The setter RTF-encodes to `richTextData` and updates `lastModified`
 3. SwiftData persists `richTextData` to external storage (and CKAsset, if iCloud sync is enabled)
-4. `TextExportCacheService.updateEntry(pageNumber:attributedText:in:)` keeps the export cache in sync
+4. `TextExportCacheService.updateEntry(pageNumber:attributedText:pageLastModified:in:)` keeps the export cache in sync
 
 ### Important Notes
 - No separate "view mode" vs "edit mode" — always editable
 - **Colors are display-only, never stored.** Platform text views render runs *without* a `.foregroundColor` attribute in default black regardless of appearance (view-level `textColor` only covers text present when it's set, plus typing attributes). So every display path stamps the dynamic label color via `RichTextArchiver.applyingDisplayColor(_:)` — `normalizedForDisplay` does it for the editor, `RichTextPreview` does it for the export preview — and `normalizedForStorage` strips it on save
 - Formatting toolbar always visible in header when page selected (macOS only — iOS uses the system-provided controls; see Multiplatform Architecture)
-- `modelContext.save()` on app quit ensures synchronous disk write before termination (`NSApplication`/`UIApplication` `willTerminateNotification` per platform; iPhone also saves on `scenePhase == .background`)
+- `modelContext.save()` on app quit ensures synchronous disk write before termination (`NSApplication`/`UIApplication` `willTerminateNotification` per platform; `scenePhase == .background` saves too)
 
 ## Storage additions (2.x, additive)
 
@@ -560,7 +578,7 @@ Backfill runs per document, decoding `textExportCache` once (no per-page externa
 
 ## App Intents & Spotlight
 
-Everything lives in `MultiScan/AppIntents/` plus the services listed below. There is no App Intents extension. Intents that touch `AppRouter`, the main `ModelContext`, or the `@MainActor` import pipeline declare `allowedExecutionTargets = .main`; `GetProjectTextIntent` only reads through `ProjectStore`, so it deliberately leaves the default (`.default`) — don't "fix" that asymmetry.
+Everything lives in `MultiScan/AppIntents/` plus the services listed below. There is no App Intents extension. Intents that touch `AppRouter`, the main `ModelContext`, or the main-actor import pipeline declare `allowedExecutionTargets = .main`; `GetProjectTextIntent` only reads through `ProjectStore`, so it deliberately leaves the default (`.default`) — don't "fix" that asymmetry.
 
 Where an intent runs is declared with `supportedModes` (`IntentModes`). The boolean `openAppWhenRun` is **deprecated** — don't reintroduce it.
 
@@ -598,7 +616,7 @@ The `.system` domain has **no entity schemas**, so the entities are plain `AppEn
 `DocumentCard` annotates itself with `.appEntityIdentifier(ProjectEntity)`, and both review views annotate the viewer with the current `PageEntity`, so Siri / Apple Intelligence can resolve "this project" / "this page".
 
 ### Deep links: `AppRouter` (`Services/AppRouter.swift`)
-`@MainActor @Observable`, one per process, injected via `.environment(AppRouter.shared)` and registered with `AppDependencyManager`. `open(project:page:)` sets an `OpenRequest`; `ContentView` switches `selectedDocument` by uuid; `ReviewView`/`CompactReviewView` consume the page number (`goToPage`) once they show that project. `showSearch(term)` sets `wantsHome` + `searchText` + `isSearchPresented`. macOS multi-window: every window observes the router; the one showing the target navigates (accepted limitation).
+`@Observable`, one per process, injected via `.environment(AppRouter.shared)` and registered with `AppDependencyManager`. `open(project:page:)` sets an `OpenRequest`; `ContentView` switches `selectedDocument` by uuid; `ReviewView` consumes the page number (`goToPage`) once it shows that project. `showSearch(term)` sets `wantsHome` + `searchText` + `isSearchPresented`. macOS multi-window: every window observes the router; the one showing the target navigates (accepted limitation).
 
 ### Spotlight indexing: `SpotlightIndexer` (`Services/SpotlightIndexer.swift`)
 - Named index `CSSearchableIndex(name: "MultiScan")`; entities donated with `indexAppEntities`, removed with `deleteAppEntities(identifiedBy:ofType:)`.
@@ -613,7 +631,7 @@ The `.system` domain has **no entity schemas**, so the entities are plain `AppEn
 - The per-document filters in `ThumbnailSidebar`, `SlideGridView`, and `NavigationState` still use `page.plainText` — now the stored column, so they no longer decode RTF per keystroke.
 
 ### Import pipeline (`Services/ProjectImportPipeline.swift`)
-`@MainActor @Observable` singleton owning the `OCRService`/`ImageImportService` and the in-flight state (`processingDocumentIDs`, `progress`). `prepare(urls:optimizeImages:onEstimate:)` scans files/folders and renders PDFs; `createProject(named:images:onPageProgress:)` inserts the `Document`, runs OCR, fills pages, builds the export cache, and returns the project `uuid` (deleting the document on failure). `HomeView` and `CreateProjectIntent` both use it, so intent-driven imports show the same progress card.
+`@Observable` singleton (main actor) owning the in-flight state (`processingDocumentIDs`, `progress`) and the whole input path: `prepare(urls:optimizeImages:onEstimate:)` holds security-scoped access to the picked items, scans files/folders on the cooperative pool (`@concurrent scan` — reads images, notes PDFs and their page counts, sorts by filename, names the project after a single picked folder), then renders PDFs via `PDFImportService`; `loadPhotos(_:optimizeImages:)` loads Photos picker items; `createProject(named:images:onPageProgress:)` inserts the `Document`, runs `OCRService.processImages` (progress mirrored into `progress`), fills pages, builds the export cache, and returns the project `uuid` (deleting the document on failure); `addPages(to:images:insertAfter:in:)` appends or inserts into an existing project. `HomeView`, `ReviewView`, `SharedImportCoordinator`, and `CreateProjectIntent` all use it, so every import shows the same progress card.
 
 ### Share sheet (`MultiScanShare/` + `Shared/`)
 The system share sheet has **no App Intents entry point** (checked against the 27 SDK — the Share Extension template is still `com.apple.share-services` with a view-controller principal class). So `MultiScanShare` is one multiplatform app-extension target (iOS, iPadOS, macOS), embedded in the app:
@@ -625,9 +643,6 @@ The system share sheet has **no App Intents entry point** (checked against the 2
 - **⚠️ `ModelConfiguration(groupContainer: .none)` in `AppModelContainer` is load-bearing.** The default `.automatic` moves the SwiftData store into the App Group container the moment the app gains an app-group entitlement, away from the user's existing data.
 - `PDFImportService` bounds its memory for this reason too: pages are capped at 18 MP (large-format pages render below 300 DPI), drawn into an opaque context, and concurrency is limited by physical memory. iOS memory kills leave **no crash report** — attach lldb to see `EXC_RESOURCE`.
 - Both targets carry the App Group entitlement; the extension has its own entitlements file and string catalog. Its `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` must match the app's.
-
-### Debug aid
-Launching a DEBUG build with `-seedSampleProject` inserts a text-only sample project when the store is empty and logs a search self-test (`DebugSampleData`).
 
 ## Accessibility & Search
 
@@ -685,7 +700,7 @@ All order changes flow through one private core, `NavigationState.setPageOrder(_
 - **Selection follows the page, not the slot**: after any reorder the current page keeps showing at its new number. This also keeps `currentPage` identity stable so the text editor never re-attaches (which would clear the undo stack)
 
 ### Undo (⌘Z / ⇧⌘Z)
-- ReviewView/CompactReviewView wire the environment `\.undoManager` into `NavigationState.undoManager` (weak)
+- ReviewView wires the environment `\.undoManager` into `NavigationState.undoManager` (weak)
 - `setPageOrder` registers an inverse action capturing only `PersistentIdentifier`s (Sendable); undo/redo resolve pages by ID at fire time and no-op if pages were added/deleted since
 - Action names: "Move Page Up/Down", "Reorder Pages" (localized)
 - macOS caveat: the window undo manager is shared with the text editor, and `PageTextController.attach()` clears it on page switch — so reorder undo history survives reorders (current page identity is stable) but not manual page navigation
@@ -726,16 +741,18 @@ func refreshPageOrder()  // Call after any reorder to update internal arrays
 func deleteCurrentPage(modelContext: ModelContext)
 ```
 
-## Thumbnail Context Menu
+## Page Context Menu
 
-Right-click on any thumbnail in `ThumbnailSidebar` shows context menu with:
+`pageContextMenu(for:in:navigationState:onInsertFromPhotos:onInsertFromFiles:)` (`PageMenuControls.swift`) is the one per-page menu, attached to thumbnails in `ThumbnailSidebar` and to cells in the iPhone `SlideGridView`. It also owns the delete confirmation state.
 
 | Section | Options |
 |---------|---------|
 | **Header** | "Page X of Y" + filename (non-interactive) |
+| **Export** | Export Page Text… (ShareLink) |
 | **Rotation** | Rotate Clockwise, Rotate Counterclockwise |
 | **Adjustments** | Increase Contrast (toggle), Increase Black Point (toggle) |
-| **Reordering** | Move Up, Move Down |
+| **Reordering** | Move Page Up, Move Page Down |
+| **Insert** (iOS only) | Insert Pages Before / After → From Photos… / From Files… |
 | **Delete** | Delete Page… (with confirmation) |
 
 ## Menu Bar Commands
@@ -759,9 +776,9 @@ Right-click on any thumbnail in `ThumbnailSidebar` shows context menu with:
 ### FocusedValues for Menu Bar
 All commands live in `MultiScanCommands` (`MultiScanCommands.swift`) and read the focused window through these entries (declared in `MultiScanApp.swift`):
 - `navigationState: NavigationState?` — the focused review view's model. The current project and page are *derived* from it (`selectedDocument`, `currentPage`); don't add separate `document`/`currentPage` entries.
-- `pageTextController: PageTextController?` — from RichTextSidebar; Format menu (B/I/U/S) and save-before-export go through it
+- `pageTextController: PageTextController?` — set by RichTextSidebar with `focusedValue` (focus-scoped, not scene-scoped, so Format/Find act on the editor only while the panel has focus); Format menu (B/I/U/S) and save-before-export go through it
 - `imageZoomController: ImageZoomController?` — from ImageViewer; View ▸ Fit/Zoom
-- `Binding<Bool>?` toggles: `showExportPanel`, `showAddFromPhotos`, `showAddFromFiles`, `showFindNavigator`, `showDeletePageConfirmation` — a command flips the binding, the owning view presents the sheet/dialog. ReviewView provides all of them; CompactReviewView provides `navigationState` + `showDeletePageConfirmation` (⌘⌫ on a hardware keyboard). The "Delete Page N?" dialog itself is the shared `deletePageConfirmation(isPresented:pageNumber:onDelete:)` modifier in `PageMenuControls.swift`, also used by the thumbnail context menu and the iPhone page grid.
+- `Binding<Bool>?` toggles: `showExportPanel`, `showAddFromPhotos`, `showAddFromFiles`, `showFindNavigator`, `showDeletePageConfirmation` — a command flips the binding, the owning view presents the sheet/dialog. ReviewView provides all of them in both layouts (⌘⌫ deletes on an iPhone hardware keyboard too). The "Delete Page N?" dialog itself is the shared `deletePageConfirmation(isPresented:pageNumber:onDelete:)` modifier in `PageMenuControls.swift`, also used by `pageContextMenu`.
 
 ## Text Export Architecture
 
@@ -857,8 +874,8 @@ Renumbering operations (`insertEntries`, `removeEntry`, `renumberEntries`) use `
 - **Fallback**: If cache is invalid, stale, or missing, TextExporter falls back to direct page loading
 - **Recovery**: `rebuildCache(for:)` regenerates cache from source data (triggers N loads, use sparingly)
 
-### ExportSettings (`Services/ExportSettings.swift`)
-`@Observable` class with UserDefaults persistence:
+### ExportSettings / ExportOptions (`Services/Preferences.swift`)
+`ExportSettings` is the `@Observable` class with UserDefaults persistence (manual `didSet` write-through, not `@AppStorage`, so `@Observable` tracking works; `init(defaults:)` takes a suite for tests). `ExportOptions` is the `Equatable, Sendable` value of the same five fields:
 ```swift
 var createVisualSeparation: Bool  // false = inline (pages flow together)
 var separatorStyle: SeparatorStyle  // .lineBreak or .hyphenatedDivider
@@ -866,11 +883,10 @@ var includePageNumber: Bool
 var includeFilename: Bool
 var includeStatistics: Bool
 ```
-
-**Important**: Uses manual UserDefaults sync with `didSet` (not `@AppStorage`) to ensure `@Observable` reactivity works correctly.
+`settings.options` is what the exporter takes and what `ExportPanelView` observes (one `onChange(of: settings.options)`); `ExportSettings.currentOptions` serves App Intents / Transferable exports off the main actor; `ExportOptions.simple(separatePages:)` is the Get Project Text intent's shape.
 
 ### TextExporter (`Services/TextExporter.swift`)
-Builds a combined `NSAttributedString` from all pages, returning a `TextExportResult` (`attributedText` for preview + pre-encoded `rtfData`/`plainText` for sharing, exposed as `.richText`). `TextExporter(document:settings:)` reads the export cache when it is fresh (one file) and falls back to the pages' raw `richTextData` otherwise (N external-storage reads). The static `buildResult(from:…)` is `@concurrent` so `ProjectStore` (App Intents / Transferable exports) shares the same combine code off the main actor.
+`nonisolated enum`. `export(_ document:options:)` runs on its caller (the export panel on the main actor, `ProjectStore` on its model actor — the `Document` never crosses actors): `snapshots(for:)` reads the export cache when it is fresh (one file) and falls back to the pages' raw `richTextData` otherwise (N external-storage reads), then the `@concurrent` `buildResult(from:options:)` decodes and combines into a `TextExportResult` (`attributedText` for preview + pre-encoded `rtfData`/`plainText` for sharing, exposed as `.richText`).
 
 ### Export Pipeline (with cache)
 ```
@@ -933,19 +949,20 @@ PDF File → PDFImportService → [HEIC images per page] → OCRService → Page
 ```
 
 1. User selects PDF via file picker (accepts `.image`, `.pdf`, `.folder`)
-2. `ImageImportService` detects PDF and returns URL in `ImportResult.pdfURLs`
-3. Page count is read immediately via `PDFImportService.pageCount(for:)` for VoiceOver announcement
-4. `PDFImportService.renderPDF(at:)` renders pages to images in parallel
-5. Rendered images feed into existing `OCRService.processImages()` pipeline
+2. `ProjectImportPipeline.scan` (`@concurrent`) notes the PDF URL and its page count (`PDFImportService.pageCount(for:)`) alongside the image files
+3. `prepare` reports the estimated page count (`onEstimate`) for the VoiceOver announcement before any rendering
+4. `PDFImportService.renderPDF(at:)` (`@concurrent`) renders pages to images in parallel, while `prepare` still holds security-scoped access to the picked items (so PDFs inside a picked folder stay readable)
+5. Rendered images feed into `OCRService.processImages()`
 6. Each PDF page becomes a `Page` with thumbnails and OCR text
 
 ### PDFImportService (`Services/PDFImportService.swift`)
 
-Key methods:
+Stateless `nonisolated enum`:
 ```swift
 static func pageCount(for url: URL) -> Int    // Quick page count without rendering
-func renderPDF(at url: URL, dpi: CGFloat = 300) async throws -> [(data: Data, fileName: String)]
+@concurrent static func renderPDF(at url: URL, dpi: CGFloat = 300) async throws -> [(data: Data, fileName: String)]
 ```
+HEIC encoding goes through `PlatformImage.encode(_:as:quality:)`, like every other encode in the app.
 
 ### Rendering Details
 - **Resolution**: 300 DPI (letter-size page ≈ 2550×3300 pixels)
@@ -970,16 +987,13 @@ enum PDFImportError: LocalizedError {
 - **Progress**: Once OCR starts, document card shows standard progress indicator
 
 ### HomeView Integration
-The `processFileURLs()` method handles mixed imports:
-1. Scans files via `ImageImportService.processFileURLs()`
-2. Counts PDF pages immediately for accessibility announcement
-3. Renders PDFs via `PDFImportService`
-4. Combines all images and starts OCR processing
+`HomeView.processFileURLs()` is a thin caller: `pipeline.prepare(urls:optimizeImages:onEstimate:)` (announce the estimate), then `pipeline.createProject(named:images:)`. The same two calls back `ReviewView`'s append/insert, the share-sheet drain, and `CreateProjectIntent`.
 
 ### Image Compression Notes
-- **Imported images**: Use HEIC only if "Optimize images on import" is enabled
+- **Imported images**: Re-encoded as HEIC only if "Optimize images on import" is enabled (`PlatformImage.heicReencoding`, inside the `@concurrent` scan; Photos imports use `heicReencodingInBackground`)
 - **PDF pages**: Always rendered to HEIC (since we're creating new images, not preserving originals)
-- **Thumbnails**: Always HEIC at 400px max dimension, 0.7 quality
+- **Thumbnails**: Always HEIC at 400px max dimension, 0.7 quality (`PlatformImage.thumbnail` + `encode`, in `OCRService`)
+- **"Optimize Images…" on an existing project** (`HomeView.optimizeImages`): re-encodes each page on the cooperative pool and keeps the smaller result — never on the main actor
 
 ## Smart Cleanup
 
@@ -996,8 +1010,9 @@ Smart Cleanup analyzes all pages via the `TextExportCache` (single file read, no
 All matching uses **normalized comparison** (case-insensitive, whitespace-collapsed, OCR-variant dashes/quotes normalized). Number parsing uses `parseNumericToken()` which handles digits and thousands-separator commas with a 5-character limit.
 
 ### Key Files
-- `Services/TextManipulationService.swift`: Analysis algorithms, data types, removal logic
-- `Views/RichTextSidebar.swift`: Smart Cleanup pane UI, state management, cleanup execution (`applyEdit(toPage:)` / `applyBatchEdit(toPages:)` for non-current pages)
+- `Services/TextManipulationService.swift`: Analysis algorithms, data types, removal logic (plus `TextStatistics`)
+- `Services/SmartCleanupModel.swift`: `@Observable` per-project model — debounced off-main analysis, the options, and the edits (`applyEdit(toPage:)` / `applyBatchEdit(toPages:)` for non-current pages); owned by `ReviewView`
+- `Views/RichTextSidebar.swift`: the Smart Cleanup pane (macOS/iPad); `ReviewView.moreMenu` shows the same options on iPhone
 - `Views/TextKit/PageTextController.swift`: Current-page removal with undo (`removePageNumberTokens`, `removeLine`)
 
 ### Data Types (in `TextManipulationService`)
@@ -1019,7 +1034,7 @@ Bottom of `RichTextSidebar` inspector, below the Statistics pane (macOS + iPad).
 - `@AppStorage("showSmartCleanup")` (default: OFF)
 - View menu: "Show Smart Cleanup" (⌘⇧K)
 
-On iPhone, the sidebar's panes are hidden (`hideBottomPanels`); Smart Cleanup instead lives in CompactReviewView's "More" menu and is always active there.
+On iPhone, the sidebar's panes are hidden (`hideBottomPanels`); Smart Cleanup instead lives in `ReviewView`'s "More" menu and is always active there.
 
 ### UI States
 | State | Menu Appearance |
@@ -1062,7 +1077,7 @@ Both compute a removal range on plain text (`removalRange(forPageNumberToken:in:
 - **Current page**: Goes through `PageTextController.performEdit` — applied in the live editor **with undo**, then saved
 - **Other single page**: `RichTextSidebar.applyEdit(toPage:)` decodes the cache entry (no page external-storage load), writes page + cache entry
 - **Batch (range/document-wide)**: `applyBatchEdit(toPages:)` loads the cache once, modifies all entries in memory, writes each page's `attributedText`, saves the cache once
-- After batch modification of the current page, re-initializes `PageTextController` to refresh the editor
+- After batch modification of the current page, `ReviewView.reloadTextController()` rebuilds the `PageTextController` to refresh the editor
 
 ### Number Parsing (`parseNumericToken`)
 Handles digits and thousands-separator commas with a 5-character limit:

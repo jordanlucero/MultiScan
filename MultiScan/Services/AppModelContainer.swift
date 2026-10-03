@@ -32,8 +32,10 @@ enum AppModelContainer {
         let iCloudSyncEnabled = SchemaVersioning.isICloudSyncEnabled
         print(iCloudSyncEnabled ? "☁️ iCloud sync ENABLED" : "☁️ iCloud sync DISABLED")
 
+        // ⚠️ `groupContainer: .none` is load-bearing. The default (`.automatic`) relocates the store into the App Group container as soon as the app has an app-group entitlement (it does, for the share extension's inbox) — away from the user's existing data.
         let modelConfiguration = ModelConfiguration(
             isStoredInMemoryOnly: false,
+            groupContainer: .none,
             cloudKitDatabase: iCloudSyncEnabled
                 ? .private("iCloud.co.jservices.MultiScan")
                 : .none

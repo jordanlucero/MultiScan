@@ -6,7 +6,34 @@
 	objectVersion = 100;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		7A5E00012F8E100000A1B2C3 /* MultiScanShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 7A5E00022F8E100000A1B2C3 /* MultiScanShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		7A5E00032F8E100000A1B2C3 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B4BCDE042DE1209B00BBA2C2 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7A5E00042F8E100000A1B2C3;
+			remoteInfo = MultiScanShare;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		7A5E00052F8E100000A1B2C3 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			dstPath = "";
+			dstSubfolder = PlugIns;
+			files = (
+				7A5E00012F8E100000A1B2C3 /* MultiScanShare.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		7A5E00022F8E100000A1B2C3 /* MultiScanShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MultiScanShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		B4BCDE0C2DE1209B00BBA2C2 /* MultiScan.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MultiScan.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -18,9 +45,29 @@
 			);
 			target = B4BCDE0B2DE1209B00BBA2C2 /* MultiScan */;
 		};
+		7A5E00092F8E100000A1B2C3 /* Exceptions for "MultiScanShare" folder in "MultiScanShare" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 7A5E00042F8E100000A1B2C3 /* MultiScanShare */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		7A5E00072F8E100000A1B2C3 /* MultiScanShare */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				7A5E00092F8E100000A1B2C3 /* Exceptions for "MultiScanShare" folder in "MultiScanShare" target */,
+			);
+			path = MultiScanShare;
+			sourceTree = "<group>";
+		};
+		7A5E00082F8E100000A1B2C3 /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
+			sourceTree = "<group>";
+		};
 		B4BCDE0E2DE1209B00BBA2C2 /* MultiScan */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -32,6 +79,11 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		7A5E000B2F8E100000A1B2C3 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+			);
+		};
 		B4BCDE092DE1209B00BBA2C2 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
@@ -44,6 +96,8 @@
 			isa = PBXGroup;
 			children = (
 				B4BCDE0E2DE1209B00BBA2C2 /* MultiScan */,
+				7A5E00072F8E100000A1B2C3 /* MultiScanShare */,
+				7A5E00082F8E100000A1B2C3 /* Shared */,
 				B4BCDE0D2DE1209B00BBA2C2 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -52,6 +106,7 @@
 			isa = PBXGroup;
 			children = (
 				B4BCDE0C2DE1209B00BBA2C2 /* MultiScan.app */,
+				7A5E00022F8E100000A1B2C3 /* MultiScanShare.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -59,6 +114,25 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		7A5E00042F8E100000A1B2C3 /* MultiScanShare */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7A5E000D2F8E100000A1B2C3 /* Build configuration list for PBXNativeTarget "MultiScanShare" */;
+			buildPhases = (
+				7A5E000A2F8E100000A1B2C3 /* Sources */,
+				7A5E000B2F8E100000A1B2C3 /* Frameworks */,
+				7A5E000C2F8E100000A1B2C3 /* Resources */,
+			);
+			buildRules = (
+			);
+			fileSystemSynchronizedGroups = (
+				7A5E00072F8E100000A1B2C3 /* MultiScanShare */,
+				7A5E00082F8E100000A1B2C3 /* Shared */,
+			);
+			name = MultiScanShare;
+			productName = MultiScanShare;
+			productReference = 7A5E00022F8E100000A1B2C3 /* MultiScanShare.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		B4BCDE0B2DE1209B00BBA2C2 /* MultiScan */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = B4BCDE1A2DE1209D00BBA2C2 /* Build configuration list for PBXNativeTarget "MultiScan" */;
@@ -66,10 +140,15 @@
 				B4BCDE082DE1209B00BBA2C2 /* Sources */,
 				B4BCDE092DE1209B00BBA2C2 /* Frameworks */,
 				B4BCDE0A2DE1209B00BBA2C2 /* Resources */,
+				7A5E00052F8E100000A1B2C3 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
+			dependencies = (
+				7A5E00062F8E100000A1B2C3 /* PBXTargetDependency */,
+			);
 			fileSystemSynchronizedGroups = (
+				7A5E00082F8E100000A1B2C3 /* Shared */,
 				B4BCDE0E2DE1209B00BBA2C2 /* MultiScan */,
 			);
 			name = MultiScan;
@@ -87,6 +166,9 @@
 				LastSwiftUpdateCheck = 1630;
 				LastUpgradeCheck = 2620;
 				TargetAttributes = {
+					7A5E00042F8E100000A1B2C3 = {
+						CreatedOnToolsVersion = 27.0;
+					};
 					B4BCDE0B2DE1209B00BBA2C2 = {
 						CreatedOnToolsVersion = 16.3;
 					};
@@ -108,11 +190,17 @@
 			projectRoot = "";
 			targets = (
 				B4BCDE0B2DE1209B00BBA2C2 /* MultiScan */,
+				7A5E00042F8E100000A1B2C3 /* MultiScanShare */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		7A5E000C2F8E100000A1B2C3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
 		B4BCDE0A2DE1209B00BBA2C2 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
@@ -121,6 +209,11 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		7A5E000A2F8E100000A1B2C3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
 		B4BCDE082DE1209B00BBA2C2 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			files = (
@@ -128,7 +221,99 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		7A5E00062F8E100000A1B2C3 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7A5E00042F8E100000A1B2C3 /* MultiScanShare */;
+			targetProxy = 7A5E00032F8E100000A1B2C3 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		7A5E000E2F8E100000A1B2C3 /* Debug configuration for PBXNativeTarget "MultiScanShare" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = MultiScanShare/MultiScanShare.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 525;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 72TUR237NP;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MultiScanShare/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = MultiScan;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 JServices Inc.";
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				MARKETING_VERSION = 2.0;
+				PRODUCT_BUNDLE_IDENTIFIER = co.jservices.MultiScan.Share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		7A5E000F2F8E100000A1B2C3 /* Release configuration for PBXNativeTarget "MultiScanShare" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = MultiScanShare/MultiScanShare.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 525;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 72TUR237NP;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MultiScanShare/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = MultiScan;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 JServices Inc.";
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				MARKETING_VERSION = 2.0;
+				PRODUCT_BUNDLE_IDENTIFIER = co.jservices.MultiScan.Share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		B4BCDE182DE1209D00BBA2C2 /* Debug configuration for PBXProject "MultiScan" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -268,7 +453,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 513;
+				CURRENT_PROJECT_VERSION = 525;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 72TUR237NP;
 				ENABLE_APP_SANDBOX = YES;
@@ -315,7 +500,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 513;
+				CURRENT_PROJECT_VERSION = 525;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 72TUR237NP;
 				ENABLE_APP_SANDBOX = YES;
@@ -356,6 +541,14 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		7A5E000D2F8E100000A1B2C3 /* Build configuration list for PBXNativeTarget "MultiScanShare" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7A5E000E2F8E100000A1B2C3 /* Debug configuration for PBXNativeTarget "MultiScanShare" */,
+				7A5E000F2F8E100000A1B2C3 /* Release configuration for PBXNativeTarget "MultiScanShare" */,
+			);
+			defaultConfigurationName = Release;
+		};
 		B4BCDE072DE1209B00BBA2C2 /* Build configuration list for PBXProject "MultiScan" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

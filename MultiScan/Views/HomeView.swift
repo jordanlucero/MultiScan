@@ -30,7 +30,14 @@ struct HomeView: View {
     @State private var showingDeleteConfirmation = false
     @State private var isDragOver = false
     @State private var isOptimizing = false
-    @State private var isPreparingImport = false
+    @State private var isPreparingLocalImport = false
+
+    /// Share-sheet imports are prepared outside this view; they show the same placeholder card.
+    private let sharedImports = SharedImportCoordinator.shared
+
+    private var isPreparingImport: Bool {
+        isPreparingLocalImport || sharedImports.isPreparing
+    }
 
     // Settings
     @AppStorage("optimizeImagesOnImport") private var optimizeImagesOnImport = false
@@ -248,7 +255,7 @@ struct HomeView: View {
 
     @MainActor
     private func processFileURLs(_ urls: [URL]) async {
-        isPreparingImport = true
+        isPreparingLocalImport = true
 
         let prepared: ProjectImportPipeline.PreparedImport
         do {
@@ -260,19 +267,19 @@ struct HomeView: View {
             }
         } catch {
             print("Import error: \(error)")
-            isPreparingImport = false
+            isPreparingLocalImport = false
             presentError(error)
             return
         }
 
         guard !prepared.images.isEmpty else {
             print("No valid images found")
-            isPreparingImport = false
+            isPreparingLocalImport = false
             return
         }
 
         // Spinner will be replaced by document card's progress indicator
-        isPreparingImport = false
+        isPreparingLocalImport = false
 
         let documentName = prepared.suggestedName ?? ProjectImportPipeline.defaultProjectName()
         await startOCRProcessing(images: prepared.images, documentName: documentName)
@@ -284,9 +291,9 @@ struct HomeView: View {
     private func processSelectedPhotos(_ items: [PhotosPickerItem]) async {
         guard !items.isEmpty else { return }
 
-        isPreparingImport = true
+        isPreparingLocalImport = true
         let images = await pipeline.loadPhotos(items, optimizeImages: optimizeImagesOnImport)
-        isPreparingImport = false
+        isPreparingLocalImport = false
 
         guard !images.isEmpty else {
             print("No photos could be loaded")

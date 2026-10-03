@@ -2064,6 +2064,9 @@
         }
       }
     },
+    "No images or pages were found." : {
+
+    },
     "No images or PDF pages were found to scan." : {
       "localizations" : {
         "es-419" : {
@@ -2073,9 +2076,6 @@
           }
         }
       }
-    },
-    "No images or PDF pages were found." : {
-
     },
     "No more matching pages ahead" : {
       "comment" : "AccessibilityNotification NavigationDirection",
@@ -2996,6 +2996,7 @@
       }
     },
     "Search pages" : {
+      "extractionState" : "stale",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -3720,6 +3721,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Alejar"
+          }
+        }
+      }
+    },
+    "MultiScan couldn’t finish importing the items you shared." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MultiScan no pudo terminar de importar los elementos que compartiste."
           }
         }
       }

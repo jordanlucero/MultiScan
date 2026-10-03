@@ -1,0 +1,75 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "Added to MultiScan" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se agregó a MultiScan"
+          }
+        }
+      }
+    },
+    "Adding to MultiScan…" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agregando a MultiScan…"
+          }
+        }
+      }
+    },
+    "Done" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hecho"
+          }
+        }
+      }
+    },
+    "Open MultiScan to start scanning." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre MultiScan para comenzar a escanear."
+          }
+        }
+      }
+    },
+    "Sending to MultiScan…" : {
+
+    },
+    "Sent to MultiScan" : {
+
+    },
+    "There are no images or PDFs to scan." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No hay imágenes ni archivos PDF para escanear."
+          }
+        }
+      }
+    },
+    "These items couldn’t be added to MultiScan." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudieron agregar estos elementos a MultiScan."
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

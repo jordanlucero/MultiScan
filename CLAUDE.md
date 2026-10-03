@@ -398,6 +398,8 @@ Viewport-based layout means only the fragments intersecting the visible viewport
 
 **⚠️ Never touch `layoutManager` (macOS) on these views** — reading the TextKit 1 property silently downgrades the view to the compatibility text engine.
 
+**⚠️ Don't put geometry-changing transitions or effects (`.scale`, animated `scaleEffect`) on a view tree that contains the macOS editor.** `ContentView` switches Home ↔ review with `.transition(.opacity)` only. A scale transition lays the AppKit-hosted scroll view out at fractional per-frame sizes; the TextKit 2 text view re-fits its content size each pass, every re-fit invalidates SwiftUI's host layout mid-layout, and if it doesn't settle within one display cycle AppKit throws "more Update Constraints in Window passes than there are views in the window" (measured: 17 `-[NSTextView setFrameSize:]` calls during one project open with the old `.scale(0.98)` transition).
+
 **Future extension points** (per the "Elevate your app's text experience" session): the framework text views conform to `NSTextViewportLayoutControllerDelegate`, so `PageTextView` subclass overrides can add line numbers, collapsible ranges, or attachment view-provider reuse. Inline table support will use `NSTextTableBlock`, which flows through the RTF storage format with no schema change.
 
 ## Rich Text Storage Architecture
@@ -612,6 +614,17 @@ The `.system` domain has **no entity schemas**, so the entities are plain `AppEn
 
 ### Import pipeline (`Services/ProjectImportPipeline.swift`)
 `@MainActor @Observable` singleton owning the `OCRService`/`ImageImportService` and the in-flight state (`processingDocumentIDs`, `progress`). `prepare(urls:optimizeImages:onEstimate:)` scans files/folders and renders PDFs; `createProject(named:images:onPageProgress:)` inserts the `Document`, runs OCR, fills pages, builds the export cache, and returns the project `uuid` (deleting the document on failure). `HomeView` and `CreateProjectIntent` both use it, so intent-driven imports show the same progress card.
+
+### Share sheet (`MultiScanShare/` + `Shared/`)
+The system share sheet has **no App Intents entry point** (checked against the 27 SDK — the Share Extension template is still `com.apple.share-services` with a view-controller principal class). So `MultiScanShare` is one multiplatform app-extension target (iOS, iPadOS, macOS), embedded in the app:
+- **Flow: flash, then the app takes over.** There is nothing to confirm. `ShareView` shows a progress bar while `ShareModel` stages the files, then the extension opens MultiScan and completes the request. The activation rule in `MultiScanShare/Info.plist` accepts items with at least one image or PDF attachment.
+- **The extension only stages files; it never runs OCR or opens the store** (extension memory limit; the store lives in the app's container). Each attachment is received as a file via `Transferable` (`FileRepresentation`, so large PDFs are copied, not loaded) and written to `SharedImportInbox` — `Shared/SharedImportInbox.swift`, compiled into both targets — inside the App Group container `group.co.jservices.MultiScan`. Batches are written as `<uuid>.staging` and renamed on commit.
+- **Opening the app** (`ShareViewController`, the only AppKit/UIKit in the target): macOS uses `NSWorkspace.openApplication(at:)` on the containing bundle. iOS has no supported API, so it walks the responder chain to the extension's `UIApplication` and calls the public `open(_:options:completionHandler:)` with `jservicesmultiscan://shared-import` (scheme declared in the app's `Info.plist`, handled by `ContentView.onOpenURL`). That is deliberate dirty work — the same thing other apps' share extensions do — and it degrades to an "Open MultiScan to start scanning" message if it ever returns `false`.
+- `SharedImportCoordinator` (app) drains the inbox through `ProjectImportPipeline`, the same path as Home and `CreateProjectIntent`. Triggers: `ContentView`'s `.task` (launch), `scenePhase == .active`, `onOpenURL`, and a Darwin notification the extension posts (app already active).
+- **⚠️ A batch is attempted at most once.** `claim` renames it to `<uuid>.importing` before the import starts; a batch still claimed at the next launch means the previous run died importing it, and it is discarded with an alert. Never go back to retrying — an import that kills the app (it happened: a PDF exhausting memory) would then crash every launch.
+- **⚠️ `ModelConfiguration(groupContainer: .none)` in `AppModelContainer` is load-bearing.** The default `.automatic` moves the SwiftData store into the App Group container the moment the app gains an app-group entitlement, away from the user's existing data.
+- `PDFImportService` bounds its memory for this reason too: pages are capped at 18 MP (large-format pages render below 300 DPI), drawn into an opaque context, and concurrency is limited by physical memory. iOS memory kills leave **no crash report** — attach lldb to see `EXC_RESOURCE`.
+- Both targets carry the App Group entitlement; the extension has its own entitlements file and string catalog. Its `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` must match the app's.
 
 ### Debug aid
 Launching a DEBUG build with `-seedSampleProject` inserts a text-only sample project when the store is empty and logs a search self-test (`DebugSampleData`).

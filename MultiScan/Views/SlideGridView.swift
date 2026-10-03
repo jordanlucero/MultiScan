@@ -72,7 +72,7 @@ struct SlideGridView: View {
                     navigationState.applyReorder(of: difference.sources, before: targetID)
                 }
             }
-            .searchable(text: $searchText, prompt: "Search pages")
+            .searchable(text: $searchText, prompt: "Search")
             .navigationTitle("Pages")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

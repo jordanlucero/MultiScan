@@ -76,7 +76,9 @@ final class PDFImportService: @unchecked Sendable {
 
         // Wrap document for safe concurrent access
         let sendableDoc = SendablePDFDocument(document)
-        let maxConcurrency = min(ProcessInfo.processInfo.activeProcessorCount, 6)
+        // Each in-flight page holds a full bitmap plus the HEIC encoder's working buffers, so concurrency is bounded by memory as well as cores — iOS kills the app outright (no crash report) when it exceeds its limit.
+        let memoryBound = Int(ProcessInfo.processInfo.physicalMemory / (2 * 1024 * 1024 * 1024))
+        let maxConcurrency = max(1, min(ProcessInfo.processInfo.activeProcessorCount, 6, memoryBound))
 
         // Render pages in parallel using TaskGroup
         let results = try await withThrowingTaskGroup(of: (Int, Data, String)?.self) { group in
@@ -136,6 +138,9 @@ final class PDFImportService: @unchecked Sendable {
     /// Shared CIContext for rotating rendered pages (thread-safe, reusable)
     private static let ciContext = CIContext()
 
+    /// Upper bound on a rendered page's pixel count (~A3 at 300 DPI). Large-format pages (posters, plans) are rendered at a lower DPI instead of allocating hundreds of megabytes each.
+    private static let maxPixelsPerPage: CGFloat = 18_000_000
+
     /// Render a single PDF page to a CGImage
     /// - Parameters:
     ///   - page: PDF page to render
@@ -148,7 +153,11 @@ final class PDFImportService: @unchecked Sendable {
         // Get the raw (unrotated) cropBox directly from Core Graphics.
         // Provides  actual stored dimensions. Falls back to mediaBox if no cropBox is defined.
         let rawBox = cgPDFPage.getBoxRect(.cropBox)
-        let scale = dpi / 72.0 // PDF points are 72 per inch
+        var scale = dpi / 72.0 // PDF points are 72 per inch
+        let pixelCount = rawBox.width * rawBox.height * scale * scale
+        if pixelCount > Self.maxPixelsPerPage {
+            scale *= (Self.maxPixelsPerPage / pixelCount).squareRoot()
+        }
 
         let width = Int(rawBox.width * scale)
         let height = Int(rawBox.height * scale)
@@ -162,7 +171,8 @@ final class PDFImportService: @unchecked Sendable {
             bitsPerComponent: 8,
             bytesPerRow: 0,
             space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            // Opaque: the page is drawn over white, and an alpha channel would make the HEIC encoder un-premultiply a second full-size copy.
+            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
         ) else {
             return nil
         }

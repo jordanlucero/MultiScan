@@ -7,7 +7,7 @@
 
 import AppIntents
 
-struct GetProjectTextIntent: AppIntent {
+nonisolated struct GetProjectTextIntent: AppIntent {
     static let title: LocalizedStringResource = "Get Project Text"
     static let description = IntentDescription(
         "Returns the recognized text of a project, optionally separated by page.",

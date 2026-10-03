@@ -15,7 +15,7 @@ import Foundation
 
 /// One parsed comparator from a "Find Projects where…" filter. `Sendable` so it can cross into the
 /// `ProjectStore` actor.
-enum ProjectQueryFilter: Sendable {
+nonisolated enum ProjectQueryFilter: Sendable {
     case nameEqualTo(String)
     case nameNotEqualTo(String)
     case nameContains(String)
@@ -30,7 +30,7 @@ enum ProjectQueryFilter: Sendable {
 }
 
 /// One parsed comparator from a "Find Pages where…" filter.
-enum PageQueryFilter: Sendable {
+nonisolated enum PageQueryFilter: Sendable {
     case textContains(String)
     case projectNameEqualTo(String)
     case projectNameContains(String)
@@ -48,11 +48,11 @@ enum PageQueryFilter: Sendable {
     }
 }
 
-enum ProjectSortKey: Sendable { case name, pageCount, createdAt, lastModified }
-enum PageSortKey: Sendable { case pageNumber, projectName, lastModified }
+nonisolated enum ProjectSortKey: Sendable { case name, pageCount, createdAt, lastModified }
+nonisolated enum PageSortKey: Sendable { case pageNumber, projectName, lastModified }
 
 /// A `Sendable` stand-in for `EntityQuerySort`, which carries a non-`Sendable` `PartialKeyPath`.
-struct QuerySortOrder<Key: Sendable>: Sendable {
+nonisolated struct QuerySortOrder<Key: Sendable>: Sendable {
     let key: Key
     let ascending: Bool
 
@@ -134,7 +134,7 @@ extension QuerySortOrder where Key == PageSortKey {
 
 // MARK: - Project query
 
-struct ProjectEntityQuery: EntityQuery, EntityStringQuery, IndexedEntityQuery, EntityPropertyQuery {
+nonisolated struct ProjectEntityQuery: EntityQuery, EntityStringQuery, IndexedEntityQuery, EntityPropertyQuery {
     typealias ComparatorMappingType = ProjectQueryFilter
 
     @Dependency var store: ProjectStore
@@ -226,7 +226,7 @@ struct ProjectEntityQuery: EntityQuery, EntityStringQuery, IndexedEntityQuery, E
 
 // MARK: - Page query
 
-struct PageEntityQuery: EntityQuery, EntityStringQuery, IndexedEntityQuery, EntityPropertyQuery {
+nonisolated struct PageEntityQuery: EntityQuery, EntityStringQuery, IndexedEntityQuery, EntityPropertyQuery {
     typealias ComparatorMappingType = PageQueryFilter
 
     @Dependency var store: ProjectStore

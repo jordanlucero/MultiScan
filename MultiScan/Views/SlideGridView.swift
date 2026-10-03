@@ -14,7 +14,6 @@ struct SlideGridView: View {
     let document: Document
     let navigationState: NavigationState
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var modelContext
 
     /// Position-aware callbacks for adding pages.
     /// `insertAfter` is the page number to insert after (0 = insert at beginning, nil = append to end).
@@ -25,7 +24,6 @@ struct SlideGridView: View {
     @State private var selectedPhotos: [PhotosPickerItem] = []
     @State private var showPhotoPicker = false
     @State private var showFileImporter = false
-    @State private var pageToDelete: Page?
 
     /// Tracks where new pages should be inserted (nil = append to end)
     @State private var insertTargetPageNumber: Int?
@@ -58,7 +56,20 @@ struct SlideGridView: View {
                             SlideGridCell(page: page, isSelected: currentPageNumber == page.pageNumber)
                         }
                         .buttonStyle(.plain)
-                        .contextMenu { contextMenu(for: page) }
+                        // The pickers are presented from inside this sheet, so the insert callbacks stay local and hand the result up.
+                        .pageContextMenu(
+                            for: page,
+                            in: document,
+                            navigationState: navigationState,
+                            onInsertFromPhotos: onAddPhotos == nil ? nil : { insertAfter in
+                                insertTargetPageNumber = insertAfter
+                                showPhotoPicker = true
+                            },
+                            onInsertFromFiles: onAddFiles == nil ? nil : { insertAfter in
+                                insertTargetPageNumber = insertAfter
+                                showFileImporter = true
+                            }
+                        )
                     }
                     .reorderable()
                 }
@@ -126,100 +137,8 @@ struct SlideGridView: View {
                 }
                 insertTargetPageNumber = nil
             }
-            .deletePageConfirmation(
-                isPresented: Binding(
-                    get: { pageToDelete != nil },
-                    set: { if !$0 { pageToDelete = nil } }
-                ),
-                pageNumber: pageToDelete?.pageNumber ?? 0
-            ) {
-                if let page = pageToDelete {
-                    withAnimation {
-                        navigationState.deletePage(page, modelContext: modelContext)
-                    }
-                }
-            }
         }
     }
-
-    // MARK: - Context Menu
-
-    @ViewBuilder
-    private func contextMenu(for page: Page) -> some View {
-        let canMoveUp = document.unwrappedPages.contains { $0.pageNumber == page.pageNumber - 1 }
-        let canMoveDown = document.unwrappedPages.contains { $0.pageNumber == page.pageNumber + 1 }
-
-        // Add before/after (only when add callbacks are provided)
-        if hasAddCallbacks {
-            Menu("Add Page Before…") {
-                if onAddPhotos != nil {
-                    Button("Import from Photos…", systemImage: "photo.on.rectangle") {
-                        insertTargetPageNumber = page.pageNumber - 1
-                        showPhotoPicker = true
-                    }
-                }
-                if onAddFiles != nil {
-                    Button("Import from Files…", systemImage: "folder") {
-                        insertTargetPageNumber = page.pageNumber - 1
-                        showFileImporter = true
-                    }
-                }
-            }
-
-            Menu("Add Page After…") {
-                if onAddPhotos != nil {
-                    Button("Import from Photos…", systemImage: "photo.on.rectangle") {
-                        insertTargetPageNumber = page.pageNumber
-                        showPhotoPicker = true
-                    }
-                }
-                if onAddFiles != nil {
-                    Button("Import from Files…", systemImage: "folder") {
-                        insertTargetPageNumber = page.pageNumber
-                        showFileImporter = true
-                    }
-                }
-            }
-
-            Divider()
-        }
-
-        Section {
-            Button {
-                movePageUp(page)
-            } label: {
-                Label("Move Before", systemImage: "arrow.up")
-            }
-            .disabled(!canMoveUp)
-
-            Button {
-                movePageDown(page)
-            } label: {
-                Label("Move After", systemImage: "arrow.down")
-            }
-            .disabled(!canMoveDown)
-        }
-
-        Section {
-            Button(role: .destructive) {
-                pageToDelete = page
-            } label: {
-                Label("Delete Page…", systemImage: "trash")
-            }
-            .disabled(document.totalPages <= 1)
-        }
-    }
-
-    // MARK: - Page Reordering
-
-    private func movePageUp(_ page: Page) {
-        navigationState.movePage(page, by: -1)
-    }
-
-    private func movePageDown(_ page: Page) {
-        navigationState.movePage(page, by: 1)
-    }
-
 }
 
 // MARK: - Thumbnail Cell
@@ -263,13 +182,13 @@ struct SlideGridCell: View {
             }
 
             // Label
-            Text("Page \(page.pageNumber)")
+            Text(page.title)
                 .font(.caption2)
                 .foregroundStyle(isSelected ? .primary : .secondary)
                 .lineLimit(1)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Page \(page.pageNumber)")
+        .accessibilityLabel(page.title)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }

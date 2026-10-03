@@ -27,7 +27,6 @@ struct ProcessedPageImage {
 // MARK: - Zoom Controller
 
 /// The platform scroll view registers itself here so commands can reach it.
-@MainActor
 protocol ImageZoomTarget: AnyObject {
     func zoomIn()
     func zoomOut()
@@ -37,7 +36,6 @@ protocol ImageZoomTarget: AnyObject {
 /// Command/state bridge between SwiftUI (buttons, menu commands, accessibility)
 /// and the platform scroll view. One per ImageViewer; exposed to the menu bar
 /// via `FocusedValues.imageZoomController`.
-@MainActor
 @Observable
 final class ImageZoomController {
     /// Current zoom relative to fit-to-window (1.0 = fit). Display-only.

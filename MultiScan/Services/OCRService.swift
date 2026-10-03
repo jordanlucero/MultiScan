@@ -6,11 +6,10 @@ import Vision
 import CoreGraphics
 import ImageIO
 import UniformTypeIdentifiers
-import SwiftUI
 import os
 
 /// Result type for processed images
-struct ProcessedImage {
+nonisolated struct ProcessedImage: Sendable {
     let pageNumber: Int
     let text: String
     let imageData: Data
@@ -19,23 +18,22 @@ struct ProcessedImage {
     let originalFileName: String
 }
 
-/// OCR service for processing images and extracting text.
-/// MainActor-isolated because it reports progress to UI state.
-/// Heavy work (thumbnail generation, Vision OCR) runs `@concurrent`, off the main actor.
-@MainActor
-final class OCRService {
-    /// Called on the main actor whenever progress changes (0…1).
-    var progressHandler: (@MainActor (Double) -> Void)?
-
+/// OCR over a batch of images. `processImages` runs on its caller (the import pipeline, on the main actor) so progress can update observable state directly; each image's decode, thumbnail, and Vision work is `@concurrent`, off the main actor.
+nonisolated enum OCRService {
     /// Process multiple images from Data
     /// - Parameters:
     ///   - images: Array of tuples containing image data and filename
     ///   - startingPageNumber: The page number to start from (default 1 for new documents)
+    ///   - onProgress: Called on the caller's actor as each page completes (0…1)
     /// - Returns: Array of ProcessedImage results
-    func processImages(_ images: [(data: Data, fileName: String)], startingPageNumber: Int = 1) async throws -> [ProcessedImage] {
+    static func processImages(
+        _ images: [(data: Data, fileName: String)],
+        startingPageNumber: Int = 1,
+        onProgress: (Double) -> Void
+    ) async throws -> [ProcessedImage] {
         var results: [ProcessedImage] = []
         let imageCount = max(images.count, 1)
-        progressHandler?(0)
+        onProgress(0)
 
         for (index, image) in images.enumerated() {
             try Task.checkCancellation()
@@ -43,23 +41,25 @@ final class OCRService {
             let processed = try await processImageData(image.data, fileName: image.fileName, pageNumber: startingPageNumber + index)
             results.append(processed)
 
-            progressHandler?(Double(index + 1) / Double(imageCount))
+            onProgress(Double(index + 1) / Double(imageCount))
         }
 
-        progressHandler?(1.0)
+        onProgress(1.0)
         return results
     }
 
     /// Process a single image from Data. `@concurrent` moves the decode, thumbnail, and Vision work onto the cooperative pool so the main actor stays free.
     @concurrent
-    private nonisolated func processImageData(_ data: Data, fileName: String, pageNumber: Int) async throws -> ProcessedImage {
+    private static func processImageData(_ data: Data, fileName: String, pageNumber: Int) async throws -> ProcessedImage {
         guard let imageSource = CGImageSourceCreateWithData(data as CFData, nil),
               let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else {
             print("Failed to load image: \(fileName)")
             throw OCRError.imageLoadError
         }
 
-        let thumbnailData = generateThumbnail(from: imageSource)
+        // Thumbnails are always HEIC at 400 px max dimension, 0.7 quality
+        let thumbnailData = PlatformImage.thumbnail(from: imageSource, maxPixelSize: 400)
+            .flatMap { PlatformImage.encode($0, as: .heic, quality: 0.7) }
         let (text, boundingBoxes) = try await recognizeText(from: cgImage)
         let boundingBoxesData = try? JSONEncoder().encode(boundingBoxes)
 
@@ -73,35 +73,7 @@ final class OCRService {
         )
     }
 
-    private nonisolated func generateThumbnail(from imageSource: CGImageSource) -> Data? {
-        let maxDimension: CGFloat = 400
-        let options: [NSString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceThumbnailMaxPixelSize: maxDimension,
-            kCGImageSourceCreateThumbnailWithTransform: true
-        ]
-
-        guard let thumbnailImage = CGImageSourceCreateThumbnailAtIndex(imageSource, 0, options as CFDictionary) else {
-            return nil
-        }
-
-        let data = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(data, UTType.heic.identifier as CFString, 1, nil) else {
-            return nil
-        }
-
-        let compressionOptions: [NSString: Any] = [
-            kCGImageDestinationLossyCompressionQuality: 0.7
-        ]
-        CGImageDestinationAddImage(destination, thumbnailImage, compressionOptions as CFDictionary)
-        guard CGImageDestinationFinalize(destination) else {
-            return nil
-        }
-
-        return data as Data
-    }
-
-    private nonisolated func recognizeText(from cgImage: CGImage) async throws -> (text: String, boundingBoxes: [CGRect]) {
+    private static func recognizeText(from cgImage: CGImage) async throws -> (text: String, boundingBoxes: [CGRect]) {
         return try await withCheckedThrowingContinuation { continuation in
             // Track whether continuation has been resumed to prevent double-resume crashes.
             // Vision can both throw from perform() AND call the completion handler with an error
@@ -145,7 +117,7 @@ final class OCRService {
     }
 }
 
-enum OCRError: LocalizedError {
+nonisolated enum OCRError: LocalizedError {
     case imageLoadError
 
     var errorDescription: String? {
@@ -153,43 +125,5 @@ enum OCRError: LocalizedError {
         case .imageLoadError:
             return String(localized: "Could not load image file")
         }
-    }
-}
-
-// MARK: - Image Compression Utilities
-
-extension OCRService {
-    /// Compress image data to HEIC with specified quality
-    /// - Parameters:
-    ///   - data: Original image data
-    ///   - quality: HEIC compression quality (0.0 to 1.0)
-    /// - Returns: Compressed HEIC data, or nil if compression failed
-    static func compressImageData(_ data: Data, quality: CGFloat = 0.8) -> Data? {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-              let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
-            return nil
-        }
-
-        let mutableData = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(
-            mutableData,
-            UTType.heic.identifier as CFString,
-            1,
-            nil
-        ) else {
-            return nil
-        }
-
-        let options: [CFString: Any] = [
-            kCGImageDestinationLossyCompressionQuality: quality
-        ]
-
-        CGImageDestinationAddImage(destination, cgImage, options as CFDictionary)
-
-        guard CGImageDestinationFinalize(destination) else {
-            return nil
-        }
-
-        return mutableData as Data
     }
 }

@@ -52,7 +52,8 @@ typealias PlatformColor = UIColor
 // MARK: - Text Style Configuration
 
 /// Font configuration for page text at each boundary of the pipeline.
-enum PageTextStyle {
+/// `nonisolated`: fonts are created wherever text is encoded — on the main actor, inside `@concurrent` export work, and on `ProjectStore`.
+nonisolated enum PageTextStyle {
     /// Font family stored in RTF and used for export. Chosen for word processor
     /// compatibility (system fonts encode as private names like ".SFNS" that other
     /// apps cannot resolve).
@@ -78,7 +79,7 @@ enum PageTextStyle {
 
 // MARK: - Font Trait Helpers
 
-extension PlatformFont {
+nonisolated extension PlatformFont {
     var isBold: Bool {
         #if os(macOS)
         fontDescriptor.symbolicTraits.contains(.bold)
@@ -116,7 +117,8 @@ extension PlatformFont {
 
 // MARK: - Archiver
 
-enum RichTextArchiver {
+/// `nonisolated`: encoding and decoding run on whichever actor holds the text — the editor on the main actor, `TextExporter.buildResult` on the cooperative pool, `ProjectStore` on its model actor.
+nonisolated enum RichTextArchiver {
 
     // MARK: Encoding
 

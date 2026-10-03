@@ -6,7 +6,7 @@
 
 import AppIntents
 
-struct MultiScanShortcuts: AppShortcutsProvider {
+nonisolated struct MultiScanShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
             intent: SearchProjectsIntent(),

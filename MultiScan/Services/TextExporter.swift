@@ -5,15 +5,14 @@
 //  Builds the combined NSAttributedString for export with configurable separators.
 //
 //  ## Performance Architecture
-//  This exporter supports two modes:
+//  `snapshots(for:)` gathers Sendable per-page inputs in one of two ways:
 //
-//  1. **Cache-based (preferred)**: Uses `TextExportCacheService` to load pre-computed page data (RTF + statistics) from a single cached file.
+//  1. **Cache-based (preferred)**: the pre-computed `TextExportCache` (RTF + statistics for every page) — a single external-storage read, used whenever it is still fresh against the pages.
+//  2. **Direct page access (fallback)**: each page's raw `richTextData` — N external-storage reads. Only used when the cache is unavailable or stale.
 //
-//  2. **Direct page access (fallback)**: Reads each page's raw text data from SwiftData external storage. This triggers N disk reads. Only used when the cache is unavailable or invalid.
+//  In both modes the expensive work — decoding page RTF and appending into the combined string — happens off the main actor in `buildResult`. `NSMutableAttributedString.append` is O(n) per page.
 //
-//  In both modes the expensive work — decoding page RTF and appending into the combined string — happens off the main actor. `NSMutableAttributedString.append` is O(n) per page (unlike the old SwiftUI `AttributedString.append`, which was O(n²) overall).
-//
-//  `result.attributedText` feeds the preview; `result.rtfData`/`plainText` feed `RichText` for sharing.
+//  `export(_:options:)` is nonisolated and runs on its caller: the export panel calls it on the main actor, `ProjectStore` on its model actor, so neither hands a `@Model` object across actors.
 //
 
 import SwiftUI
@@ -22,7 +21,7 @@ import SwiftData
 /// The finished export: attributed text for preview plus pre-encoded share payloads.
 ///
 /// `NSAttributedString` is not Sendable, but the instance here is built fresh inside the export task and never mutated afterward — immutable NSAttributedStrings are safe to read from any thread once ownership is transferred.
-struct TextExportResult: @unchecked Sendable {
+nonisolated struct TextExportResult: @unchecked Sendable {
     let attributedText: NSAttributedString
     let rtfData: Data?
     let plainText: String
@@ -35,14 +34,9 @@ struct TextExportResult: @unchecked Sendable {
     }
 }
 
-@MainActor
-struct TextExporter {
-    let document: Document
-    let settings: ExportSettings
+nonisolated enum TextExporter {
 
-    // MARK: - Page Snapshot
-
-    /// Sendable snapshot of one page's export inputs, gathered on the main actor (or on `ProjectStore` for App Intents / Transferable exports).
+    /// Sendable snapshot of one page's export inputs, gathered on the actor that owns the page.
     struct PageSnapshot: Sendable {
         let pageNumber: Int
         let fileName: String?
@@ -53,17 +47,21 @@ struct TextExporter {
         let charCount: Int?
     }
 
-    // MARK: - Async Export
+    // MARK: - Export
 
-    /// Builds the combined export result from all pages.
-    ///
-    /// Uses the cache when available (fast single-file load), falls back to direct page access if the cache is unavailable (slow N-file load).
-    func buildCombinedTextAsync() async -> TextExportResult {
-        let snapshots: [PageSnapshot]
+    /// Builds the combined export result for a project. Runs on the caller's actor up to the snapshot, then decodes and combines on the cooperative pool.
+    static func export(_ document: Document, options: ExportOptions) async -> TextExportResult {
+        let snapshots = snapshots(for: document)
+        guard !snapshots.isEmpty else { return .empty }
+        return await buildResult(from: snapshots, options: options)
+    }
 
-        if let cache = TextExportCacheService.loadFreshCache(from: document) {
-            // Cache path: one external-storage read for the whole document
-            snapshots = cache.pages
+    /// Per-page inputs, from the export cache when it is fresh (one read) and from the pages otherwise (N reads).
+    static func snapshots(for document: Document) -> [PageSnapshot] {
+        if let data = document.textExportCache,
+           let cache = TextExportCacheService.decodeCache(from: data),
+           TextExportCacheService.isFresh(cache, against: TextExportCacheService.fingerprints(of: document)) {
+            return cache.pages
                 .sorted { $0.pageNumber < $1.pageNumber }
                 .map {
                     PageSnapshot(
@@ -74,45 +72,25 @@ struct TextExporter {
                         charCount: $0.charCount
                     )
                 }
-        } else {
-            // Fallback path: N external-storage reads (raw Data only — decode happens off-main)
-            snapshots = document.unwrappedPages
-                .sorted { $0.pageNumber < $1.pageNumber }
-                .map {
-                    PageSnapshot(
-                        pageNumber: $0.pageNumber,
-                        fileName: $0.originalFileName,
-                        textData: $0.richTextData,
-                        wordCount: nil,
-                        charCount: nil
-                    )
-                }
         }
-
-        guard !snapshots.isEmpty else { return .empty }
-
-        // Decode, combine, and encode off the main actor
-        return await Self.buildResult(
-            from: snapshots,
-            createVisualSeparation: settings.createVisualSeparation,
-            separatorStyle: settings.separatorStyle,
-            includePageNumber: settings.includePageNumber,
-            includeFilename: settings.includeFilename,
-            includeStatistics: settings.includeStatistics
-        )
+        // Fallback path: raw Data only — decode happens off-main.
+        return document.unwrappedPages
+            .sorted { $0.pageNumber < $1.pageNumber }
+            .map {
+                PageSnapshot(
+                    pageNumber: $0.pageNumber,
+                    fileName: $0.originalFileName,
+                    textData: $0.richTextData,
+                    wordCount: nil,
+                    charCount: nil
+                )
+            }
     }
 
     // MARK: - Combining (off the main actor)
 
     @concurrent
-    nonisolated static func buildResult(
-        from snapshots: [PageSnapshot],
-        createVisualSeparation: Bool,
-        separatorStyle: SeparatorStyle,
-        includePageNumber: Bool,
-        includeFilename: Bool,
-        includeStatistics: Bool
-    ) async -> TextExportResult {
+    static func buildResult(from snapshots: [PageSnapshot], options: ExportOptions) async -> TextExportResult {
         let combined = NSMutableAttributedString()
         let separatorAttributes: [NSAttributedString.Key: Any] = [.font: PageTextStyle.storageFont]
         let totalPages = snapshots.count
@@ -124,8 +102,7 @@ struct TextExporter {
 
             let pageText = RichTextArchiver.attributedString(from: snapshot.textData)
 
-            // Add separator
-            if index > 0 || createVisualSeparation {
+            if index > 0 || options.createVisualSeparation {
                 let separator = separatorString(
                     pageNumber: snapshot.pageNumber,
                     fileName: snapshot.fileName,
@@ -133,18 +110,13 @@ struct TextExporter {
                     charCount: snapshot.charCount ?? pageText.string.count,
                     totalPages: totalPages,
                     isFirstPage: index == 0,
-                    createVisualSeparation: createVisualSeparation,
-                    separatorStyle: separatorStyle,
-                    includePageNumber: includePageNumber,
-                    includeFilename: includeFilename,
-                    includeStatistics: includeStatistics
+                    options: options
                 )
                 if !separator.isEmpty {
                     combined.append(NSAttributedString(string: separator, attributes: separatorAttributes))
                 }
             }
 
-            // Add page content
             combined.append(pageText)
         }
 
@@ -157,44 +129,40 @@ struct TextExporter {
     }
 
     /// Builds the separator text between pages (empty string = no separator).
-    nonisolated private static func separatorString(
+    static func separatorString(
         pageNumber: Int,
         fileName: String?,
         wordCount: Int,
         charCount: Int,
         totalPages: Int,
         isFirstPage: Bool,
-        createVisualSeparation: Bool,
-        separatorStyle: SeparatorStyle,
-        includePageNumber: Bool,
-        includeFilename: Bool,
-        includeStatistics: Bool
+        options: ExportOptions
     ) -> String {
-        guard createVisualSeparation else {
+        guard options.createVisualSeparation else {
             return " "
         }
 
         var components: [String] = []
 
-        if includePageNumber {
+        if options.includePageNumber {
             components.append(String(localized: "Page \(pageNumber) of \(totalPages)", comment: "Page number indicator in export separator"))
         }
 
-        if includeFilename, let filename = fileName {
+        if options.includeFilename, let filename = fileName {
             components.append(filename)
         }
 
-        if includeStatistics {
+        if options.includeStatistics {
             components.append(String(localized: "\(wordCount) words, \(charCount) characters", comment: "Word and character count in export separator"))
         }
 
-        if isFirstPage && separatorStyle == .lineBreak && components.isEmpty {
+        if isFirstPage && options.separatorStyle == .lineBreak && components.isEmpty {
             return ""
         }
 
         var separator = isFirstPage ? "" : "\n\n"
 
-        switch separatorStyle {
+        switch options.separatorStyle {
         case .lineBreak:
             if !components.isEmpty {
                 separator += "[\(components.joined(separator: " | "))]"

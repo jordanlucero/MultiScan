@@ -11,7 +11,8 @@
 
 import Foundation
 
-enum SharedImportInbox {
+/// `nonisolated`: plain file-system work with Codable manifests, called from the extension's model and the app's coordinator alike.
+nonisolated enum SharedImportInbox {
     static let appGroupIdentifier = "group.co.jservices.MultiScan"
 
     /// Darwin notification posted by the extension after committing a batch, for the case where the app is already active (iPad multitasking, a visible Mac window). Prefixed with the app group so the macOS sandbox lets it through.

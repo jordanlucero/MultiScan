@@ -14,7 +14,7 @@ import CloudKit
 // MARK: - Panes (shared)
 
 struct ImportAndStorageSettingsView: View {
-    @AppStorage("optimizeImagesOnImport") private var optimizeImagesOnImport = false
+    @AppStorage(DefaultsKey.optimizeImagesOnImport) private var optimizeImagesOnImport = false
 
     // iCloud sync is read straight from UserDefaults because changing it requires a relaunch: the container is configured once per process.
     @State private var iCloudSyncEnabled = SchemaVersioning.isICloudSyncEnabled
@@ -90,7 +90,7 @@ struct ImportAndStorageSettingsView: View {
 }
 
 struct ViewerSettingsView: View {
-    @AppStorage("viewerBackground") private var viewerBackground = ViewerBackground.system.rawValue
+    @AppStorage(DefaultsKey.viewerBackground) private var viewerBackground = ViewerBackground.system.rawValue
     private let navigationSettings = NavigationSettings.shared
 
     var body: some View {

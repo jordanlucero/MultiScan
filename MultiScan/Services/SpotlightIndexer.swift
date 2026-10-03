@@ -19,20 +19,20 @@ actor SpotlightIndexer {
     /// Named index (Apple: use the default index only for prototyping).
     static let indexName = "MultiScan"
 
-    private static let logger = Logger(subsystem: "co.jservices.MultiScan", category: "SpotlightIndexer")
+    private nonisolated static let logger = Logger(subsystem: "co.jservices.MultiScan", category: "SpotlightIndexer")
 
     /// Entities per `indexAppEntities` call.
-    private static let batchSize = 200
+    private nonisolated static let batchSize = 200
 
     /// Coalesces bursts of save notifications (typing autosaves every second).
-    private static let debounce: Duration = .seconds(2)
+    private nonisolated static let debounce: Duration = .seconds(2)
 
     /// A fresh handle per call: `CSSearchableIndex` is not Sendable, and each async call sends it away.
-    private static var index: CSSearchableIndex { CSSearchableIndex(name: indexName) }
+    private nonisolated static var index: CSSearchableIndex { CSSearchableIndex(name: indexName) }
 
     // MARK: Manifest
 
-    private struct Manifest: Codable {
+    private nonisolated struct Manifest: Codable {
         static let currentVersion = 1
         var version = currentVersion
         /// uuidString → fingerprint
@@ -45,7 +45,7 @@ actor SpotlightIndexer {
     private var isReconciling = false
     private var needsAnotherPass = false
 
-    private static var manifestURL: URL {
+    private nonisolated static var manifestURL: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
         return base.appendingPathComponent("MultiScan", isDirectory: true)
@@ -118,7 +118,8 @@ actor SpotlightIndexer {
 
     /// Diffs the database against the manifest and applies the difference to the index.
     func reconcile() async {
-        guard CSSearchableIndex.isIndexingAvailable() else { return }
+        // Under test the store is a throwaway; reconciling it would wipe the user's real index.
+        guard CSSearchableIndex.isIndexingAvailable(), !AppModelContainer.isRunningTests else { return }
         if isReconciling {
             needsAnotherPass = true
             return
@@ -136,7 +137,7 @@ actor SpotlightIndexer {
     func reindex(projects ids: [UUID]) async {
         var manifest = loadManifest()
         for id in ids { manifest.projects[id.uuidString] = nil }
-        let store = await MainActor.run { ProjectStore.shared }
+        let store = await ProjectStore.shared
         let fingerprints = await store.fingerprints()
         let projectSet = Set(ids)
         for (pageID, projectID) in fingerprints.pageProject where projectSet.contains(projectID) {
@@ -168,7 +169,7 @@ actor SpotlightIndexer {
     // MARK: Reconcile pass
 
     private func reconcileOnce() async {
-        let store = await MainActor.run { ProjectStore.shared }
+        let store = await ProjectStore.shared
         let current = await store.fingerprints()
         var manifest = loadManifest()
 

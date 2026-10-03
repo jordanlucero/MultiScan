@@ -40,10 +40,10 @@ struct ImageViewer: View {
     let navigationState: NavigationState
 
     // Settings
-    @AppStorage("viewerBackground") private var viewerBackgroundRaw = ViewerBackground.system.rawValue
+    @AppStorage(DefaultsKey.viewerBackground) private var viewerBackgroundRaw = ViewerBackground.system.rawValue
     /// Show HDR photos with full headroom; when off, the system tone-maps them to SDR.
     /// Toggled from the Image menu (macOS + iPadOS menu bar).
-    @AppStorage("viewerShowsHDR") private var viewerShowsHDR = true
+    @AppStorage(DefaultsKey.viewerShowsHDR) private var viewerShowsHDR = true
 
     private var viewerBackground: ViewerBackground {
         ViewerBackground(rawValue: viewerBackgroundRaw) ?? .system
@@ -62,7 +62,8 @@ struct ImageViewer: View {
 
     /// Everything that requires re-decoding the display image. Drives `.task(id:)`,
     /// which cancels any in-flight decode when the page or its settings change.
-    private struct ImageRequest: Equatable {
+    /// `nonisolated`: handed to the `@concurrent` decode.
+    private nonisolated struct ImageRequest: Equatable, Sendable {
         var pageID: PersistentIdentifier?
         var rotation: Int
         var increaseContrast: Bool

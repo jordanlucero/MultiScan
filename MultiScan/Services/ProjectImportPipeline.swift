@@ -2,7 +2,9 @@
 //  ProjectImportPipeline.swift
 //  MultiScan
 //
-//  Shared import → OCR → project creation pipeline used by the Home screen and the "Start New Project" App Intent. Owns the in-flight state (which projects are still processing, overall progress) so an intent-driven import shows the same progress card as a manual one.
+//  The one import path: files/folders/Photos → page images → OCR → project. Used by the Home screen, the review views (append/insert pages), the share extension hand-off, and the "Start New Project" App Intent, so every entry point shows the same progress card.
+//
+//  Main-actor isolated (the project default): it owns observable in-flight state and writes SwiftData models. The heavy stages are `@concurrent` (`scan`, `PDFImportService.renderPDF`, `OCRService` per-image work) and report back here.
 //
 
 import Foundation
@@ -10,19 +12,19 @@ import Observation
 import PhotosUI
 import SwiftData
 import SwiftUI
+import UniformTypeIdentifiers
 
-@MainActor
 @Observable
 final class ProjectImportPipeline {
     static let shared = ProjectImportPipeline()
 
     /// Images ready for OCR plus naming hints gathered while scanning the input.
-    struct PreparedImport: Sendable {
+    nonisolated struct PreparedImport: Sendable {
         let images: [(data: Data, fileName: String)]
         let suggestedName: String?
     }
 
-    enum ImportError: LocalizedError {
+    nonisolated enum ImportError: LocalizedError {
         case noImages
 
         var errorDescription: String? {
@@ -33,9 +35,6 @@ final class ProjectImportPipeline {
         }
     }
 
-    private let ocrService = OCRService()
-    private let importService = ImageImportService()
-
     /// Projects whose OCR is still running (Home shows a progress card for these).
     private(set) var processingDocumentIDs: Set<PersistentIdentifier> = []
 
@@ -43,14 +42,9 @@ final class ProjectImportPipeline {
     private(set) var progress: Double = 0
 
     /// Per-page progress callback for the active `createProject` call (App Intents `Progress`).
-    private var pageProgressHandler: (@MainActor (Double) -> Void)?
+    private var pageProgressHandler: ((Double) -> Void)?
 
-    private init() {
-        ocrService.progressHandler = { [weak self] progress in
-            self?.progress = progress
-            self?.pageProgressHandler?(progress)
-        }
-    }
+    private init() {}
 
     // MARK: Input preparation
 
@@ -59,34 +53,35 @@ final class ProjectImportPipeline {
     func prepare(
         urls: [URL],
         optimizeImages: Bool,
-        onEstimate: (@MainActor (Int) -> Void)? = nil
+        onEstimate: ((Int) -> Void)? = nil
     ) async throws -> PreparedImport {
-        let result = await importService.processFileURLs(urls, optimizeImages: optimizeImages)
+        // Hold security-scoped access to the picked items for the whole scan + render, so PDFs inside a picked folder stay readable.
+        let accessed = urls.filter { $0.startAccessingSecurityScopedResource() }
+        defer { for url in accessed { url.stopAccessingSecurityScopedResource() } }
 
-        var estimatedPageCount = result.images.count
-        for pdfURL in result.pdfURLs {
-            let accessed = pdfURL.startAccessingSecurityScopedResource()
-            estimatedPageCount += PDFImportService.pageCount(for: pdfURL)
-            if accessed { pdfURL.stopAccessingSecurityScopedResource() }
-        }
-        onEstimate?(estimatedPageCount)
+        let scanned = await Self.scan(urls, optimizeImages: optimizeImages)
+        onEstimate?(scanned.images.count + scanned.pdfPageCount)
 
-        var allImages = result.images
-        if !result.pdfURLs.isEmpty {
-            let pdfService = PDFImportService()
-            for pdfURL in result.pdfURLs {
-                let accessed = pdfURL.startAccessingSecurityScopedResource()
-                defer { if accessed { pdfURL.stopAccessingSecurityScopedResource() } }
-                allImages.append(contentsOf: try await pdfService.renderPDF(at: pdfURL))
-            }
+        var images = scanned.images
+        for pdfURL in scanned.pdfURLs {
+            images.append(contentsOf: try await PDFImportService.renderPDF(at: pdfURL))
         }
 
-        return PreparedImport(images: allImages, suggestedName: result.suggestedName)
+        return PreparedImport(images: images, suggestedName: scanned.suggestedName)
     }
 
-    /// Loads Photos picker selections into image data.
+    /// Loads Photos picker selections into image data (with the original filename when Photos provides one).
     func loadPhotos(_ items: [PhotosPickerItem], optimizeImages: Bool) async -> [(data: Data, fileName: String)] {
-        await importService.processSelectedPhotos(items, optimizeImages: optimizeImages)
+        var images: [(data: Data, fileName: String)] = []
+        for (index, item) in items.enumerated() {
+            guard let loaded = await Self.loadPhoto(item, index: index) else { continue }
+            var data = loaded.data
+            if optimizeImages, let compressed = await PlatformImage.heicReencodingInBackground(data) {
+                data = compressed
+            }
+            images.append((data: data, fileName: loaded.fileName))
+        }
+        return images
     }
 
     /// Default project name when the input suggests none.
@@ -103,7 +98,7 @@ final class ProjectImportPipeline {
     func createProject(
         named name: String,
         images: [(data: Data, fileName: String)],
-        onPageProgress: (@MainActor (Double) -> Void)? = nil
+        onPageProgress: ((Double) -> Void)? = nil
     ) async throws -> UUID {
         guard !images.isEmpty else { throw ImportError.noImages }
         let context = AppModelContainer.shared.mainContext
@@ -122,8 +117,13 @@ final class ProjectImportPipeline {
         }
 
         do {
-            let results = try await ocrService.processImages(images)
-            populate(document, with: results)
+            let results = try await runOCR(images, startingPageNumber: 1)
+            document.totalPages = results.count
+            insertPages(for: results, into: document)
+            document.lastModified = Date()
+            document.recalculateStorageSize()
+            // Build the text export cache while page text is still in memory.
+            TextExportCacheService.buildInitialCache(for: document, from: document.unwrappedPages)
             try context.save()
             MultiScanShortcuts.updateAppShortcutParameters()
             return document.uuid ?? UUID()
@@ -137,7 +137,7 @@ final class ProjectImportPipeline {
     // MARK: Adding pages to an existing project
 
     /// Outcome of an `addPages` call, so the caller can decide where to navigate.
-    struct AddPagesResult: Sendable {
+    nonisolated struct AddPagesResult: Sendable {
         /// Page number of the first page added, or `nil` if OCR produced nothing.
         let firstNewPageNumber: Int?
         /// Whether the pages went on the end rather than being inserted mid-project.
@@ -157,9 +157,7 @@ final class ProjectImportPipeline {
         let insertStart = insertAfterNum + 1
         let isAppend = insertAfterNum >= document.totalPages
 
-        // Reset so a progress UI doesn't briefly show the previous import's final value
-        progress = 0
-        let results = try await ocrService.processImages(images, startingPageNumber: insertStart)
+        let results = try await runOCR(images, startingPageNumber: insertStart)
         let newCount = results.count
 
         // Shift existing pages that come after the insertion point (no-op when appending)
@@ -167,21 +165,7 @@ final class ProjectImportPipeline {
             page.pageNumber += newCount
         }
 
-        var newPages: [Page] = []
-        for result in results {
-            let page = Page(
-                pageNumber: result.pageNumber,
-                text: result.text,
-                imageData: result.imageData,
-                originalFileName: result.originalFileName,
-                boundingBoxesData: result.boundingBoxesData
-            )
-            page.thumbnailData = result.thumbnailData
-            page.document = document
-            document.pages?.append(page)
-            newPages.append(page)
-        }
-
+        let newPages = insertPages(for: results, into: document)
         document.totalPages += newCount
         document.recalculateStorageSize()
 
@@ -198,9 +182,22 @@ final class ProjectImportPipeline {
         return AddPagesResult(firstNewPageNumber: newPages.first?.pageNumber, isAppend: isAppend)
     }
 
-    private func populate(_ document: Document, with results: [ProcessedImage]) {
-        document.totalPages = results.count
-        for result in results {
+    // MARK: Internals
+
+    /// OCR with progress mirrored into `progress` (and the intent's per-page handler).
+    private func runOCR(_ images: [(data: Data, fileName: String)], startingPageNumber: Int) async throws -> [ProcessedImage] {
+        // Reset so a progress UI doesn't briefly show the previous import's final value
+        progress = 0
+        return try await OCRService.processImages(images, startingPageNumber: startingPageNumber) { fraction in
+            progress = fraction
+            pageProgressHandler?(fraction)
+        }
+    }
+
+    /// Creates `Page` models for OCR results and attaches them to the document.
+    @discardableResult
+    private func insertPages(for results: [ProcessedImage], into document: Document) -> [Page] {
+        results.map { result in
             let page = Page(
                 pageNumber: result.pageNumber,
                 text: result.text,
@@ -211,10 +208,100 @@ final class ProjectImportPipeline {
             page.thumbnailData = result.thumbnailData
             page.document = document
             document.pages?.append(page)
+            return page
         }
-        document.lastModified = Date()
-        document.recalculateStorageSize()
-        // Build the text export cache while page text is still in memory.
-        TextExportCacheService.buildInitialCache(for: document, from: document.unwrappedPages)
+    }
+
+    // MARK: File scanning (off the main actor)
+
+    /// What a scan of the picked URLs found: image bytes (already optimized if requested), PDFs to render, and a name hint.
+    private nonisolated struct ScannedInput: Sendable {
+        var images: [(data: Data, fileName: String)] = []
+        var pdfURLs: [URL] = []
+        var pdfPageCount = 0
+        var suggestedName: String?
+    }
+
+    /// Walks files and folders, reading images and noting PDFs. Everything is sorted by filename; a single picked folder names the project.
+    @concurrent
+    private static func scan(_ urls: [URL], optimizeImages: Bool) async -> ScannedInput {
+        var result = ScannedInput()
+        let fileManager = FileManager.default
+
+        for url in urls {
+            var isDirectory: ObjCBool = false
+            guard fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory) else { continue }
+
+            if isDirectory.boolValue {
+                guard let enumerator = fileManager.enumerator(
+                    at: url,
+                    includingPropertiesForKeys: [.contentTypeKey],
+                    options: [.skipsHiddenFiles, .skipsPackageDescendants]
+                ) else { continue }
+                while let fileURL = enumerator.nextObject() as? URL {
+                    collect(fileURL, optimizeImages: optimizeImages, into: &result)
+                }
+            } else {
+                collect(url, optimizeImages: optimizeImages, into: &result)
+            }
+        }
+
+        result.images.sort { $0.fileName.localizedStandardCompare($1.fileName) == .orderedAscending }
+        result.pdfURLs.sort { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+
+        if urls.count == 1, let only = urls.first {
+            var isDirectory: ObjCBool = false
+            if fileManager.fileExists(atPath: only.path, isDirectory: &isDirectory), isDirectory.boolValue {
+                result.suggestedName = only.lastPathComponent
+            }
+        }
+        return result
+    }
+
+    private static func collect(_ url: URL, optimizeImages: Bool, into result: inout ScannedInput) {
+        guard let contentType = try? url.resourceValues(forKeys: [.contentTypeKey]).contentType else { return }
+
+        if contentType.conforms(to: .pdf) {
+            result.pdfURLs.append(url)
+            result.pdfPageCount += PDFImportService.pageCount(for: url)
+            return
+        }
+
+        guard contentType.conforms(to: .image), let data = try? Data(contentsOf: url) else { return }
+        let finalData = optimizeImages ? (PlatformImage.heicReencoding(data) ?? data) : data
+        result.images.append((data: finalData, fileName: url.lastPathComponent))
+    }
+
+    // MARK: Photos
+
+    /// Loads one picked photo, preferring the file representation (which carries the original filename).
+    private static func loadPhoto(_ item: PhotosPickerItem, index: Int) async -> (data: Data, fileName: String)? {
+        do {
+            if let file = try await item.loadTransferable(type: PhotoFileTransferable.self) {
+                return (data: file.data, fileName: file.fileName)
+            }
+        } catch {
+            print("Failed to load file representation: \(error)")
+        }
+
+        // Fallback: raw data without a filename
+        if let data = try? await item.loadTransferable(type: Data.self) {
+            return (data: data, fileName: String(localized: "Photo \(index + 1)", comment: "Fallback filename for imported photo"))
+        }
+        return nil
+    }
+}
+
+/// Loads a photo with its original filename.
+private nonisolated struct PhotoFileTransferable: Transferable {
+    let data: Data
+    let fileName: String
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(importedContentType: .image) { received in
+            let fileName = received.file.lastPathComponent
+            let data = try Data(contentsOf: received.file)
+            return PhotoFileTransferable(data: data, fileName: fileName)
+        }
     }
 }

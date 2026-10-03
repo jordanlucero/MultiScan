@@ -10,8 +10,9 @@ import SwiftData
 import CoreGraphics
 import SwiftUI
 
+// `nonisolated`: the project builds with default main-actor isolation, but model objects are also read on `ProjectStore`'s model actor (App Intents, Spotlight, search). SwiftData, not an actor, owns their thread-safety — a model must only be touched on the actor that owns its context.
 @Model
-final class Page {
+nonisolated final class Page {
     // MARK: - CloudKit Compatibility
     // All properties must have default values for CloudKit sync. Relationships must be optional.
 
@@ -104,10 +105,15 @@ final class Page {
         }
         return boxes
     }
+
+    /// The localized "Page N" label used by thumbnails, the page grid, rotors, and accessibility labels.
+    var title: String {
+        String(localized: "Page \(pageNumber)", comment: "Thumbnail label with page number")
+    }
 }
 
 @Model
-final class Document {
+nonisolated final class Document {
     // MARK: - CloudKit Compatibility
     // All properties must have default values for CloudKit sync. Relationships must be optional.
 
@@ -199,15 +205,6 @@ final class Document {
             totalBytes += Int64(textExportCache.count)
         }
         cachedStorageBytes = totalBytes
-    }
-}
-
-// MARK: - Accessibility Extensions
-
-extension Page {
-    /// Label for VoiceOver rotor navigation
-    var rotorLabel: String {
-        "Page \(pageNumber)"
     }
 }
 

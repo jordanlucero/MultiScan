@@ -16,7 +16,7 @@ import UniformTypeIdentifiers
 // MARK: - Export Error Types
 
 /// Conforms to `CustomLocalizedStringResourceConvertible` as well as `LocalizedError`: the App Intents framework routes thrown errors by type and keys on the former, so a `LocalizedError` alone would surface as a generic failure in Siri/Shortcuts.
-enum RichTextExportError: LocalizedError, CustomLocalizedStringResourceConvertible {
+nonisolated enum RichTextExportError: LocalizedError, CustomLocalizedStringResourceConvertible {
     case rtfConversionFailed
     case emptyContent
 
@@ -35,7 +35,8 @@ enum RichTextExportError: LocalizedError, CustomLocalizedStringResourceConvertib
 // MARK: - Transferable Rich Text Wrapper
 
 /// A Sendable rich text payload that exports RTF (file + data) with a plain text fallback.
-struct RichText: Transferable, Sendable {
+/// `nonisolated`: Transferable's export closures run off the main actor.
+nonisolated struct RichText: Transferable, Sendable {
     /// Pre-encoded RTF. Nil when conversion failed — file/data representations then throw at share time, and the plain text fallback still works.
     let rtfData: Data?
     let plainText: String

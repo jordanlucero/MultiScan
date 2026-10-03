@@ -9,16 +9,23 @@ import Foundation
 import SwiftData
 import CoreData
 
-@MainActor
 enum AppModelContainer {
-    /// Error captured during container creation (if any). `MultiScanApp` shows recovery UI when set.
-    static var creationError: ContainerLoadError?
+    /// Message captured when container creation failed. `MultiScanApp` shows recovery UI when set.
+    static var creationError: String?
 
     /// Result of the pre-load schema version check (UserDefaults-based, survives DB corruption).
     static var preLoadCheckResult: PreLoadCheckResult = .compatible
 
+    /// Unit tests run inside the app (`TEST_HOST`), so the launch sequence must not touch the user's real store, Spotlight index, or share inbox. Checked by every side effect that reaches outside the process.
+    nonisolated static let isRunningTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        || ProcessInfo.processInfo.environment["XCTestSessionIdentifier"] != nil
+
     /// The one container for the process. Created lazily on first access; `MultiScanApp.init` touches it first so the load-state check observes the real outcome.
     static let shared: ModelContainer = {
+        if isRunningTests {
+            return previewContainer()
+        }
+
         // Pre-load version check — runs BEFORE the container so it survives database corruption.
         let preLoadResult = SchemaValidationService.checkPreLoadCompatibility()
         preLoadCheckResult = preLoadResult
@@ -59,18 +66,9 @@ enum AppModelContainer {
             return container
         } catch {
             // Don't crash: remember the error (recovery UI) and fall back to an in-memory container.
-            creationError = .containerCreationFailed(error.localizedDescription)
+            creationError = String(localized: "Failed to load data: \(error.localizedDescription)")
             print("ModelContainer creation failed: \(error)")
-
-            let fallbackConfig = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
-            do {
-                return try ModelContainer(
-                    for: Document.self, Page.self, SchemaMetadata.self,
-                    configurations: fallbackConfig
-                )
-            } catch {
-                fatalError("Could not create a fallback ModelContainer: \(error)")
-            }
+            return previewContainer()
         }
     }()
 
@@ -81,16 +79,16 @@ enum AppModelContainer {
     static func performPostLoadMaintenance() async -> Int? {
         let context = shared.mainContext
 
-        let result = await SchemaValidationService.validatePostLoad(context: context)
+        let issues = await SchemaValidationService.validatePostLoad(context: context)
 
-        for issue in result.issues {
+        for issue in issues {
             if case .newerSchemaVersion(let stored, _) = issue {
                 return stored
             }
         }
 
-        if result.hasMinorIssues {
-            let unfixable = SchemaValidationService.attemptSelfHeal(issues: result.issues, context: context)
+        if issues.contains(where: { !$0.isCritical }) {
+            let unfixable = SchemaValidationService.attemptSelfHeal(issues: issues, context: context)
             if !unfixable.isEmpty {
                 print("Some integrity issues could not be auto-fixed: \(unfixable.map { $0.description })")
             }

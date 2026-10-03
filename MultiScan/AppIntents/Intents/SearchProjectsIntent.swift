@@ -8,7 +8,7 @@
 import AppIntents
 
 @AppIntent(schema: .system.searchInApp)
-struct SearchProjectsIntent: ShowInAppSearchResultsIntent {
+nonisolated struct SearchProjectsIntent: ShowInAppSearchResultsIntent {
     static let searchScopes: [StringSearchScope] = [.general]
 
     var criteria: StringSearchCriteria

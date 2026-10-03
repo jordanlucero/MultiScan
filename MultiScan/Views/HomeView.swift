@@ -40,9 +40,8 @@ struct HomeView: View {
     }
 
     // Settings
-    @AppStorage("optimizeImagesOnImport") private var optimizeImagesOnImport = false
+    @AppStorage(DefaultsKey.optimizeImagesOnImport) private var optimizeImagesOnImport = false
     @AppStorage(SchemaVersioning.iCloudSyncEnabledKey) private var iCloudSyncEnabled = false
-
 
     // Settings sheet (iOS only — macOS uses the Settings window)
     #if os(iOS)
@@ -201,41 +200,21 @@ struct HomeView: View {
         }
     }
 
+    /// Re-encodes every page image as HEIC, keeping the smaller of the two. Encoding runs on the cooperative pool; the model writes stay here on the main actor.
     private func optimizeImages(for document: Document) {
         guard !isOptimizing else { return }
         isOptimizing = true
 
-        // Gather image data from pages on main actor
-        let pageData: [(page: Page, imageData: Data)] = document.unwrappedPages.compactMap { page in
-            guard let imageData = page.imageData else { return nil }
-            return (page, imageData)
-        }
-
         Task {
-            var updates: [(page: Page, compressed: Data)] = []
-
-            for (page, imageData) in pageData {
-                let originalSize = imageData.count
-                if let compressed = OCRService.compressImageData(imageData, quality: 0.8) {
-                    // Only replace if we actually saved space
-                    if compressed.count < originalSize {
-                        updates.append((page, compressed))
-                    }
-                }
-            }
-
-            // Apply updates on main actor
-            for (page, compressed) in updates {
+            defer { isOptimizing = false }
+            for page in document.unwrappedPages {
+                guard let imageData = page.imageData,
+                      let compressed = await PlatformImage.heicReencodingInBackground(imageData),
+                      compressed.count < imageData.count else { continue }
                 page.imageData = compressed
             }
-
-            // Recalculate storage
             document.recalculateStorageSize()
-
-            // Save changes
             try? modelContext.save()
-
-            isOptimizing = false
         }
     }
 
@@ -253,7 +232,6 @@ struct HomeView: View {
         }
     }
 
-    @MainActor
     private func processFileURLs(_ urls: [URL]) async {
         isPreparingLocalImport = true
 
@@ -287,7 +265,6 @@ struct HomeView: View {
 
     // MARK: - Photos Import Handling
 
-    @MainActor
     private func processSelectedPhotos(_ items: [PhotosPickerItem]) async {
         guard !items.isEmpty else { return }
 
@@ -324,7 +301,6 @@ struct HomeView: View {
 
     // MARK: - OCR Processing
 
-    @MainActor
     private func startOCRProcessing(images: [(data: Data, fileName: String)], documentName: String) async {
         do {
             try await pipeline.createProject(named: documentName, images: images)

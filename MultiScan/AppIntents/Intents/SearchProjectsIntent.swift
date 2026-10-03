@@ -8,16 +8,17 @@
 import AppIntents
 
 @AppIntent(schema: .system.searchInApp)
-nonisolated struct SearchProjectsIntent: ShowInAppSearchResultsIntent {
-    static let searchScopes: [StringSearchScope] = [.general]
+struct SearchProjectsIntent: ShowInAppSearchResultsIntent {
+    nonisolated static let searchScopes: [StringSearchScope] = [.general]
 
     var criteria: StringSearchCriteria
 
-    static var allowedExecutionTargets: IntentExecutionTargets { .main }
+    nonisolated static var allowedExecutionTargets: IntentExecutionTargets { .main }
 
     @Dependency var router: AppRouter
 
-    @MainActor
+    nonisolated init() {}
+
     func perform() async throws -> some IntentResult {
         router.showSearch(criteria.term)
         return .result()

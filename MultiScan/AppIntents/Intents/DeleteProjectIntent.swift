@@ -7,22 +7,23 @@
 
 import AppIntents
 
-nonisolated struct DeleteProjectIntent: DeleteIntent {
-    static let title: LocalizedStringResource = "Delete Project"
-    static let description = IntentDescription(
+struct DeleteProjectIntent: DeleteIntent {
+    nonisolated static let title: LocalizedStringResource = "Delete Project"
+    nonisolated static let description = IntentDescription(
         "Permanently deletes projects and all of their pages.",
         categoryName: "Projects"
     )
-    static var allowedExecutionTargets: IntentExecutionTargets { .main }
+    nonisolated static var allowedExecutionTargets: IntentExecutionTargets { .main }
+
+    nonisolated init() {}
 
     @Parameter(title: "Projects", requestValueDialog: "Which projects should be deleted?")
     var entities: [ProjectEntity]
 
-    static var parameterSummary: some ParameterSummary {
+    nonisolated static var parameterSummary: some ParameterSummary {
         Summary("Delete \(\.$entities)")
     }
 
-    @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
         guard !entities.isEmpty else {
             return .result(dialog: IntentDialog("No projects were selected."))

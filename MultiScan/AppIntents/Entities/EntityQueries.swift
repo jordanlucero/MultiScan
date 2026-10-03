@@ -134,12 +134,13 @@ extension QuerySortOrder where Key == PageSortKey {
 
 // MARK: - Project query
 
-nonisolated struct ProjectEntityQuery: EntityQuery, EntityStringQuery, IndexedEntityQuery, EntityPropertyQuery {
+// The query/entity/intent types stay main-actor isolated (the project default): `nonisolated` on the type is rejected because it propagates onto the `@Dependency`/`@Property`/`@Parameter` storage. Members the framework calls synchronously are marked `nonisolated` individually; the async requirements run on the main actor.
+struct ProjectEntityQuery: EntityQuery, EntityStringQuery, IndexedEntityQuery, EntityPropertyQuery {
     typealias ComparatorMappingType = ProjectQueryFilter
 
     @Dependency var store: ProjectStore
 
-    init() {}
+    nonisolated init() {}
 
     func entities(for identifiers: [UUID]) async throws -> [ProjectEntity] {
         await store.projectEntities(uuids: identifiers)
@@ -226,12 +227,12 @@ nonisolated struct ProjectEntityQuery: EntityQuery, EntityStringQuery, IndexedEn
 
 // MARK: - Page query
 
-nonisolated struct PageEntityQuery: EntityQuery, EntityStringQuery, IndexedEntityQuery, EntityPropertyQuery {
+struct PageEntityQuery: EntityQuery, EntityStringQuery, IndexedEntityQuery, EntityPropertyQuery {
     typealias ComparatorMappingType = PageQueryFilter
 
     @Dependency var store: ProjectStore
 
-    init() {}
+    nonisolated init() {}
 
     func entities(for identifiers: [UUID]) async throws -> [PageEntity] {
         await store.pageEntities(uuids: identifiers)

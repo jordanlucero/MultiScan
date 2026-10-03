@@ -224,7 +224,7 @@ final class ProjectImportPipeline {
 
     /// Walks files and folders, reading images and noting PDFs. Everything is sorted by filename; a single picked folder names the project.
     @concurrent
-    private static func scan(_ urls: [URL], optimizeImages: Bool) async -> ScannedInput {
+    private nonisolated static func scan(_ urls: [URL], optimizeImages: Bool) async -> ScannedInput {
         var result = ScannedInput()
         let fileManager = FileManager.default
 
@@ -258,7 +258,7 @@ final class ProjectImportPipeline {
         return result
     }
 
-    private static func collect(_ url: URL, optimizeImages: Bool, into result: inout ScannedInput) {
+    private nonisolated static func collect(_ url: URL, optimizeImages: Bool, into result: inout ScannedInput) {
         guard let contentType = try? url.resourceValues(forKeys: [.contentTypeKey]).contentType else { return }
 
         if contentType.conforms(to: .pdf) {

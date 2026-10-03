@@ -59,15 +59,16 @@ struct PageEntity: IndexedEntity, SyncableEntity {
         lastModified: Date,
         thumbnail: Data?
     ) {
+        // Plain stored properties first: in a nonisolated init, assigning a wrapped property counts as a use of `self`, so everything else must be initialized by then.
         self.id = id
         self.projectID = projectID
+        self.thumbnail = thumbnail
         self.pageNumber = pageNumber
         self.projectName = projectName
         self.isReviewed = isReviewed
         self.fileName = fileName
         self.text = text
         self.lastModified = lastModified
-        self.thumbnail = thumbnail
     }
 
     // MARK: Display

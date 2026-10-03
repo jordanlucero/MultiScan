@@ -52,6 +52,7 @@ struct CreateProjectIntent: AppIntent, LongRunningIntent, CancellableIntent {
         }
     }
 
+    @MainActor
     func perform() async throws -> some ReturnsValue<ProjectEntity> & ProvidesDialog {
         let stagingDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("intent-import-\(UUID().uuidString)", isDirectory: true)

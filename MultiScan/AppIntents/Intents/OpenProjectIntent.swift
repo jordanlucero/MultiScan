@@ -19,6 +19,7 @@ struct OpenProjectIntent: OpenIntent {
 
     nonisolated init() {}
 
+    @MainActor
     func perform() async throws -> some IntentResult {
         router.open(project: target.id)
         return .result()

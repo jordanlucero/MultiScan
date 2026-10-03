@@ -23,6 +23,7 @@ struct OpenPageIntent: OpenIntent {
 
     @Dependency var router: AppRouter
 
+    @MainActor
     func perform() async throws -> some IntentResult {
         router.open(project: target.projectID, page: target.pageNumber)
         return .result()

@@ -63,8 +63,9 @@ nonisolated struct QuerySortOrder<Key: Sendable>: Sendable {
 }
 
 // MARK: - Filter / sort execution against the SwiftData models
+// `nonisolated extension`: an extension does not inherit the type's `nonisolated`, and these run on `ProjectStore`'s model actor.
 
-extension ProjectQueryFilter {
+nonisolated extension ProjectQueryFilter {
     func matches(_ document: Document) -> Bool {
         switch self {
         case .nameEqualTo(let value): document.name.localizedCaseInsensitiveCompare(value) == .orderedSame
@@ -82,7 +83,7 @@ extension ProjectQueryFilter {
     }
 }
 
-extension PageQueryFilter {
+nonisolated extension PageQueryFilter {
     func matches(_ page: Page) -> Bool {
         switch self {
         case .textContains(let value): page.plainText.localizedStandardContains(value)
@@ -100,7 +101,7 @@ extension PageQueryFilter {
     }
 }
 
-extension QuerySortOrder where Key == ProjectSortKey {
+nonisolated extension QuerySortOrder where Key == ProjectSortKey {
     func compare(_ a: Document, _ b: Document) -> Bool? {
         switch key {
         case .name:
@@ -116,7 +117,7 @@ extension QuerySortOrder where Key == ProjectSortKey {
     }
 }
 
-extension QuerySortOrder where Key == PageSortKey {
+nonisolated extension QuerySortOrder where Key == PageSortKey {
     func compare(_ a: Page, _ b: Page) -> Bool? {
         switch key {
         case .pageNumber:

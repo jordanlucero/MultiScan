@@ -64,7 +64,9 @@ struct ProjectEntity: IndexedEntity, SyncableEntity {
         summary: String,
         coverThumbnail: Data?
     ) {
+        // Plain stored properties first — see PageEntity.init.
         self.id = id
+        self.coverThumbnail = coverThumbnail
         self.name = name
         self.emoji = emoji
         self.pageCount = pageCount
@@ -72,7 +74,6 @@ struct ProjectEntity: IndexedEntity, SyncableEntity {
         self.createdAt = createdAt
         self.lastModified = lastModified
         self.summary = summary
-        self.coverThumbnail = coverThumbnail
     }
 
     // MARK: Display
@@ -156,7 +157,7 @@ extension ProjectEntity: Transferable {
     }
 }
 
-extension ProjectTextExport {
+nonisolated extension ProjectTextExport {
     func rtfDataOrThrow() throws -> Data {
         guard !plainText.isEmpty else { throw RichTextExportError.emptyContent }
         guard let rtfData, !rtfData.isEmpty else { throw RichTextExportError.rtfConversionFailed }

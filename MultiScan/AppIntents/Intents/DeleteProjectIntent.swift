@@ -24,6 +24,8 @@ struct DeleteProjectIntent: DeleteIntent {
         Summary("Delete \(\.$entities)")
     }
 
+    // Witnesses of App Intents' nonisolated requirements are inferred nonisolated; this one writes the main context, so it must say @MainActor.
+    @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
         guard !entities.isEmpty else {
             return .result(dialog: IntentDialog("No projects were selected."))

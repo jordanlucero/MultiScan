@@ -19,6 +19,7 @@ struct SearchProjectsIntent: ShowInAppSearchResultsIntent {
 
     nonisolated init() {}
 
+    @MainActor
     func perform() async throws -> some IntentResult {
         router.showSearch(criteria.term)
         return .result()

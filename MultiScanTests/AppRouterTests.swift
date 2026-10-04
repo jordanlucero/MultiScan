@@ -5,6 +5,7 @@
 
 import Foundation
 import Testing
+import SwiftData
 @testable import MultiScan
 
 @Suite("App router")

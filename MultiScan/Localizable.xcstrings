@@ -24,10 +24,24 @@
       }
     },
     "·" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "."
+          }
+        }
+      }
     },
     "%@" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@"
+          }
+        }
+      }
     },
     "%@ · %@ reviewed" : {
       "comment" : "Project subtitle in App Intents/Spotlight",
@@ -36,6 +50,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "%1$@ · %2$@ reviewed"
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%1$@ · %2$@ revisado"
           }
         }
       }
@@ -691,26 +711,6 @@
         }
       }
     },
-    "Add Page After…" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Agregar página después…"
-          }
-        }
-      }
-    },
-    "Add Page Before…" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Agregar página antes…"
-          }
-        }
-      }
-    },
     "Add visual separation" : {
       "localizations" : {
         "es-419" : {
@@ -756,13 +756,13 @@
             "plural" : {
               "one" : {
                 "stringUnit" : {
-                  "state" : "needs_review",
+                  "state" : "machine_translated",
                   "value" : "Toda la %lld página"
                 }
               },
               "other" : {
                 "stringUnit" : {
-                  "state" : "needs_review",
+                  "state" : "machine_translated",
                   "value" : "Todas las %lld páginas"
                 }
               }
@@ -1373,7 +1373,14 @@
       }
     },
     "Failed to convert rich text to RTF." : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "No se pudo convertir el texto enriquecido a RTF."
+          }
+        }
+      }
     },
     "Failed to load data: %@" : {
       "localizations" : {
@@ -1910,26 +1917,6 @@
         }
       }
     },
-    "Move After" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mover después"
-          }
-        }
-      }
-    },
-    "Move Before" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mover antes"
-          }
-        }
-      }
-    },
     "Move Page Down" : {
       "localizations" : {
         "es-419" : {
@@ -1952,6 +1939,16 @@
     },
     "MultiScan" : {
       "shouldTranslate" : false
+    },
+    "MultiScan couldn’t finish importing the items you shared." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MultiScan no pudo terminar de importar los elementos que compartiste."
+          }
+        }
+      }
     },
     "MultiScan Documentation" : {
       "localizations" : {
@@ -2034,16 +2031,6 @@
         }
       }
     },
-    "Next" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Siguiente"
-          }
-        }
-      }
-    },
     "Next Page" : {
       "localizations" : {
         "es-419" : {
@@ -2065,7 +2052,14 @@
       }
     },
     "No images or pages were found." : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "No se encontraron imágenes ni páginas."
+          }
+        }
+      }
     },
     "No images or PDF pages were found to scan." : {
       "localizations" : {
@@ -2480,16 +2474,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Vista previa"
-          }
-        }
-      }
-    },
-    "Previous" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Anterior"
           }
         }
       }
@@ -2983,7 +2967,14 @@
       }
     },
     "Search" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Buscar"
+          }
+        }
+      }
     },
     "Search by page number, filename, or content" : {
       "localizations" : {
@@ -2991,17 +2982,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Busque por número de página, nombre de archivo o contenido"
-          }
-        }
-      }
-    },
-    "Search pages" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Buscar páginas"
           }
         }
       }
@@ -3238,7 +3218,14 @@
       }
     },
     "Start New Project" : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "Iniciar nuevo proyecto"
+          }
+        }
+      }
     },
     "Start Project" : {
       "localizations" : {
@@ -3451,7 +3438,14 @@
       }
     },
     "There is no text to export." : {
-
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "No hay texto para exportar."
+          }
+        }
+      }
     },
     "This page has no image." : {
       "localizations" : {
@@ -3724,17 +3718,7 @@
           }
         }
       }
-    },
-    "MultiScan couldn’t finish importing the items you shared." : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "MultiScan no pudo terminar de importar los elementos que compartiste."
-          }
-        }
-      }
     }
   },
-  "version" : "1.1"
+  "version" : "1.3"
 }

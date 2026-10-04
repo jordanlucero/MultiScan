@@ -335,12 +335,19 @@ struct ReviewView: View {
 
         #if os(iOS)
         // Compact width has no thumbnail sidebar; the page grid sheet stands in for it.
-        ToolbarItem(placement: .primaryAction) {
-            Button { showPageGrid = true } label: {
-                Label("Pages", systemImage: "square.grid.3x3")
+        //ToolbarItem(placement: .primaryAction) {
+        //    Button { showPageGrid = true } label: {
+        //        Label("Pages", systemImage: "square.grid.3x3")
+        //    }
+        //}
+        // not in iOS?? .hidden(!isCompact)
+        if isCompact {
+            ToolbarItem(placement: .primaryAction) {
+                Button { showPageGrid = true } label: {
+                    Label("Pages", systemImage: "square.grid.3x3")
+                }
             }
         }
-        .hidden(!isCompact)
 
         ToolbarItem(placement: .primaryAction) {
             moreMenu

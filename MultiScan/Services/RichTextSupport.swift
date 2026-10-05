@@ -4,7 +4,7 @@
 //
 //  Transferable rich text wrapper for ShareLink / pasteboard / Save As export.
 //
-//  ## What the share sheet gets (2.1 export fix)
+//  ## What the share sheet gets (2.0 export fix)
 //  The 2.0 share path offered a `FileRepresentation` first. Transferable picks the *first* representation a destination accepts, and almost everything accepts a file URL — so Messages, Notes, and Mail all received a temp file named after a UUID (`SentTransferredFile` keeps the URL's own name; `.suggestedFileName` doesn't rename it). Users wanted the *text*.
 //
 //  Now the representations are ordered **data first, file never** for sharing:

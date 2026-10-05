@@ -4,7 +4,7 @@
 //
 //  The one status-filter control (All / Reviewed / Not Reviewed), used beside the search field in the thumbnail sidebar (macOS, iPad) and in the compact page grid's bottom bar (iPhone).
 //
-//  ## Rendering (2.1 fix)
+//  ## Rendering (2.0 fix)
 //  The 2.0 sidebar drew its own capsule behind a `Menu` and filled it with the accent color when active — which fought the system's menu button rendering and looked wrong inside the glass search bar. The platform convention for "a filter is applied" (Mail, Files, Photos) is simply the **filled symbol variant tinted with the accent color**, and the plain outline otherwise. So:
 //  - `Menu` + inline `Picker` for the choices (a real radio group in the menu);
 //  - the label is `line.3.horizontal.decrease.circle`, `.symbolVariant(.fill)` + `.tint(.accentColor)` when a filter is active;

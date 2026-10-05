@@ -65,7 +65,7 @@ nonisolated final class Page {
     /// When `plainText` was last derived from `richTextData`. `nil` or older than `lastModified` means the mirror is stale (e.g., written by a build without this column) and is re-derived on backfill.
     var plainTextUpdatedAt: Date?
 
-    // MARK: - 2.1 additive fields (no SwiftData schema-version bump needed — see CLAUDE.md "Storage additions")
+    // MARK: - 2.0 additive fields (no SwiftData schema-version bump needed — see CLAUDE.md "Storage additions")
 
     /// Structured Vision result for this page's image: paragraphs, lines, tables, and their normalized regions, encoded as a `VisionDocumentLayout` (binary plist).
     ///
@@ -73,7 +73,7 @@ nonisolated final class Page {
     @Attribute(.externalStorage)
     var visionLayoutData: Data?
 
-    /// Vision's plain transcript of this page's image (`DocumentObservation.Container.Text.transcript`), stored even when another engine wrote `richTextData`, so both results survive side by side. `nil` for legacy rows and for pages created before 2.1.
+    /// Vision's plain transcript of this page's image (`DocumentObservation.Container.Text.transcript`), stored even when another engine wrote `richTextData`, so both results survive side by side. `nil` for legacy rows and for pages created before 2.0.
     var visionTranscript: String?
 
     /// Identifier of the OCR engine whose output became `richTextData` at import — see `OCREngineKind.provenanceIdentifier(…)` (e.g. `"vision"`, `"lmstudio:qwen2.5-vl-7b"`). `nil` for legacy rows (which were all Vision).
@@ -159,7 +159,7 @@ nonisolated final class Page {
         return boxes
     }
 
-    /// Decodes the structured Vision layout, if this page has one (2.1+ imports).
+    /// Decodes the structured Vision layout, if this page has one (2.0+ imports).
     var visionLayout: VisionDocumentLayout? {
         VisionDocumentLayout.decode(visionLayoutData)
     }
@@ -210,16 +210,10 @@ nonisolated final class Document {
     /// Optional so legacy rows fall back to the derived page dates in `lastModifiedDate`.
     var lastModified: Date?
 
-    // MARK: - 2.1 additive fields
+    // MARK: - 2.0 additive fields
 
-    /// Printed page numbering: the *project* page number on which the physical book's Arabic numbering begins (e.g. 9 when the first eight scans are a foreword numbered i–viii). `nil` = not configured; the UI then shows project page numbers only.
-    var printedNumberingStartPage: Int?
-
-    /// The printed number shown on `printedNumberingStartPage` (usually 1, but a scan of chapters 3–5 might start at 41).
-    var printedNumberingStartValue: Int = 1
-
-    /// How pages *before* `printedNumberingStartPage` are labelled — `FrontMatterNumberingStyle` raw value (`roman` → i, ii, iii…; `none` → no printed label).
-    var frontMatterNumberingStyle: String = FrontMatterNumberingStyle.roman.rawValue
+    /// Printed page numbering plan (`PrintedNumberingPlan`, JSON): ranges of project pages with a numbering style and start value — typically Roman front matter from page 1 and Arabic numbering from the first body page, optionally more (an appendix restarting at 1). `nil` = not configured; the UI then shows project page numbers only. One small blob rather than scattered scalars so a CloudKit merge can never mix two devices' half-plans.
+    var printedNumberingData: Data?
 
     /// `true` when `name` was proposed by the on-device model (`ProjectTitleSuggester`) and the user hasn't renamed it since. Renaming by hand clears it, so an automatic pass never overwrites a user's title.
     var isAutoTitled: Bool = false
@@ -249,10 +243,10 @@ nonisolated final class Document {
         unwrappedPages.sorted { $0.pageNumber < $1.pageNumber }
     }
 
-    /// Typed view of `frontMatterNumberingStyle`.
-    var frontMatterStyle: FrontMatterNumberingStyle {
-        get { FrontMatterNumberingStyle(rawValue: frontMatterNumberingStyle) ?? .roman }
-        set { frontMatterNumberingStyle = newValue.rawValue }
+    /// Typed view of `printedNumberingData`. Setting `nil` turns printed numbering off.
+    var printedNumbering: PrintedNumberingPlan? {
+        get { PrintedNumberingPlan.decode(printedNumberingData) }
+        set { printedNumberingData = newValue?.encoded() }
     }
 
     /// Every artwork capture in the project that is still flagged as a draft, in page order — the export panel lists these as "revisit this page" reminders.

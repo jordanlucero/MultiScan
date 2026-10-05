@@ -15,6 +15,9 @@
 //  ## Undo
 //  Typing undo is native to NSTextView/UITextView. On macOS the text view uses this controller's `editorUndoManager` (handed over by `PageTextEditor`'s delegate), so clearing it on page load leaves the window's page-reorder history intact. Programmatic edits (formatting, Remove Line Breaks, Smart Cleanup, inserting/removing captures) register snapshot-based undo actions on the same manager, so they participate in the same stack on both platforms.
 //
+//  ## Tables (macOS)
+//  On the Mac, table reference attachments are expanded into `NSTextTable` paragraphs when the page loads (`TextTableRendering.expandingTableAttachments`) and collapsed back on save, so the stored page is the same cross-platform attachment form. iOS shows the attachment view read-only.
+//
 //  ## Captures
 //  `insertCapture(_:)` places a reference attachment on its own paragraph at the caret; `removeCapture(_:)` deletes the attachment *and* the model; `toggleDraft(forCapture:)` flips the flag and refreshes the attachment view. The controller is the `CaptureImageStore.actionHandler` while attached, so the attachment views' menus reach it.
 //
@@ -57,7 +60,11 @@ final class PageTextController {
 
     init(page: Page) {
         self.page = page
-        let display = RichTextArchiver.normalizedForDisplay(page.attributedText)
+        var display = RichTextArchiver.normalizedForDisplay(page.attributedText)
+        #if os(macOS)
+        // Tables become native NSTextTable paragraphs in the Mac editor (collapsed back to attachments on save).
+        display = TextTableRendering.expandingTableAttachments(in: display, font: PageTextStyle.displayFont)
+        #endif
         self.snapshot = display
         self.wordCount = TextStatistics.wordCount(of: display.string)
         self.charCount = TextStatistics.characterCount(of: display.string)
@@ -170,7 +177,11 @@ final class PageTextController {
         hasUnsavedChanges = false
 
         // Normalize to the canonical storage font (also strips display-only colors). Attachments pass through; the setter picks RTFD when they're present.
-        let storageText = RichTextArchiver.normalizedForStorage(currentText)
+        var storageText = RichTextArchiver.normalizedForStorage(currentText)
+        #if os(macOS)
+        // Native tables go back to the portable attachment form so iOS reads the same page.
+        storageText = TextTableRendering.collapsingTables(in: storageText)
+        #endif
         page.attributedText = storageText
 
         if let document = page.document {

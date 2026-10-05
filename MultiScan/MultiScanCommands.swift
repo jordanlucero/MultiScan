@@ -56,7 +56,7 @@ struct MultiScanCommands: Commands {
     /// The current page's text as a share payload (live editor content when the panel has focus, stored text otherwise), named after the project and page.
     private var currentPageRichText: RichText? {
         guard let page = currentPage else { return nil }
-        let text = textController?.attributedTextForExport ?? page.attributedText
+        let text = TextExporter.exportableText(for: page, liveText: textController?.attributedTextForExport)
         return RichText(text, suggestedName: "\(document?.name ?? "") — \(page.title)")
     }
 

@@ -129,13 +129,7 @@ struct RichTextSidebar: View {
     /// Copies the current page's text (RTFD/RTF + plain text) to the pasteboard.
     /// Uses the live editor content so unsaved edits are included. Capture references are swapped for real images first so a paste into Notes/Pages shows the illustration.
     private func copyCurrentPageText(_ page: Page) {
-        let exportText = textController?.attributedTextForExport ?? page.attributedText
-        var hasImages = false
-        let captures = page.unwrappedCaptures.compactMap { capture -> TextExporter.CaptureSnapshot? in
-            guard let id = capture.uuid else { return nil }
-            return TextExporter.CaptureSnapshot(id: id, imageData: capture.imageData, isDraft: capture.isDraft, caption: capture.caption, reminder: capture.reminderDescription)
-        }
-        let resolved = TextExporter.resolveAttachments(in: exportText, captures: captures, options: ExportSettings.currentOptions, baseFont: PageTextStyle.storageFont, hasImages: &hasImages)
+        let resolved = TextExporter.exportableText(for: page, liveText: textController?.attributedTextForExport)
         RichText(resolved, suggestedName: "\(document.name) — \(page.title)").copyToPasteboard()
     }
 

@@ -8,7 +8,7 @@
 //  Page text is persisted in `Page.richTextData` as:
 //  - **RTF** when the text is text-only — `NSAttributedString`'s native document format; encode/decode is one framework call on both AppKit and UIKit, and it round-trips fonts, bold/italic traits, underline/strikethrough, and paragraph styles.
 //  - **RTFD** (a *flattened* RTFD package — `NSFileWrapper`'s serialized representation) when the text contains inline attachments. RTF has no way to carry attachments; RTFD stores each one as a file inside the package. MultiScan's attachments are tiny *reference* files (see `InlineAttachments.swift`): a capture attachment holds the `PageCapture` uuid, a table attachment holds the table's JSON. So an RTFD page is only slightly larger than an RTF one, and the `TextExportCache` stays small.
-//  Both remain plain `Data` blobs, so CloudKit external storage (CKAsset) and the SwiftData schema are unaffected. The *format* change is what bumped `SchemaVersioning.currentVersion` to 3: a 2.0 build decodes RTFD as RTF, gets an empty string, and could write it back.
+//  Both remain plain `Data` blobs, so CloudKit external storage (CKAsset) and the SwiftData schema are unaffected. The *format* change is what bumped `SchemaVersioning.currentVersion` to 3: a 2.0 preview build (schema 2) decodes RTFD as RTF, gets an empty string, and could write it back.
 //
 //  ## Legacy Migration
 //  Versions prior to 2.0 stored JSON-encoded SwiftUI `AttributedString` (Codable).

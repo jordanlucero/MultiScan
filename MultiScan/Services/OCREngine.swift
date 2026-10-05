@@ -18,7 +18,7 @@
 //  ## Configuration storage
 //  `OCREngineSettings` is the usual `@Observable` + UserDefaults write-through object (see `Preferences.swift` for the pattern). It is read once per import by `ProjectImportPipeline`, so flipping the engine mid-import doesn't change engines halfway through a project.
 //
-//  2.1 ships the picker in **DEBUG builds only** (Settings ▸ OCR Engine). Release builds always use Vision until a downloadable model exists.
+//  2.0 ships the picker in **DEBUG builds only** (Settings ▸ OCR Engine). Release builds always use Vision until a downloadable model exists.
 //
 
 import Foundation
@@ -148,7 +148,7 @@ final class OCREngineSettings {
     }
 
     /// The configuration the pipeline snapshots at the start of an import.
-    /// Release builds ignore the stored kind and always transcribe with Vision — the model picker is a debug feature in 2.1.
+    /// Release builds ignore the stored kind and always transcribe with Vision — the model picker is a debug feature in 2.0.
     var configuration: OCREngineConfiguration {
         #if DEBUG
         let effectiveKind = OCREngineKind.availableOnThisPlatform.contains(kind) ? kind : .vision

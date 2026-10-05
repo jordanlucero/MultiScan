@@ -4,7 +4,7 @@
 //
 //  Searchable page grid presented as a sheet in the compact (iPhone) layout.
 //
-//  2.1: feature parity with the thumbnail sidebar — the grid filters by review status (the same `PageFilterOption` stored in `@AppStorage(DefaultsKey.filterOption)`) as well as by text, syncs both into `NavigationState` so Previous/Next honor the filter, and groups pages under their chapter titles. The search field sits in the bottom bar with the status filter next to it (`DefaultToolbarItem(kind: .search, placement: .bottomBar)` + a `ToolbarItem` — the iOS 26 Mail/Messages arrangement), so the sheet's top bar keeps just the title and the add/done actions.
+//  2.0: feature parity with the thumbnail sidebar — the grid filters by review status (the same `PageFilterOption` stored in `@AppStorage(DefaultsKey.filterOption)`) as well as by text, syncs both into `NavigationState` so Previous/Next honor the filter, and groups pages under their chapter titles. The search field sits in the bottom bar with the status filter next to it (`DefaultToolbarItem(kind: .search, placement: .bottomBar)` + a `ToolbarItem` — the iOS 26 Mail/Messages arrangement), so the sheet's top bar keeps just the title and the add/done actions.
 //
 
 #if os(iOS)

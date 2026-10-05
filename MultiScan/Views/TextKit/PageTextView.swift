@@ -28,11 +28,11 @@
 //  deliberate limit is `importsGraphics = false` / no image paste on iOS — arbitrary pasted
 //  images aren't a supported attachment kind yet, so they'd be silently dropped at save time.
 //
-//  ## Editing behavior for OCR review (2.1 review findings)
-//  - Automatic quote/dash substitution and text replacement are **off**: the editor exists to
-//    correct a transcription, and silently turning `"` into `“` or `--` into `—` changes what
-//    the page says. Spell checking stays **on** (macOS) because it highlights exactly the kind of
-//    misrecognition a reviewer is looking for.
+//  ## Editing behavior (2.0 review)
+//  - Smart quotes, smart dashes, autocorrection, and spell checking keep the **system defaults**
+//    (all on). MultiScan is designed around reading and hand-editing OCR output, whichever engine
+//    produced it, so the editor behaves like any other text field on the platform. (Turning the
+//    substitutions off was considered and rejected: the user is writing, not transcribing.)
 //  - `allowsUndo` on macOS with a per-editor `UndoManager` supplied by the delegate (see
 //    `PageTextEditor`), so clearing the typing history on page switch no longer wipes the
 //    window's page-reorder undo stack.
@@ -79,12 +79,7 @@ final class PageTextView: NSTextView {
             .foregroundColor: NSColor.labelColor
         ]
 
-        // OCR review: never rewrite what the user typed or what Vision read.
-        textView.isAutomaticQuoteSubstitutionEnabled = false
-        textView.isAutomaticDashSubstitutionEnabled = false
-        textView.isAutomaticTextReplacementEnabled = false
-        textView.isAutomaticSpellingCorrectionEnabled = false
-        // …but do point out likely misrecognitions.
+        // Smart quotes/dashes, text replacement, spelling correction: system defaults (on). Spell-check underlines are useful on OCR output, so make sure they show while editing.
         textView.isContinuousSpellCheckingEnabled = editable
 
         let scrollView = NSScrollView()
@@ -141,12 +136,7 @@ final class PageTextView: UITextView {
             .font: PageTextStyle.displayFont,
             .foregroundColor: UIColor.label
         ]
-
-        // OCR review: no silent rewriting of quotes/dashes. Autocorrection is left at the system default —
-        // on a touch keyboard it is doing real work; see the clarifying question in the 2.1 notes.
-        textView.smartQuotesType = .no
-        textView.smartDashesType = .no
-        textView.smartInsertDeleteType = .no
+        // Smart quotes/dashes and autocorrection stay at the system defaults (on) — see the file comment.
         return textView
     }
 }

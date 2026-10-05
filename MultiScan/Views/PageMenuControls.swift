@@ -233,12 +233,13 @@ struct PageContextMenu: ViewModifier {
                 }
 
                 Section {
-                    ShareLink(item: RichText(page.attributedText, suggestedName: "\(document.name) — \(page.title)"),
+                    // `exportableText` swaps capture references for real images and tables for native tables (macOS) before anything leaves the app.
+                    ShareLink(item: RichText(TextExporter.exportableText(for: page), suggestedName: "\(document.name) — \(page.title)"),
                               preview: SharePreview(String(localized: "Page \(page.pageNumber) Text"))) {
                         Label("Share Page Text…", systemImage: "square.and.arrow.up")
                     }
                     Button {
-                        RichText(page.attributedText, suggestedName: "\(document.name) — \(page.title)").copyToPasteboard()
+                        RichText(TextExporter.exportableText(for: page), suggestedName: "\(document.name) — \(page.title)").copyToPasteboard()
                     } label: {
                         Label("Copy Page Text", systemImage: "doc.on.doc")
                     }

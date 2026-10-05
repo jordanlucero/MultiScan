@@ -14,7 +14,7 @@
 //
 //  RTFD serializes each attachment as a file inside the package and restores it as a plain `NSTextAttachment` with a `fileWrapper` — subclasses do **not** survive the round trip, which is why identity lives in the file type + contents, not in a Swift type. `kind(of:)` classifies any attachment coming out of `RichTextArchiver.decodeRTFD`.
 //
-//  Rendering is handled by `NSTextAttachmentViewProvider` subclasses registered per file type (`AttachmentViewProviders.swift`), so TextKit 2 asks us for a view wherever one of these appears — in the editor, the export preview, and the Digest alike.
+//  Rendering is handled by `NSTextAttachmentViewProvider` subclasses registered per file type (`AttachmentViewProviders.swift`), so TextKit 2 asks us for a view wherever one of these appears — in the editor, the export preview, and the Digest alike. Exception: on macOS, table attachments are expanded into native `NSTextTable` paragraphs before display/export and collapsed back on save (`TextTableRendering`), so the Mac gets real, editable tables while the stored form stays portable.
 //
 //  Why references and not pixels: see `PageCapture.swift`.
 //
@@ -29,7 +29,7 @@ import UIKit
 
 // MARK: - Table model
 
-/// A simple rectangular text table — what Vision's table detection, a markdown table from a transformer OCR engine, or a user edit produce. Cells are plain strings; formatting inside cells is out of scope for 2.1.
+/// A simple rectangular text table — what Vision's table detection, a markdown table from a transformer OCR engine, or a user edit produce. Cells are plain strings; formatting inside cells is out of scope for 2.0.
 nonisolated struct TextTableModel: Codable, Sendable, Equatable, Hashable {
     static let currentVersion = 1
 

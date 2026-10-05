@@ -18,7 +18,7 @@
 //
 //  ## Attachments in the output
 //  - Capture references → a real image attachment (JPEG bytes, bounds scaled to ≤ 400 pt wide) when `includeCaptures`; otherwise an `[Illustration]` note. Drafts additionally get an inline `[Draft — rescan page N]` marker and a list at the end when `includeDraftReminders`.
-//  - Table references → tab-separated text on both platforms (RTF tables via `NSTextTable` exist only in AppKit; flattening keeps the output identical across Mac and iPhone). Follow-up: macOS-only `NSTextTable` export.
+//  - Table references → native `NSTextTable` paragraphs on macOS (`TextTableRendering`), tab-separated text on iOS/iPadOS, which has no text tables.
 //
 
 import SwiftUI
@@ -135,6 +135,18 @@ nonisolated enum TextExporter {
         }
     }
 
+    /// One page's text ready to leave the app (share, copy): capture references become real images, tables become native tables (macOS) or tab text. Main actor — reads the page's captures.
+    @MainActor
+    static func exportableText(for page: Page, liveText: NSAttributedString? = nil, options: ExportOptions = ExportSettings.currentOptions) -> NSAttributedString {
+        let text = liveText ?? page.attributedText
+        let captures = page.unwrappedCaptures.compactMap { capture -> CaptureSnapshot? in
+            guard let id = capture.uuid else { return nil }
+            return CaptureSnapshot(id: id, imageData: capture.imageData, isDraft: capture.isDraft, caption: capture.caption, reminder: capture.reminderDescription)
+        }
+        var hasImages = false
+        return resolveAttachments(in: text, captures: captures, options: options, baseFont: PageTextStyle.storageFont, hasImages: &hasImages)
+    }
+
     // MARK: - Combining (off the main actor)
 
     @concurrent
@@ -240,7 +252,12 @@ nonisolated enum TextExporter {
                 }
                 replacements.append((range, piece))
             case .table(let table):
+                #if os(macOS)
+                // Real tables on the Mac (RTF carries NSTextTable; Pages/Word/TextEdit import them).
+                replacements.append((range, TextTableRendering.attributedString(for: table, font: baseFont)))
+                #else
                 replacements.append((range, NSAttributedString(string: "\n" + table.tabSeparatedText + "\n", attributes: [.font: baseFont])))
+                #endif
             case .image:
                 hasImages = true // keep as-is
             case .unknown:

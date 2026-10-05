@@ -4,7 +4,7 @@
 //
 //  Print-panel-style export view with preview and options.
 //
-//  Cache-based export. Three ways out (2.1):
+//  Cache-based export. Three ways out (2.0):
 //  - **Copy** puts RTF/RTFD + plain text on the pasteboard — the fastest path into a word processor.
 //  - **Save As…** uses `fileExporter` with a real default filename (the project's name) and the richest format the content supports (RTFD when illustrations are embedded, RTF otherwise).
 //  - **Share** hands the share sheet *data*, not a temp file, so Messages/Notes/Mail receive text (see `RichTextSupport.swift`).

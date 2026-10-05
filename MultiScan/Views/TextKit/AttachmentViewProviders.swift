@@ -271,7 +271,7 @@ final class CaptureAttachmentView: NSView {
     @objc private func removeCapture() { captureID.map { CaptureImageStore.shared.actionHandler?.removeCapture($0) } }
 }
 
-/// A plain grid of labels. Read-only in 2.1; editing tables is a follow-up.
+/// A plain grid of labels. On the Mac this only shows when a table was *not* expanded into an NSTextTable (export preview of an unresolved attachment); the editor expands tables, see `TextTableRendering`.
 final class TableAttachmentView: NSView {
     static let rowHeight: CGFloat = 22
     private let grid: NSGridView
@@ -400,7 +400,7 @@ final class CaptureAttachmentView: UIView {
     }
 }
 
-/// A plain grid of labels. Read-only in 2.1; editing tables is a follow-up.
+/// A plain grid of labels — read-only: UIKit has no text tables, so tables are edited on the Mac and viewed here.
 final class TableAttachmentView: UIView {
     static let rowHeight: CGFloat = 22
     private let stack = UIStackView()

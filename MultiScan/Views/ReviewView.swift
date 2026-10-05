@@ -10,7 +10,7 @@
 //
 //  The toolbar is declared once (`reviewToolbar`) and attached to the detail content in both layouts. Items whose presence depends on the size class use `.hidden(_:)`; page navigation carries `.visibilityPriority(.high)` so it outlasts the rest in a narrow window; only genuinely per-OS item sets (discrete Mac buttons vs. the iOS "More" menu) are split with `#if os`.
 //
-//  ## 2.1 sessions owned here
+//  ## 2.0 sessions owned here
 //  - **Artwork capture** (`captureSession`): opened from the viewer's context menu (seeded at the pointer), the Image/More menu, a page's context menu, or an existing capture's "Recapture…". Presented as a sheet (regular) or full-screen cover (compact). On completion the reference attachment goes into the live editor (`PageTextController.insertCapture`) when the captured page is the current one, or into the page's stored text otherwise.
 //  - **Digest** (`showDigest`), **Page Numbering** (`showPageNumbering`), and the current page's **chapter editor** (`showChapterEditor`) — all reachable from the menu bar through `FocusedValues`.
 //
@@ -53,7 +53,7 @@ struct ReviewView: View {
     @State private var selectedPhotos: [PhotosPickerItem] = []
     @State private var isAddingPages = false
 
-    // 2.1 sessions
+    // 2.0 sessions
     @State private var captureSession: ArtworkCaptureSession?
     @State private var showArtworkCapture = false   // menu-bar trigger; opens `captureSession` centered on the current page
     @State private var showDigest = false

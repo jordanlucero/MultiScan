@@ -30,7 +30,7 @@ extension FocusedValues {
     @Entry var showAddFromFiles: Binding<Bool>?
     @Entry var showFindNavigator: Binding<Bool>?
     @Entry var showDeletePageConfirmation: Binding<Bool>?
-    /// 2.1: Image ▸ Capture Artwork…, View ▸ Read in Digest, Edit ▸ Mark Chapter Start…, and the project's Page Numbering… sheet.
+    /// 2.0: Image ▸ Capture Artwork…, View ▸ Read in Digest, Edit ▸ Mark Chapter Start…, and the project's Page Numbering… sheet.
     @Entry var showArtworkCapture: Binding<Bool>?
     @Entry var showDigest: Binding<Bool>?
     @Entry var showChapterEditor: Binding<Bool>?

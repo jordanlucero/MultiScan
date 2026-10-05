@@ -11,7 +11,7 @@
 //
 //  Presented as a sheet (macOS/iPad) or full-screen cover (iPhone) by `ReviewView`; `ArtworkCaptureSession` is the `Identifiable` item that drives the presentation.
 //
-//  Snapping the rectangle to Vision's text/figure regions is a natural follow-up (the layout is on the page); 2.1 keeps the gesture free-form.
+//  Snapping the rectangle to Vision's text/figure regions is a natural follow-up (the layout is on the page); 2.0 keeps the gesture free-form.
 //
 
 import SwiftUI

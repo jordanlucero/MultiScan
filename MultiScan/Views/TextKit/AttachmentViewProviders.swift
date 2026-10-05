@@ -40,8 +40,8 @@ enum InlineAttachmentViewProviders {
     }
 
     /// Layout constants shared by both providers.
-    static let maximumWidth: CGFloat = 420
-    static let verticalPadding: CGFloat = 6
+    nonisolated static let maximumWidth: CGFloat = 420
+    nonisolated static let verticalPadding: CGFloat = 6
 }
 
 // MARK: - Capture store
@@ -113,7 +113,7 @@ final class CaptureImageStore {
 
 // MARK: - Shared bounds math
 
-private func attachmentBounds(aspectRatio: CGFloat, proposedLineFragment: CGRect, maximumWidth: CGFloat) -> CGRect {
+private nonisolated func inlineAttachmentBounds(aspectRatio: CGFloat, proposedLineFragment: CGRect, maximumWidth: CGFloat) -> CGRect {
     // Fill the line (minus a little breathing room), capped, and never wider than the container.
     let available = max(proposedLineFragment.width - 8, 40)
     let width = min(available, maximumWidth)
@@ -121,9 +121,11 @@ private func attachmentBounds(aspectRatio: CGFloat, proposedLineFragment: CGRect
     return CGRect(x: 0, y: 0, width: width, height: height + InlineAttachmentViewProviders.verticalPadding)
 }
 
+// The providers are `nonisolated` because `NSTextAttachmentViewProvider` is; TextKit 2 calls them during layout on the main thread, so the bodies that touch views or the store assume main-actor isolation.
+
 // MARK: - Capture provider
 
-final class CaptureAttachmentViewProvider: NSTextAttachmentViewProvider {
+nonisolated final class CaptureAttachmentViewProvider: NSTextAttachmentViewProvider {
     private var captureID: UUID? {
         guard let attachment = textAttachment, case .capture(let id) = InlineAttachments.kind(of: attachment) else { return nil }
         return id
@@ -135,19 +137,25 @@ final class CaptureAttachmentViewProvider: NSTextAttachmentViewProvider {
     }
 
     override func loadView() {
-        let view = CaptureAttachmentView(captureID: captureID)
-        self.view = view
+        let captureID = captureID
+        nonisolated(unsafe) let provider = self
+        MainActor.assumeIsolated {
+            provider.view = CaptureAttachmentView(captureID: captureID)
+        }
     }
 
     override func attachmentBounds(for attributes: [NSAttributedString.Key: Any], location: any NSTextLocation, textContainer: NSTextContainer?, proposedLineFragment: CGRect, position: CGPoint) -> CGRect {
-        let aspect = captureID.flatMap { CaptureImageStore.shared.info(for: $0)?.aspectRatio } ?? (4.0 / 3.0)
-        return attachmentBounds(aspectRatio: aspect, proposedLineFragment: proposedLineFragment, maximumWidth: InlineAttachmentViewProviders.maximumWidth)
+        let captureID = captureID
+        let aspect = MainActor.assumeIsolated {
+            captureID.flatMap { CaptureImageStore.shared.info(for: $0)?.aspectRatio }
+        } ?? (4.0 / 3.0)
+        return inlineAttachmentBounds(aspectRatio: aspect, proposedLineFragment: proposedLineFragment, maximumWidth: InlineAttachmentViewProviders.maximumWidth)
     }
 }
 
 // MARK: - Table provider
 
-final class TableAttachmentViewProvider: NSTextAttachmentViewProvider {
+nonisolated final class TableAttachmentViewProvider: NSTextAttachmentViewProvider {
     private var table: TextTableModel? {
         guard let attachment = textAttachment, case .table(let table) = InlineAttachments.kind(of: attachment) else { return nil }
         return table
@@ -159,7 +167,11 @@ final class TableAttachmentViewProvider: NSTextAttachmentViewProvider {
     }
 
     override func loadView() {
-        self.view = TableAttachmentView(table: table ?? TextTableModel(rows: []))
+        let table = table ?? TextTableModel(rows: [])
+        nonisolated(unsafe) let provider = self
+        MainActor.assumeIsolated {
+            provider.view = TableAttachmentView(table: table)
+        }
     }
 
     override func attachmentBounds(for attributes: [NSAttributedString.Key: Any], location: any NSTextLocation, textContainer: NSTextContainer?, proposedLineFragment: CGRect, position: CGPoint) -> CGRect {
@@ -212,7 +224,7 @@ final class CaptureAttachmentView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
-    deinit {
+    isolated deinit {
         if let observer { NotificationCenter.default.removeObserver(observer) }
     }
 
@@ -273,7 +285,7 @@ final class CaptureAttachmentView: NSView {
 
 /// A plain grid of labels. On the Mac this only shows when a table was *not* expanded into an NSTextTable (export preview of an unresolved attachment); the editor expands tables, see `TextTableRendering`.
 final class TableAttachmentView: NSView {
-    static let rowHeight: CGFloat = 22
+    nonisolated static let rowHeight: CGFloat = 22
     private let grid: NSGridView
 
     init(table: TextTableModel) {
@@ -356,7 +368,7 @@ final class CaptureAttachmentView: UIView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
-    deinit {
+    isolated deinit {
         if let observer { NotificationCenter.default.removeObserver(observer) }
     }
 
@@ -402,7 +414,7 @@ final class CaptureAttachmentView: UIView {
 
 /// A plain grid of labels — read-only: UIKit has no text tables, so tables are edited on the Mac and viewed here.
 final class TableAttachmentView: UIView {
-    static let rowHeight: CGFloat = 22
+    nonisolated static let rowHeight: CGFloat = 22
     private let stack = UIStackView()
 
     init(table: TextTableModel) {

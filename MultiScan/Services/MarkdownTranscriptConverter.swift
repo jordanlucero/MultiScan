@@ -126,6 +126,9 @@ nonisolated enum MarkdownTranscriptConverter {
             flushPendingTable()
 
             switch block.kind {
+            case .tableCell:
+                break   // collected above
+
             case .thematicBreak:
                 appendParagraphBreakIfNeeded(output, font: base)
                 output.append(NSAttributedString(string: "———\n", attributes: [.font: base]))

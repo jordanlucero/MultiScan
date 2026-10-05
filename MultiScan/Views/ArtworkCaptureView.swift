@@ -431,7 +431,7 @@ private struct CropCanvas: View {
 }
 
 /// Everything except `selection`, for the even-odd dimming fill.
-private struct DimmingMask: Shape {
+private nonisolated struct DimmingMask: Shape {
     let selection: CGRect
 
     func path(in rect: CGRect) -> Path {

@@ -177,9 +177,8 @@ nonisolated enum VisionDocumentRecognizer {
     ///   - orientation: the EXIF orientation of `cgImage`, so Vision reads the text upright. Regions are returned relative to the upright image.
     static func recognize(_ cgImage: CGImage, orientation: CGImagePropertyOrientation) async throws -> VisionDocumentLayout {
         var request = RecognizeDocumentsRequest()
-        // REVIEW: `TextRecognitionOptions` member names are the ones RecognizeTextRequest exposes; confirm they exist on RecognizeDocumentsRequest.TextRecognitionOptions in the 27 SDK.
-        request.textRecognitionOptions.usesLanguageCorrection = true
-        request.textRecognitionOptions.automaticallyDetectsLanguage = true
+        request.textRecognitionOptions.useLanguageCorrection = true
+        request.textRecognitionOptions.automaticallyDetectLanguage = true
 
         let handler = ImageRequestHandler(cgImage, orientation: orientation)
         let observations = try await handler.perform(request)
@@ -217,11 +216,11 @@ nonisolated enum VisionDocumentRecognizer {
                 row.map { cell in
                     VisionDocumentLayout.TableCell(
                         rowStart: cell.rowRange.lowerBound,
-                        rowEnd: cell.rowRange.upperBound - 1,
+                        rowEnd: cell.rowRange.upperBound,
                         columnStart: cell.columnRange.lowerBound,
-                        columnEnd: cell.columnRange.upperBound - 1,
+                        columnEnd: cell.columnRange.upperBound,
                         text: cell.content.text.transcript,
-                        box: NormalizedBox(flippingVision: cell.boundingRegion.boundingBox.cgRect)
+                        box: NormalizedBox(flippingVision: cell.content.boundingRegion.boundingBox.cgRect)
                     )
                 }
             }
@@ -234,8 +233,7 @@ nonisolated enum VisionDocumentRecognizer {
         let lists: [VisionDocumentLayout.ListBlock] = document.lists.map { list in
             VisionDocumentLayout.ListBlock(
                 box: NormalizedBox(flippingVision: list.boundingRegion.boundingBox.cgRect),
-                // REVIEW: `List.items` element type — documented as containers; `.text.transcript` is the per-item text.
-                items: list.items.map { $0.text.transcript }
+                items: list.items.map(\.itemString)
             )
         }
 

@@ -23,6 +23,9 @@
         }
       }
     },
+    "…is printed page" : {
+
+    },
     "·" : {
       "localizations" : {
         "es-419" : {
@@ -32,6 +35,15 @@
           }
         }
       }
+    },
+    "· p. %@" : {
+      "comment" : "Printed page number next to the project page number"
+    },
+    "[Draft — rescan this illustration]" : {
+      "comment" : "Inline marker next to a draft capture in exported text"
+    },
+    "[Illustration]" : {
+      "comment" : "Placeholder written into exported text where an artwork capture sits"
     },
     "%@" : {
       "localizations" : {
@@ -56,6 +68,17 @@
           "stringUnit" : {
             "state" : "machine_translated",
             "value" : "%1$@ · %2$@ revisado"
+          }
+        }
+      }
+    },
+    "%@ (%lld of 2)" : {
+      "comment" : "File name shown for one half of a scan that Smart Separate split in two",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ (%2$lld of 2)"
           }
         }
       }
@@ -231,6 +254,9 @@
         }
       }
     },
+    "%lld chapters" : {
+      "comment" : "Sidebar project menu: chapter count"
+    },
     "%lld characters" : {
       "localizations" : {
         "en" : {
@@ -270,6 +296,9 @@
           }
         }
       }
+    },
+    "%lld illustrations are still drafts" : {
+      "comment" : "Export panel notice"
     },
     "%lld of %lld pages completed" : {
       "comment" : "Progress indicator showing amount of reviewed pages that are considered 'completed'",
@@ -671,6 +700,9 @@
         }
       }
     },
+    "1 illustration is still a draft" : {
+      "comment" : "Export panel notice"
+    },
     "1 page" : {
       "localizations" : {
         "es-419" : {
@@ -711,6 +743,9 @@
         }
       }
     },
+    "Add Range" : {
+
+    },
     "Add visual separation" : {
       "localizations" : {
         "es-419" : {
@@ -720,6 +755,12 @@
           }
         }
       }
+    },
+    "Additional numbering ranges" : {
+
+    },
+    "After a new import, the on-device model proposes a title from the document's title page and running headers. You can always rename the project." : {
+
     },
     "All" : {
       "localizations" : {
@@ -781,6 +822,9 @@
         }
       }
     },
+    "and %lld more" : {
+      "comment" : "Export panel: overflow count of draft reminders"
+    },
     "Append Pages from Files…" : {
       "localizations" : {
         "es-419" : {
@@ -813,6 +857,9 @@
         }
       }
     },
+    "Apple Vision" : {
+      "comment" : "OCR engine name"
+    },
     "Are you sure you want to delete this project? It will also be removed from your other iCloud devices. This cannot be undone." : {
       "localizations" : {
         "es-419" : {
@@ -832,6 +879,9 @@
           }
         }
       }
+    },
+    "Artwork capture area" : {
+
     },
     "Back" : {
       "localizations" : {
@@ -894,6 +944,15 @@
         }
       }
     },
+    "Bottom handle" : {
+
+    },
+    "Bottom left handle" : {
+
+    },
+    "Bottom right handle" : {
+
+    },
     "Cancel" : {
       "localizations" : {
         "es-419" : {
@@ -903,6 +962,33 @@
           }
         }
       }
+    },
+    "Capture" : {
+
+    },
+    "Capture Artwork" : {
+
+    },
+    "Capture Artwork Here…" : {
+
+    },
+    "Capture Artwork…" : {
+
+    },
+    "Capturing…" : {
+
+    },
+    "Chapter" : {
+
+    },
+    "Chapter headings" : {
+
+    },
+    "Chapter title" : {
+
+    },
+    "Chapters" : {
+
     },
     "Checking…" : {
       "localizations" : {
@@ -934,6 +1020,9 @@
         }
       }
     },
+    "Clear Draft Flag" : {
+
+    },
     "Clear search filter" : {
       "localizations" : {
         "es-419" : {
@@ -954,6 +1043,9 @@
         }
       }
     },
+    "Click for illustration options" : {
+      "comment" : "Tooltip on an inline artwork capture"
+    },
     "Close and reopen MultiScan to disable iCloud sync. Your projects will remain on this device but will no longer sync with other devices." : {
       "localizations" : {
         "es-419" : {
@@ -963,6 +1055,24 @@
           }
         }
       }
+    },
+    "Composing…" : {
+
+    },
+    "Content" : {
+
+    },
+    "Copied" : {
+
+    },
+    "Copy" : {
+
+    },
+    "Copy exported text" : {
+
+    },
+    "Copy Page Text" : {
+
     },
     "Copy the Current Page's Text" : {
       "comment" : "Copy Page Text button on “Page x of x” RichTextSidebar header",
@@ -975,6 +1085,9 @@
         }
       }
     },
+    "Copy the exported text to the clipboard" : {
+
+    },
     "Could not load image file" : {
       "localizations" : {
         "es-419" : {
@@ -984,6 +1097,9 @@
           }
         }
       }
+    },
+    "Couldn't Capture" : {
+
     },
     "Created" : {
       "localizations" : {
@@ -1232,6 +1348,21 @@
         }
       }
     },
+    "Detect chapters" : {
+
+    },
+    "Detect Chapters" : {
+
+    },
+    "Detected automatically" : {
+
+    },
+    "Digest" : {
+
+    },
+    "Digest text" : {
+
+    },
     "Disable" : {
       "localizations" : {
         "es-419" : {
@@ -1261,6 +1392,33 @@
           }
         }
       }
+    },
+    "Draft" : {
+
+    },
+    "DRAFT" : {
+      "comment" : "Badge on a draft illustration capture"
+    },
+    "Draft — rescan later" : {
+
+    },
+    "Draft reminders" : {
+
+    },
+    "Drag the rectangle or its handles to frame the illustration, then choose Capture." : {
+
+    },
+    "Drag to move" : {
+
+    },
+    "Edit Chapter Title" : {
+
+    },
+    "Edit Chapter Title…" : {
+
+    },
+    "Embed illustrations" : {
+
     },
     "Emoji" : {
       "localizations" : {
@@ -1343,6 +1501,7 @@
       }
     },
     "Export Page Text…" : {
+      "extractionState" : "stale",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -1363,6 +1522,7 @@
       }
     },
     "Export…" : {
+      "extractionState" : "stale",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -1371,6 +1531,9 @@
           }
         }
       }
+    },
+    "Exported Text" : {
+      "comment" : "Default export file name"
     },
     "Failed to convert rich text to RTF." : {
       "localizations" : {
@@ -1542,6 +1705,18 @@
         }
       }
     },
+    "Flag this capture as a draft so exports remind you to rescan the page" : {
+
+    },
+    "Flag this capture as a draft to be rescanned later" : {
+
+    },
+    "Font" : {
+
+    },
+    "For documents whose numbering restarts — an appendix counted from 1 again, or plates without numbers. Each range applies from its start page until the next range begins." : {
+
+    },
     "Format" : {
       "localizations" : {
         "es-419" : {
@@ -1571,6 +1746,9 @@
           }
         }
       }
+    },
+    "From project page" : {
+
     },
     "Get Project Text" : {
       "localizations" : {
@@ -1623,6 +1801,9 @@
         }
       }
     },
+    "Has draft illustrations" : {
+
+    },
     "Hidden" : {
       "comment" : "Text editor is hidden via RichTextSidebar, accessibility announcement",
       "localizations" : {
@@ -1644,6 +1825,9 @@
         }
       }
     },
+    "High Contrast" : {
+      "comment" : "Digest theme"
+    },
     "Hyphenated Divider" : {
       "localizations" : {
         "es-419" : {
@@ -1661,6 +1845,38 @@
     "iCloud.co.jservices.MultiScan" : {
       "comment" : "Debug only",
       "shouldTranslate" : false
+    },
+    "Illustration" : {
+      "comment" : "Accessibility label for an inline capture\nFallback label for a capture whose page is unavailable"
+    },
+    "Illustration (not yet downloaded)" : {
+      "comment" : "Accessibility label for a capture whose image isn't available"
+    },
+    "Illustration captured and placed in the page text." : {
+
+    },
+    "Illustration on page %lld" : {
+      "comment" : "Draft capture reminder with the project page number"
+    },
+    "Illustration on page %lld (printed p. %@)" : {
+      "comment" : "Draft capture reminder with project and printed page numbers",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Illustration on page %1$lld (printed p. %2$@)"
+          }
+        }
+      }
+    },
+    "Illustration options" : {
+
+    },
+    "Illustration recaptured." : {
+
+    },
+    "Illustrations to rescan" : {
+      "comment" : "Heading of the draft-capture reminder list at the end of an export"
     },
     "Image" : {
       "localizations" : {
@@ -1775,6 +1991,9 @@
         }
       }
     },
+    "Insert Illustration" : {
+
+    },
     "Insert Pages After" : {
       "localizations" : {
         "es-419" : {
@@ -1794,6 +2013,9 @@
           }
         }
       }
+    },
+    "Intelligence" : {
+
     },
     "Italic" : {
       "localizations" : {
@@ -1815,6 +2037,12 @@
         }
       }
     },
+    "Kerning" : {
+
+    },
+    "Larger text" : {
+
+    },
     "Last Modified" : {
       "localizations" : {
         "es-419" : {
@@ -1824,6 +2052,9 @@
           }
         }
       }
+    },
+    "Left handle" : {
+
     },
     "Light Gray" : {
       "comment" : "Viewer background option: light gray color",
@@ -1846,6 +2077,9 @@
         }
       }
     },
+    "Line spacing" : {
+
+    },
     "Loading image…" : {
       "localizations" : {
         "es-419" : {
@@ -1855,6 +2089,15 @@
           }
         }
       }
+    },
+    "Loading page…" : {
+
+    },
+    "Local server (LM Studio)" : {
+      "comment" : "OCR engine name"
+    },
+    "Mark as Draft" : {
+
     },
     "Mark as Not Reviewed" : {
       "localizations" : {
@@ -1876,6 +2119,12 @@
         }
       }
     },
+    "Mark Chapter Start" : {
+
+    },
+    "Mark Chapter Start…" : {
+
+    },
     "Mark Page as Not Reviewed" : {
       "localizations" : {
         "es-419" : {
@@ -1895,6 +2144,9 @@
           }
         }
       }
+    },
+    "Marks pages that begin a chapter, part, or section so the sidebar, Digest, and exports can group them. You can edit or remove any mark from a page's context menu." : {
+
     },
     "Medium Gray" : {
       "comment" : "Viewer background option: medium gray color",
@@ -2041,6 +2293,9 @@
         }
       }
     },
+    "Night" : {
+      "comment" : "Digest theme"
+    },
     "No filter active" : {
       "localizations" : {
         "es-419" : {
@@ -2092,6 +2347,9 @@
           }
         }
       }
+    },
+    "No OCR model is configured." : {
+
     },
     "No Page Selected" : {
       "localizations" : {
@@ -2166,6 +2424,9 @@
         }
       }
     },
+    "Numbers (1, 2, 3)" : {
+      "comment" : "Printed page numbering style"
+    },
     "OK" : {
       "localizations" : {
         "es-419" : {
@@ -2175,6 +2436,9 @@
           }
         }
       }
+    },
+    "On-device model (Core AI)" : {
+      "comment" : "OCR engine name"
     },
     "Open App Store" : {
       "localizations" : {
@@ -2337,6 +2601,9 @@
         }
       }
     },
+    "Page %lld will begin this chapter in the sidebar, the Digest, and exports." : {
+
+    },
     "Page Count" : {
       "localizations" : {
         "es-419" : {
@@ -2357,6 +2624,9 @@
         }
       }
     },
+    "Page markers" : {
+
+    },
     "Page number" : {
       "localizations" : {
         "es-419" : {
@@ -2376,6 +2646,12 @@
           }
         }
       }
+    },
+    "Page Numbering" : {
+
+    },
+    "Page Numbering…" : {
+
     },
     "Page Order" : {
       "localizations" : {
@@ -2406,6 +2682,12 @@
           }
         }
       }
+    },
+    "Pages before that" : {
+
+    },
+    "Paper" : {
+      "comment" : "Digest theme"
     },
     "Password-protected PDFs are not supported. Please unlock the document and save it without a password in Preview." : {
       "localizations" : {
@@ -2487,6 +2769,9 @@
           }
         }
       }
+    },
+    "Printed page %@" : {
+      "comment" : "Context menu header: the number printed on the physical page"
     },
     "Processing %@" : {
       "localizations" : {
@@ -2630,7 +2915,11 @@
         }
       }
     },
+    "Project page" : {
+
+    },
     "Project Text" : {
+      "extractionState" : "stale",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -2659,6 +2948,24 @@
           }
         }
       }
+    },
+    "Read in Digest" : {
+
+    },
+    "Read the whole project as one continuous text" : {
+
+    },
+    "Recapture" : {
+
+    },
+    "Recapture Artwork" : {
+
+    },
+    "Recapture…" : {
+
+    },
+    "Recognized by %@" : {
+      "comment" : "Context menu header: OCR engine that produced the page text"
     },
     "Remove \"%@\" from pages %lld–%lld" : {
       "localizations" : {
@@ -2696,6 +3003,9 @@
         }
       }
     },
+    "Remove Chapter Mark" : {
+
+    },
     "Remove consecutive page numbers from pages %lld–%lld" : {
       "localizations" : {
         "en" : {
@@ -2731,6 +3041,9 @@
           }
         }
       }
+    },
+    "Remove Illustration" : {
+
     },
     "Remove Line Breaks" : {
       "localizations" : {
@@ -2772,6 +3085,9 @@
         }
       }
     },
+    "Remove range" : {
+
+    },
     "Rename…" : {
       "localizations" : {
         "es-419" : {
@@ -2811,6 +3127,12 @@
           }
         }
       }
+    },
+    "Requires Apple Intelligence. The on-device model isn't available on this device right now, so new projects keep their date-based names." : {
+
+    },
+    "Reset" : {
+
     },
     "Reset All Data" : {
       "localizations" : {
@@ -2894,6 +3216,15 @@
         }
       }
     },
+    "Revisit those pages for a higher-quality scan, then recapture the illustration. The exported text lists them at the end." : {
+
+    },
+    "Right handle" : {
+
+    },
+    "Roman numerals (i, ii, iii)" : {
+      "comment" : "Printed page numbering style"
+    },
     "Rotate Clockwise" : {
       "comment" : "Rotate rightwards",
       "localizations" : {
@@ -2915,6 +3246,18 @@
           }
         }
       }
+    },
+    "Save" : {
+
+    },
+    "Save As…" : {
+
+    },
+    "Save exported text to Files" : {
+
+    },
+    "Save the exported text as a file" : {
+
     },
     "Scan ${files} into a new project" : {
       "localizations" : {
@@ -3026,6 +3369,9 @@
         }
       }
     },
+    "Selection" : {
+
+    },
     "Separate Pages" : {
       "localizations" : {
         "es-419" : {
@@ -3055,6 +3401,9 @@
           }
         }
       }
+    },
+    "Sepia" : {
+      "comment" : "Digest theme"
     },
     "Sequential" : {
       "localizations" : {
@@ -3096,6 +3445,15 @@
         }
       }
     },
+    "Share" : {
+
+    },
+    "Share Page Text…" : {
+
+    },
+    "Share…" : {
+
+    },
     "Show HDR" : {
       "localizations" : {
         "es-419" : {
@@ -3135,6 +3493,9 @@
           }
         }
       }
+    },
+    "Show the numbers printed in the physical book next to MultiScan's own page numbers — in the sidebar, the Digest, exports, and reminders to rescan illustrations." : {
+
     },
     "Show Thumbnails" : {
       "localizations" : {
@@ -3177,6 +3538,12 @@
         }
       }
     },
+    "Size" : {
+
+    },
+    "Smaller text" : {
+
+    },
     "Smart Cleanup" : {
       "localizations" : {
         "es-419" : {
@@ -3196,6 +3563,9 @@
           }
         }
       }
+    },
+    "Smart Separate" : {
+
     },
     "Start a new project" : {
       "localizations" : {
@@ -3237,6 +3607,9 @@
         }
       }
     },
+    "Starting at" : {
+
+    },
     "Statistics" : {
       "localizations" : {
         "es-419" : {
@@ -3277,6 +3650,12 @@
           }
         }
       }
+    },
+    "Style" : {
+
+    },
+    "Suggest project titles" : {
+
     },
     "Summary" : {
       "localizations" : {
@@ -3329,12 +3708,29 @@
       }
     },
     "System" : {
-      "comment" : "Viewer background option: system default",
+      "comment" : "Digest theme\nViewer background option: system default",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sistema"
+          }
+        }
+      }
+    },
+    "System (San Francisco)" : {
+
+    },
+    "System Serif (New York)" : {
+
+    },
+    "Table with %lld rows and %lld columns" : {
+      "comment" : "Accessibility label for an inline table",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Table with %1$lld rows and %2$lld columns"
           }
         }
       }
@@ -3417,6 +3813,31 @@
         }
       }
     },
+    "The model didn't answer within %lld seconds." : {
+
+    },
+    "The model returned no text for this page." : {
+
+    },
+    "The model server returned %lld: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The model server returned %1$lld: %2$@"
+          }
+        }
+      }
+    },
+    "The model server's response could not be read." : {
+
+    },
+    "The on-device model can't run: %@" : {
+
+    },
+    "The page image could not be encoded for the model." : {
+
+    },
     "The PDF file could not be opened." : {
       "localizations" : {
         "es-419" : {
@@ -3436,6 +3857,12 @@
           }
         }
       }
+    },
+    "The selected area is too small to capture." : {
+
+    },
+    "Theme" : {
+
     },
     "There is no text to export." : {
       "localizations" : {
@@ -3487,6 +3914,18 @@
         }
       }
     },
+    "Top handle" : {
+
+    },
+    "Top left handle" : {
+
+    },
+    "Top right handle" : {
+
+    },
+    "Typography" : {
+
+    },
     "Unable to Load Data" : {
       "localizations" : {
         "es-419" : {
@@ -3517,6 +3956,9 @@
         }
       }
     },
+    "Unnumbered" : {
+      "comment" : "Printed page numbering style"
+    },
     "Unreviewed" : {
       "localizations" : {
         "es-419" : {
@@ -3546,6 +3988,9 @@
           }
         }
       }
+    },
+    "Use printed page numbers" : {
+
     },
     "Use Sequential Order" : {
       "localizations" : {
@@ -3607,6 +4052,9 @@
         }
       }
     },
+    "When a scan shows two facing pages, MultiScan splits it into two pages along the gutter, using the recognized text's layout. Each half is cropped to its text with a margin for easier review." : {
+
+    },
     "When shuffle is on and a filter is active, the previous and next page buttons will only visit matching pages." : {
       "localizations" : {
         "es-419" : {
@@ -3616,6 +4064,9 @@
           }
         }
       }
+    },
+    "Where counting starts" : {
+
     },
     "Which page?" : {
       "localizations" : {

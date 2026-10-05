@@ -76,8 +76,7 @@ nonisolated enum OCRService {
     private static func recognizeText(from cgImage: CGImage) async throws -> (text: String, boundingBoxes: [CGRect]) {
         return try await withCheckedThrowingContinuation { continuation in
             // Track whether continuation has been resumed to prevent double-resume crashes.
-            // Vision can both throw from perform() AND call the completion handler with an error
-            // for the same failure (e.g., CoreML neural network errors), which would crash.
+            // Vision can both throw from perform() AND call the completion handler with an error for the same failure (e.g., CoreML neural network errors), which would crash.
             let resumed = OSAllocatedUnfairLock(initialState: false)
 
             let request = VNRecognizeTextRequest { request, error in

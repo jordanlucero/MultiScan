@@ -12,8 +12,8 @@ struct HomeView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     #endif
-    /// Sorted by the store, not per body evaluation.
-    @Query(sort: \Document.createdAt, order: .reverse) private var documents: [Document]
+    /// Sorted by the store, not per body evaluation. Result changes (create, delete, sync) arrive animated, so the grid's cards slide into place.
+    @Query(sort: \Document.createdAt, order: .reverse, animation: .default) private var documents: [Document]
 
     /// Shared import → OCR → project pipeline (also driven by the "Start New Project" intent).
     private let pipeline = ProjectImportPipeline.shared
@@ -26,8 +26,6 @@ struct HomeView: View {
     // UI state
     @State private var showingError = false
     @State private var importError: Error?
-    @State private var documentToDelete: Document?
-    @State private var showingDeleteConfirmation = false
     @State private var isDragOver = false
     @State private var isOptimizing = false
     @State private var isPreparingLocalImport = false
@@ -41,7 +39,6 @@ struct HomeView: View {
 
     // Settings
     @AppStorage(DefaultsKey.optimizeImagesOnImport) private var optimizeImagesOnImport = false
-    @AppStorage(SchemaVersioning.iCloudSyncEnabledKey) private var iCloudSyncEnabled = false
 
     // Settings sheet (iOS only — macOS uses the Settings window)
     #if os(iOS)
@@ -82,10 +79,7 @@ struct HomeView: View {
                     columns: gridColumns,
                     isPreparingImport: isPreparingImport,
                     onSelect: onDocumentSelected,
-                    onDelete: { document in
-                        documentToDelete = document
-                        showingDeleteConfirmation = true
-                    },
+                    onDelete: deleteDocument,
                     onOptimize: { document in optimizeImages(for: document) }
                 )
             }
@@ -110,22 +104,6 @@ struct HomeView: View {
             Button("OK") { }
         } message: { error in
             Text(error.localizedDescription)
-        }
-        .confirmationDialog(
-            "Delete \"\(documentToDelete?.name ?? "Project")\"?",
-            isPresented: $showingDeleteConfirmation,
-            presenting: documentToDelete
-        ) { document in
-            Button("Delete", role: .destructive) {
-                deleteDocument(document)
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: { document in
-            if iCloudSyncEnabled {
-                Text("Are you sure you want to delete this project? It will also be removed from your other iCloud devices. This cannot be undone.")
-            } else {
-                Text("Are you sure you want to delete this project? This cannot be undone.")
-            }
         }
         .onChange(of: selectedPhotos) { _, items in
             Task { await processSelectedPhotos(items) }
@@ -344,6 +322,7 @@ struct DocumentsGrid: View {
             LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
                 if isPreparingImport {
                     NewProjectPlaceholderCard()
+                        .transition(.scale(scale: 0.9).combined(with: .opacity))
                 }
                 ForEach(documents) { document in
                     DocumentGridItem(
@@ -352,9 +331,12 @@ struct DocumentsGrid: View {
                         onDelete: onDelete,
                         onOptimize: onOptimize
                     )
+                    .transition(.scale(scale: 0.9).combined(with: .opacity))
                 }
             }
             .padding()
+            // The placeholder is view state, not a query result, so it needs its own animation.
+            .animation(.default, value: isPreparingImport)
         }
     }
 }

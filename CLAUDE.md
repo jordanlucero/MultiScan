@@ -114,7 +114,7 @@ One app target builds for macOS, iPadOS, and iPhone. **Guiding principle: the Ma
 ReviewView (owns NavigationState, PageTextController, SmartCleanupModel, all sheet flags)
 ├─ regular (macOS, iPad, wide iPhone) ─► NavigationSplitView: ThumbnailSidebar | detail | .inspector { RichTextSidebar }
 └─ compact (iPhone)                    ─► NavigationStack { detail } + persistent RichTextSidebar sheet + SlideGridView sheet
-                                          detail = ImageViewer + navigationTitle + .toolbar { reviewToolbar } + rotors
+                                          detail = ImageViewer + navigationTitle (macOS only) + .toolbar { reviewToolbar } + rotors
 ```
 
 - **The toolbar is declared once** (`reviewToolbar`) and attached to the detail content in both layouts. Back + Previous/Next carry `.visibilityPriority(.high)` so they outlast everything else when a window narrows (iOS 27 / macOS 26.1 overflow); the page-grid button is `.hidden(!isCompact)`; only the per-OS item sets (`macToolbarItems` vs. `moreMenu`) are split with `#if os`. Inside `moreMenu`, Smart Cleanup appears only on compact (iPad has the inspector pane) and the text-panel toggle only on regular.
@@ -127,7 +127,7 @@ ReviewView (owns NavigationState, PageTextController, SmartCleanupModel, all she
 
 | View | macOS | iOS/iPadOS |
 |------|-------|------------|
-| `ReviewView` toolbar | Back + Prev/Next, then discrete icon buttons (order / review / progress / inspector) | Back + Prev/Next + page grid (compact only) + "More" (ellipsis) menu containing Smart Cleanup (compact only), review, image, panel (regular only), export actions, statistics; progress popover attaches to the view root (can't anchor to a menu item) |
+| `ReviewView` toolbar | Back + Prev/Next, then discrete icon buttons (order / review / progress / inspector) | Back + Prev/Next + page grid (compact only) + "More" (ellipsis) menu containing Smart Cleanup (compact only), review, image, panel (regular only), export actions, statistics; progress popover attaches to the "More" menu button (can't anchor to a menu item), so it opens below it on iPad and as a sheet on iPhone; no navigation title on iOS/iPadOS (macOS keeps title + page-count subtitle) |
 | `pageContextMenu` (thumbnails + page grid) | Info, export, rotation, adjustments, move, delete | Same, plus "Insert Pages Before/After" (insert-at-position is deliberately iOS-only; `ReviewView` passes the callbacks on both platforms, the menu shows them under `#if os(iOS)`) |
 | `RichTextSidebar` header | Page # + copy button, B/I/U/S + remove-line-breaks toolbar | Page # + copy button only (see formatting note below); Remove Line Breaks moves into the Smart Cleanup pane (iPad) or the More menu (iPhone) |
 | `ExportPanelView` | Two-pane HStack (preview left, options right), radio-group picker | Vertical NavigationStack sheet (preview top, options below), segmented picker, share/dismiss in the nav bar |

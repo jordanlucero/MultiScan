@@ -7,8 +7,11 @@ struct DocumentCard: View {
     let isProcessing: Bool
     let ocrProgress: Double
     let onOpen: () -> Void
+    /// Called once the user has confirmed; the card owns the confirmation so it anchors to the card.
     let onDelete: () -> Void
     let onOptimize: () -> Void
+
+    @AppStorage(SchemaVersioning.iCloudSyncEnabledKey) private var iCloudSyncEnabled = false
 
     // Inline rename state. `editedName` lives in DocumentCardName
     @State private var isEditingName = false
@@ -26,6 +29,9 @@ struct DocumentCard: View {
 
     // Export panel state
     @State private var showingExportPanel = false
+
+    // Delete confirmation state
+    @State private var showingDeleteConfirmation = false
 
     /// The ellipsis menu shows while the card is hovered or keyboard-focused (or the menu itself has focus).
     private var menuButtonVisible: Bool {
@@ -66,7 +72,7 @@ struct DocumentCard: View {
                     onRename: startEditing,
                     onExport: { showingExportPanel = true },
                     onOptimize: onOptimize,
-                    onDelete: onDelete
+                    onDelete: { showingDeleteConfirmation = true }
                 )
                 .padding(.vertical, 2)
             }
@@ -96,7 +102,7 @@ struct DocumentCard: View {
                 onRename: startEditing,
                 onExport: { showingExportPanel = true },
                 onOptimize: onOptimize,
-                onDelete: onDelete
+                onDelete: { showingDeleteConfirmation = true }
             )
         }
         .focusable()
@@ -117,6 +123,17 @@ struct DocumentCard: View {
         }
         .sheet(isPresented: $showingExportPanel) {
             ExportPanelView(document: document)
+        }
+        // Attached to the card, not the grid, so the iPad popover points at the project being deleted.
+        .confirmationDialog("Delete \"\(document.name)\"?", isPresented: $showingDeleteConfirmation) {
+            Button("Delete", role: .destructive, action: onDelete)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            if iCloudSyncEnabled {
+                Text("Are you sure you want to delete this project? It will also be removed from your other iCloud devices. This cannot be undone.")
+            } else {
+                Text("Are you sure you want to delete this project? This cannot be undone.")
+            }
         }
         // Onscreen awareness: lets Siri/Apple Intelligence refer to a visible project.
         .appEntityIdentifier(document.uuid.map { EntityIdentifier(for: ProjectEntity.self, identifier: $0) })

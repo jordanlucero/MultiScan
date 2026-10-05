@@ -93,10 +93,6 @@ struct ReviewView: View {
             .focusedSceneValue(\.showAddFromPhotos, $showAddFromPhotos)
             .focusedSceneValue(\.showAddFromFiles, $showAddFromFiles)
             .focusedSceneValue(\.showDeletePageConfirmation, $showDeletePageConfirmation)
-            #if os(iOS)
-            // On iOS the progress button lives inside the More menu, so the popover can't anchor to it — attach it to the root instead.
-            .popover(isPresented: $showProgress) { progressPopover }
-            #endif
             .sheet(isPresented: $showExportPanel, onDismiss: restoreTextSheet) {
                 ExportPanelView(document: document)
             }
@@ -208,7 +204,6 @@ struct ReviewView: View {
     private var compactLayout: some View {
         NavigationStack {
             detailContent
-                .navigationBarTitleDisplayMode(.inline)
                 .sheet(isPresented: $showTextSheet) {
                     textPanel(hideBottomPanels: true)
                         .presentationDetents([.height(120), .fraction(0.3), .medium, .large])
@@ -247,14 +242,16 @@ struct ReviewView: View {
                 navigationState.goToPage(pageNumber: pageNumber)
             })
 
-        if isCompact {
-            // No title in the compact bar: the space goes to the toolbar items.
-            viewer.navigationTitle("")
-        } else {
-            viewer
-                .navigationTitle(navigationTitle)
-                .navigationSubtitle(Text(document.totalPages == 1 ? "1 page" : "\(document.totalPages) pages"))
-        }
+        #if os(iOS)
+        // No title on iPhone or iPad: the bar is toolbar items only, and the image gets the space.
+        viewer
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+        #else
+        viewer
+            .navigationTitle(navigationTitle)
+            .navigationSubtitle(Text(document.totalPages == 1 ? "1 page" : "\(document.totalPages) pages"))
+        #endif
     }
 
     private func textPanel(hideBottomPanels: Bool) -> some View {
@@ -471,6 +468,8 @@ struct ReviewView: View {
         } label: {
             Label("More", systemImage: "ellipsis.circle")
         }
+        // The progress item lives inside the menu and a popover can't anchor to a menu item, so it anchors to the menu's button: it opens below "More" on iPad and as a sheet on iPhone.
+        .popover(isPresented: $showProgress) { progressPopover }
     }
 
     @ViewBuilder

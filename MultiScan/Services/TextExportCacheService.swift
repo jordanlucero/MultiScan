@@ -57,7 +57,7 @@ nonisolated struct PageCacheEntry: Codable, Sendable {
     let pageNumber: Int
     let fileName: String?
 
-    /// The page's rich text content as RTF bytes (decode with `RichTextArchiver.decodeRTF`).
+    /// The page's rich text content as RTF bytes — or flattened RTFD when the page has inline attachments (decode with `RichTextArchiver.attributedString(from:)`, which sniffs both). Attachments are tiny references, so RTFD entries stay small.
     let rtfData: Data
 
     /// Pre-extracted plain text for Smart Cleanup analysis and search.
@@ -93,8 +93,8 @@ nonisolated struct PageCacheEntry: Codable, Sendable {
     init(pageNumber: Int, fileName: String?, attributedText: NSAttributedString, pageLastModified: Date?) {
         self.pageNumber = pageNumber
         self.fileName = fileName
-        self.rtfData = RichTextArchiver.rtfData(from: attributedText) ?? Data()
-        let plain = attributedText.string
+        self.rtfData = RichTextArchiver.richTextData(from: attributedText) ?? Data()
+        let plain = attributedText.string.strippingAttachmentCharacters()
         self.plainText = plain
         self.wordCount = TextStatistics.wordCount(of: plain)
         self.charCount = plain.count
@@ -126,9 +126,11 @@ nonisolated struct PageCacheEntry: Codable, Sendable {
         )
     }
 
-    /// Decodes the entry's rich text for editing/removal operations.
+    /// Decodes the entry's rich text for editing/removal operations (RTF or RTFD).
     func decodedText() -> NSAttributedString? {
-        RichTextArchiver.decodeRTF(rtfData)
+        guard !rtfData.isEmpty else { return nil }
+        let decoded = RichTextArchiver.attributedString(from: rtfData)
+        return decoded.length == 0 && !plainText.isEmpty ? nil : decoded
     }
 }
 

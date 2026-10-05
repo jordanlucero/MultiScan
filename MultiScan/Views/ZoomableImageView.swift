@@ -67,6 +67,9 @@ struct ZoomableImageView: View {
     /// still rendering behind the glass panels.
     var safeAreaInsets: EdgeInsets = EdgeInsets()
 
+    /// Right-click (macOS) / long-press (iOS) on the image offers "Capture Artwork Here…"; the point is normalized (0…1, upper-left origin) within the displayed image, so the capture overlay can open a rectangle around it. `nil` disables the menu.
+    var onCaptureArtwork: ((CGPoint) -> Void)? = nil
+
     @Environment(\.layoutDirection) private var layoutDirection
 
     private var leftInset: CGFloat {
@@ -88,7 +91,8 @@ struct ZoomableImageView: View {
                 left: leftInset,
                 bottom: safeAreaInsets.bottom,
                 right: rightInset
-            )
+            ),
+            onCaptureArtwork: onCaptureArtwork
         )
         #else
         MacZoomableImageView(
@@ -100,7 +104,8 @@ struct ZoomableImageView: View {
                 left: leftInset,
                 bottom: safeAreaInsets.bottom,
                 right: rightInset
-            )
+            ),
+            onCaptureArtwork: onCaptureArtwork
         )
         #endif
     }
@@ -116,6 +121,7 @@ private struct MacZoomableImageView: NSViewRepresentable {
     let controller: ImageZoomController
     let displaysHDR: Bool
     let insets: NSEdgeInsets
+    let onCaptureArtwork: ((CGPoint) -> Void)?
 
     func makeNSView(context: Context) -> MacZoomableScrollView {
         let view = MacZoomableScrollView()
@@ -132,6 +138,7 @@ private struct MacZoomableImageView: NSViewRepresentable {
         controller.target = view
         view.displaysHDR = displaysHDR
         view.baseInsets = insets
+        view.onCaptureArtwork = onCaptureArtwork
         view.setImage(image.cgImage, contentID: image.contentID)
     }
 }
@@ -141,6 +148,10 @@ private struct MacZoomableImageView: NSViewRepresentable {
 /// sidebar/inspector resizes without notification races.
 final class MacZoomableScrollView: NSScrollView, ImageZoomTarget {
     weak var zoomController: ImageZoomController?
+
+    /// "Capture Artwork Here…" from the right-click menu; receives the normalized, upper-left-origin point.
+    var onCaptureArtwork: ((CGPoint) -> Void)?
+    private var pendingCapturePoint: CGPoint?
 
     private let imageView = NSImageView()
     private var lastCGImage: CGImage?
@@ -351,6 +362,35 @@ final class MacZoomableScrollView: NSScrollView, ImageZoomTarget {
         setMagnification(target, centeredAt: point)
     }
 
+    // MARK: Context menu (artwork capture)
+
+    /// Right-click on the page: offer to capture artwork at that spot. The image view's frame equals the bitmap's pixel size (`imageScaling = .scaleNone`), so a point in its coordinates divided by its size *is* the normalized position — only the y axis needs flipping (AppKit is bottom-up).
+    override func rightMouseDown(with event: NSEvent) {
+        guard onCaptureArtwork != nil, imageView.image != nil, imageView.bounds.width > 0, imageView.bounds.height > 0 else {
+            super.rightMouseDown(with: event)
+            return
+        }
+        let point = imageView.convert(event.locationInWindow, from: nil)
+        let normalized = CGPoint(
+            x: min(max(point.x / imageView.bounds.width, 0), 1),
+            y: min(max(1 - point.y / imageView.bounds.height, 0), 1)
+        )
+        // The menu action fires asynchronously; it reads the point from here.
+        pendingCapturePoint = normalized
+
+        let menu = NSMenu()
+        let capture = NSMenuItem(title: String(localized: "Capture Artwork Here…"), action: #selector(captureArtworkHere), keyEquivalent: "")
+        capture.target = self
+        menu.addItem(capture)
+        NSMenu.popUpContextMenu(menu, with: event, for: self)
+    }
+
+    @objc private func captureArtworkHere() {
+        guard let point = pendingCapturePoint else { return }
+        pendingCapturePoint = nil
+        onCaptureArtwork?(point)
+    }
+
     /// Double-click toggles between fit and 2.5× fit at the click point.
     @objc private func handleDoubleClick(_ gesture: NSClickGestureRecognizer) {
         let fit = minMagnification
@@ -418,6 +458,7 @@ private struct IOSZoomableImageView: UIViewRepresentable {
     let controller: ImageZoomController
     let displaysHDR: Bool
     let insets: UIEdgeInsets
+    let onCaptureArtwork: ((CGPoint) -> Void)?
 
     func makeUIView(context: Context) -> IOSZoomableScrollView {
         let view = IOSZoomableScrollView()
@@ -434,6 +475,7 @@ private struct IOSZoomableImageView: UIViewRepresentable {
         controller.target = view
         view.displaysHDR = displaysHDR
         view.baseInsets = insets
+        view.onCaptureArtwork = onCaptureArtwork
         view.setImage(image.cgImage, contentID: image.contentID)
     }
 }
@@ -442,8 +484,11 @@ private struct IOSZoomableImageView: UIViewRepresentable {
 /// `layoutSubviews`, so rotation, split-view resizes, and inspector changes
 /// re-fit synchronously. Centering is done through contentInset, which plays
 /// correctly with bouncesZoom and rubber-band panning.
-final class IOSZoomableScrollView: UIScrollView, UIScrollViewDelegate, ImageZoomTarget {
+final class IOSZoomableScrollView: UIScrollView, UIScrollViewDelegate, UIContextMenuInteractionDelegate, ImageZoomTarget {
     weak var zoomController: ImageZoomController?
+
+    /// "Capture Artwork Here" from the long-press menu; receives the normalized, upper-left-origin point.
+    var onCaptureArtwork: ((CGPoint) -> Void)?
 
     private let imageView = UIImageView()
     private var lastCGImage: CGImage?
@@ -495,11 +540,33 @@ final class IOSZoomableScrollView: UIScrollView, UIScrollViewDelegate, ImageZoom
         let doubleTap = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTap(_:)))
         doubleTap.numberOfTapsRequired = 2
         addGestureRecognizer(doubleTap)
+
+        // Long-press → context menu with "Capture Artwork Here".
+        imageView.isUserInteractionEnabled = true
+        imageView.addInteraction(UIContextMenuInteraction(delegate: self))
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) is not supported")
+    }
+
+    // MARK: Context menu (artwork capture)
+
+    /// The image view's bounds equal the bitmap's pixel size (zoom is applied by the scroll view's transform), so the interaction's location in the image view divided by its bounds is the normalized position; UIKit is already top-down.
+    func contextMenuInteraction(_ interaction: UIContextMenuInteraction, configurationForMenuAtLocation location: CGPoint) -> UIContextMenuConfiguration? {
+        guard let onCaptureArtwork, imageView.image != nil, imageView.bounds.width > 0, imageView.bounds.height > 0 else { return nil }
+        let normalized = CGPoint(
+            x: min(max(location.x / imageView.bounds.width, 0), 1),
+            y: min(max(location.y / imageView.bounds.height, 0), 1)
+        )
+        return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in
+            UIMenu(children: [
+                UIAction(title: String(localized: "Capture Artwork Here…"), image: UIImage(systemName: "crop")) { _ in
+                    onCaptureArtwork(normalized)
+                }
+            ])
+        }
     }
 
     // MARK: Content

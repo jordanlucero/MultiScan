@@ -9,6 +9,13 @@
 //  the shared PageTextView. The platform view instance is reused across page
 //  switches — only the controller changes, which reloads the content storage.
 //
+//  ## Undo (macOS)
+//  `NSTextView` asks its delegate for an undo manager (`undoManager(for:)`); without one it
+//  uses the window's, which the review screen shares with page reordering. The coordinator
+//  hands back the controller's own `UndoManager`, so typing undo is scoped to the editor and
+//  ⌘Z goes to whichever responder has focus — the text view when editing, the window (page
+//  reorder) otherwise. On iOS `UITextView` already owns its undo manager.
+//
 
 import SwiftUI
 
@@ -44,6 +51,13 @@ struct PageTextEditor: NSViewRepresentable {
         func textDidChange(_ notification: Notification) {
             controller?.textDidChange()
         }
+
+        /// Per-editor undo manager — see the file comment.
+        func undoManager(for view: NSTextView) -> UndoManager? {
+            controller?.editorUndoManager
+        }
+
+        /// Keep attachment placeholders atomic: a selection that ends up half inside an attachment character is never meaningful, and TextKit treats the single U+FFFC as one glyph anyway. Nothing to adjust here today; the hook is kept so a future attachment-aware selection policy has a home.
     }
 }
 

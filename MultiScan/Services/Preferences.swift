@@ -22,6 +22,12 @@ nonisolated enum DefaultsKey {
     static let filterOption = "filterOption"
     static let viewerBackground = "viewerBackground"
     static let viewerShowsHDR = "viewerShowsHDR"
+    /// Suggest a project title with the on-device model after a new import (Foundation Models). Default on; silently inert where Apple Intelligence is unavailable.
+    static let autoTitleProjects = "autoTitleProjects"
+    /// Mark chapter starts automatically after a new import (`ChapterDetector`). Default on.
+    static let autoDetectChapters = "autoDetectChapters"
+    /// Include "[Illustration]" placeholders and draft reminders in exported text.
+    static let exportIncludeDraftReminders = "exportIncludeDraftReminders"
 }
 
 private extension UserDefaults {
@@ -54,6 +60,15 @@ nonisolated struct ExportOptions: Equatable, Sendable {
     var includeFilename: Bool
     var includeStatistics: Bool
 
+    /// Insert each chapter's title (`Page.sectionTitle`) as a heading where the chapter begins. Default on — it's the whole point of marking chapters.
+    var includeChapterHeadings: Bool = true
+
+    /// Embed artwork captures as real images (RTFD export). Off → captures become a short `[Illustration]` note so the plain RTF stays portable.
+    var includeCaptures: Bool = true
+
+    /// Append a "revisit these pages" list for draft captures at the end, and mark each draft inline. Default on: the reminder is what the draft flag is *for*.
+    var includeDraftReminders: Bool = true
+
     /// Plain "Page X of Y" separators (or none) — used by the Get Project Text intent.
     static func simple(separatePages: Bool) -> ExportOptions {
         ExportOptions(
@@ -61,7 +76,10 @@ nonisolated struct ExportOptions: Equatable, Sendable {
             separatorStyle: .lineBreak,
             includePageNumber: true,
             includeFilename: false,
-            includeStatistics: false
+            includeStatistics: false,
+            includeChapterHeadings: true,
+            includeCaptures: false,
+            includeDraftReminders: false
         )
     }
 }
@@ -74,6 +92,8 @@ final class ExportSettings {
     private static let includePageNumberKey = "exportIncludePageNumber"
     private static let includeFilenameKey = "exportIncludeFilename"
     private static let includeStatisticsKey = "exportIncludeStatistics"
+    private static let includeChapterHeadingsKey = "exportIncludeChapterHeadings"
+    private static let includeCapturesKey = "exportIncludeCaptures"
 
     private let defaults: UserDefaults
 
@@ -102,6 +122,21 @@ final class ExportSettings {
         didSet { defaults.set(includeStatistics, forKey: Self.includeStatisticsKey) }
     }
 
+    /// Chapter titles as headings (default: true)
+    var includeChapterHeadings: Bool {
+        didSet { defaults.set(includeChapterHeadings, forKey: Self.includeChapterHeadingsKey) }
+    }
+
+    /// Embed artwork captures (default: true)
+    var includeCaptures: Bool {
+        didSet { defaults.set(includeCaptures, forKey: Self.includeCapturesKey) }
+    }
+
+    /// Draft reminders (default: true). Shares `DefaultsKey.exportIncludeDraftReminders` with the export panel's notice.
+    var includeDraftReminders: Bool {
+        didSet { defaults.set(includeDraftReminders, forKey: DefaultsKey.exportIncludeDraftReminders) }
+    }
+
     /// The user's current export preferences, for callers off the main actor (App Intents, Transferable exports).
     static var currentOptions: ExportOptions { ExportSettings().options }
 
@@ -112,7 +147,10 @@ final class ExportSettings {
             separatorStyle: separatorStyle,
             includePageNumber: includePageNumber,
             includeFilename: includeFilename,
-            includeStatistics: includeStatistics
+            includeStatistics: includeStatistics,
+            includeChapterHeadings: includeChapterHeadings,
+            includeCaptures: includeCaptures,
+            includeDraftReminders: includeDraftReminders
         )
     }
 
@@ -123,6 +161,9 @@ final class ExportSettings {
         includePageNumber = defaults.bool(forKey: Self.includePageNumberKey, default: true)
         includeFilename = defaults.bool(forKey: Self.includeFilenameKey)
         includeStatistics = defaults.bool(forKey: Self.includeStatisticsKey)
+        includeChapterHeadings = defaults.bool(forKey: Self.includeChapterHeadingsKey, default: true)
+        includeCaptures = defaults.bool(forKey: Self.includeCapturesKey, default: true)
+        includeDraftReminders = defaults.bool(forKey: DefaultsKey.exportIncludeDraftReminders, default: true)
     }
 }
 

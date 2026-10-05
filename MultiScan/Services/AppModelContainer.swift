@@ -56,7 +56,7 @@ enum AppModelContainer {
 
         do {
             let container = try ModelContainer(
-                for: Document.self, Page.self, SchemaMetadata.self,
+                for: Document.self, Page.self, PageCapture.self, SchemaMetadata.self,
                 configurations: modelConfiguration
             )
             // Don't record a successful load when the store is ahead of this build — that would clear the pre-load gate and let the next launch past the update gate.
@@ -126,7 +126,7 @@ enum AppModelContainer {
                 description.shouldAddStoreAsynchronously = false
 
                 guard let model = NSManagedObjectModel.makeManagedObjectModel(
-                    for: [Document.self, Page.self, SchemaMetadata.self]
+                    for: [Document.self, Page.self, PageCapture.self, SchemaMetadata.self]
                 ) else {
                     print("⚠️ CloudKit schema init: could not build the managed object model")
                     return

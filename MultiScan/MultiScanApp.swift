@@ -30,6 +30,11 @@ extension FocusedValues {
     @Entry var showAddFromFiles: Binding<Bool>?
     @Entry var showFindNavigator: Binding<Bool>?
     @Entry var showDeletePageConfirmation: Binding<Bool>?
+    /// 2.0: Image ▸ Capture Artwork…, View ▸ Read in Digest, Edit ▸ Mark Chapter Start…, and the project's Page Numbering… sheet.
+    @Entry var showArtworkCapture: Binding<Bool>?
+    @Entry var showDigest: Binding<Bool>?
+    @Entry var showChapterEditor: Binding<Bool>?
+    @Entry var showPageNumbering: Binding<Bool>?
 }
 
 // MARK: - App Entry Point
@@ -53,6 +58,9 @@ struct MultiScanApp: App {
         let store = ProjectStore.shared
         AppDependencyManager.shared.add(dependency: router)
         AppDependencyManager.shared.add(dependency: store)
+
+        // TextKit 2: artwork captures and tables in page text are rendered by registered view providers.
+        InlineAttachmentViewProviders.registerAll()
 
         // Spotlight: reconcile after saves / remote changes.
         if !AppModelContainer.isRunningTests {

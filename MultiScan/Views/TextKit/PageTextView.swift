@@ -21,10 +21,21 @@
 //  ⚠️ Never touch `layoutManager` (macOS) on these views — accessing the TextKit 1
 //  property makes the view silently fall back to the compatibility text engine.
 //
-//  Future extension point: subclassing here is what enables the viewport-delegate
-//  customizations (line numbers, collapsible ranges, attachment view-provider reuse)
-//  by overriding the NSTextViewportLayoutControllerDelegate methods that the
-//  framework text views now conform to.
+//  ## Inline attachments
+//  Artwork captures and tables are `NSTextAttachment`s rendered by registered
+//  `NSTextAttachmentViewProvider`s (`AttachmentViewProviders.swift`). Nothing here is
+//  attachment-specific: the text view hosts whatever views the providers return. The one
+//  deliberate limit is `importsGraphics = false` / no image paste on iOS — arbitrary pasted
+//  images aren't a supported attachment kind yet, so they'd be silently dropped at save time.
+//
+//  ## Editing behavior (2.0 review)
+//  - Smart quotes, smart dashes, autocorrection, and spell checking keep the **system defaults**
+//    (all on). MultiScan is designed around reading and hand-editing OCR output, whichever engine
+//    produced it, so the editor behaves like any other text field on the platform. (Turning the
+//    substitutions off was considered and rejected: the user is writing, not transcribing.)
+//  - `allowsUndo` on macOS with a per-editor `UndoManager` supplied by the delegate (see
+//    `PageTextEditor`), so clearing the typing history on page switch no longer wipes the
+//    window's page-reorder undo stack.
 //
 
 import SwiftUI
@@ -68,6 +79,9 @@ final class PageTextView: NSTextView {
             .foregroundColor: NSColor.labelColor
         ]
 
+        // Smart quotes/dashes, text replacement, spelling correction: system defaults (on). Spell-check underlines are useful on OCR output, so make sure they show while editing.
+        textView.isContinuousSpellCheckingEnabled = editable
+
         let scrollView = NSScrollView()
         scrollView.documentView = textView
         scrollView.hasVerticalScroller = true
@@ -81,6 +95,7 @@ final class PageTextView: NSTextView {
 
 extension PageTextView {
     /// Non-optional text storage accessor (NSTextView exposes it as optional).
+    /// Despite the name this is the `NSTextStorage` — the attributed string — not the TextKit 2 `NSTextContentStorage` that wraps it.
     var contentStorage: NSTextStorage {
         textStorage ?? NSTextStorage()
     }
@@ -121,6 +136,7 @@ final class PageTextView: UITextView {
             .font: PageTextStyle.displayFont,
             .foregroundColor: UIColor.label
         ]
+        // Smart quotes/dashes and autocorrection stay at the system defaults (on) — see the file comment.
         return textView
     }
 }

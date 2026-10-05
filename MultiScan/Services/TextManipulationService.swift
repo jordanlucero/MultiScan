@@ -4,9 +4,14 @@
 import Foundation
 
 /// Single source of truth for word/character counting across editor, cache, and export.
+/// Inline attachments (U+FFFC placeholders) never count as words or characters.
 nonisolated enum TextStatistics {
     static func wordCount(of text: String) -> Int {
-        text.split(whereSeparator: { $0.isWhitespace }).count
+        text.split(whereSeparator: { $0.isWhitespace || $0 == "\u{FFFC}" }).count
+    }
+
+    static func characterCount(of text: String) -> Int {
+        text.strippingAttachmentCharacters().count
     }
 }
 

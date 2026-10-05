@@ -22,7 +22,7 @@ MultiScan is designed for casual reading or workflows where the OCR output can b
 
 * Fingers, image noise, and specks of dust/dirt might be mistaken for new or accented characters. When you're in low-light, consider using flash or night mode for MultiScan-bound images. Avoid glare.
 
-* MultiScan doesn't have the capacity to identify illustrations or images on document pages. VisionKit will attempt to transcribe the text within artwork in a way that doesn't make sense. It's useful to include an in-line note to yourself when you export from MultiScan in case you want to add a screenshot or external scan of the artwork in an external word processor.
+* MultiScan doesn't identify illustrations on its own. Vision will attempt to transcribe the text within artwork in a way that doesn't make sense. In 2.0 you can right-click (or long-press) the page image to capture the artwork into the page text yourself, and flag it as a draft so exports remind you to rescan it.
 
 * This implementation of VisionKit adds line breaks at the end of each physical line of text. When appropriate, you can choose to purge line breaks from a page when editing.
 

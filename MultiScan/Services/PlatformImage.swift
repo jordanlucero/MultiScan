@@ -172,6 +172,16 @@ nonisolated enum PlatformImage {
         return ciContext.createCGImage(ciImage, from: ciImage.extent)
     }
 
+    // MARK: - Orientation baking
+
+    /// Returns `image` with `orientation` applied to its pixels (so the result is `.up`). Returns the input unchanged for `.up`.
+    /// Used by Smart Separate (crops must be taken in upright space) and when handing pages to transformer OCR engines.
+    static func oriented(_ image: CGImage, _ orientation: CGImagePropertyOrientation) -> CGImage? {
+        guard orientation != .up else { return image }
+        let ciImage = CIImage(cgImage: image).oriented(orientation)
+        return ciContext.createCGImage(ciImage, from: ciImage.extent)
+    }
+
     // MARK: - Encoding
 
     /// Encodes a CGImage as `type` (HEIC or JPEG) at the given lossy quality.

@@ -23,6 +23,10 @@ struct MultiScanCommands: Commands {
     @FocusedBinding(\.showAddFromFiles) private var showAddFromFiles
     @FocusedBinding(\.showFindNavigator) private var showFindNavigator
     @FocusedBinding(\.showDeletePageConfirmation) private var showDeletePageConfirmation
+    @FocusedBinding(\.showArtworkCapture) private var showArtworkCapture
+    @FocusedBinding(\.showDigest) private var showDigest
+    @FocusedBinding(\.showChapterEditor) private var showChapterEditor
+    @FocusedBinding(\.showPageNumbering) private var showPageNumbering
 
     private var document: Document? { navigationState?.selectedDocument }
     private var currentPage: Page? { navigationState?.currentPage }
@@ -49,6 +53,13 @@ struct MultiScanCommands: Commands {
 
     // MARK: - File
 
+    /// The current page's text as a share payload (live editor content when the panel has focus, stored text otherwise), named after the project and page.
+    private var currentPageRichText: RichText? {
+        guard let page = currentPage else { return nil }
+        let text = TextExporter.exportableText(for: page, liveText: textController?.attributedTextForExport)
+        return RichText(text, suggestedName: "\(document?.name ?? "") — \(page.title)")
+    }
+
     private var fileCommands: some Commands {
         CommandGroup(after: .newItem) {
             Divider()
@@ -66,12 +77,18 @@ struct MultiScanCommands: Commands {
             Divider()
 
             // A ShareLink may not honor `.disabled()`, so the item is swapped for a disabled button when there is no page.
-            if let page = currentPage {
-                ShareLink("Export Page Text…",
-                          item: RichText(textController?.attributedTextForExport ?? page.attributedText),
+            if let richText = currentPageRichText, let page = currentPage {
+                ShareLink("Share Page Text…",
+                          item: richText,
                           preview: SharePreview(String(localized: "Page \(page.pageNumber) Text")))
+                Button("Copy Page Text") {
+                    richText.copyToPasteboard()
+                }
+                .keyboardShortcut("C", modifiers: [.command, .shift])
             } else {
-                Button("Export Page Text…", systemImage: "square.and.arrow.up") {}
+                Button("Share Page Text…", systemImage: "square.and.arrow.up") {}
+                    .disabled(true)
+                Button("Copy Page Text") {}
                     .disabled(true)
             }
 
@@ -81,6 +98,13 @@ struct MultiScanCommands: Commands {
             }
             .keyboardShortcut("C", modifiers: [.command, .option])
             .disabled(document == nil)
+
+            Divider()
+
+            Button("Page Numbering…", systemImage: "number") {
+                showPageNumbering = true
+            }
+            .disabled(showPageNumbering == nil)
         }
     }
 
@@ -102,6 +126,12 @@ struct MultiScanCommands: Commands {
             }
             .keyboardShortcut("D", modifiers: [.command])
             .disabled(currentPage == nil)
+
+            Button(currentPage?.sectionTitle == nil ? "Mark Chapter Start…" : "Edit Chapter Title…", systemImage: "bookmark") {
+                showChapterEditor = true
+            }
+            .keyboardShortcut("B", modifiers: [.command, .option])
+            .disabled(currentPage == nil || showChapterEditor == nil)
 
             Divider()
 
@@ -169,6 +199,11 @@ struct MultiScanCommands: Commands {
 
             Divider()
 
+            // Opens the capture overlay centered on the page; right-click on the viewer seeds it at the pointer instead.
+            CaptureArtworkButton(page: showArtworkCapture == nil ? nil : currentPage, action: { showArtworkCapture = true }, showsKeyboardShortcut: true)
+
+            Divider()
+
             // Viewer-wide display preference (not a page edit): when off, the system tone-maps HDR photos down to SDR. No effect on SDR images.
             Toggle(isOn: $viewerShowsHDR) {
                 Label("Show HDR", systemImage: "sun.max")
@@ -191,6 +226,15 @@ struct MultiScanCommands: Commands {
 
             Toggle("Show Smart Cleanup", isOn: $showSmartCleanup)
                 .keyboardShortcut("K", modifiers: [.command, .shift])
+
+            Divider()
+
+            Button("Read in Digest", systemImage: "book.pages") {
+                textController?.saveNow()
+                showDigest = true
+            }
+            .keyboardShortcut("D", modifiers: [.command, .shift])
+            .disabled(showDigest == nil)
 
             Divider()
 

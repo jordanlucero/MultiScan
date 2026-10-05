@@ -39,6 +39,9 @@ enum ViewerBackground: String, CaseIterable {
 struct ImageViewer: View {
     let navigationState: NavigationState
 
+    /// Right-click / long-press "Capture Artwork Here…" — the point is normalized (0…1, upper-left) within the displayed page image.
+    var onCaptureArtwork: ((CGPoint) -> Void)? = nil
+
     // Settings
     @AppStorage(DefaultsKey.viewerBackground) private var viewerBackgroundRaw = ViewerBackground.system.rawValue
     /// Show HDR photos with full headroom; when off, the system tone-maps them to SDR.
@@ -94,7 +97,8 @@ struct ImageViewer: View {
                         image: displayImage,
                         controller: zoomController,
                         displaysHDR: viewerShowsHDR,
-                        safeAreaInsets: geometry.safeAreaInsets
+                        safeAreaInsets: geometry.safeAreaInsets,
+                        onCaptureArtwork: onCaptureArtwork
                     )
                     .ignoresSafeArea()
                 }

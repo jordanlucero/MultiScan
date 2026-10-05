@@ -2,7 +2,9 @@
 //  SettingsView.swift
 //  MultiScan
 //
-//  The settings surface on every platform. macOS presents `SettingsView` in a custom `Window` scene (see the workaround note below); iOS/iPadOS present `SettingsSheetView` from the Home screen's gear button. Both host the same two panes.
+//  The settings surface on every platform. macOS presents `SettingsView` in a custom `Window` scene (see the workaround note below); iOS/iPadOS present `SettingsSheetView` from the Home screen's gear button. Both host the same panes.
+//
+//  Panes: Import & Storage (import options, intelligence toggles, iCloud), Viewer, and — DEBUG builds only — OCR Engine (Vision vs. an on-device Core AI model vs. an LM Studio server).
 //
 
 import SwiftUI
@@ -15,6 +17,10 @@ import CloudKit
 
 struct ImportAndStorageSettingsView: View {
     @AppStorage(DefaultsKey.optimizeImagesOnImport) private var optimizeImagesOnImport = false
+    @AppStorage(DefaultsKey.autoTitleProjects) private var autoTitleProjects = true
+    @AppStorage(DefaultsKey.autoDetectChapters) private var autoDetectChapters = true
+
+    private let ocrSettings = OCREngineSettings.shared
 
     // iCloud sync is read straight from UserDefaults because changing it requires a relaunch: the container is configured once per process.
     @State private var iCloudSyncEnabled = SchemaVersioning.isICloudSyncEnabled
@@ -26,6 +32,25 @@ struct ImportAndStorageSettingsView: View {
             Section("Import") {
                 Toggle("Optimize images on import", isOn: $optimizeImagesOnImport)
                 Text("MultiScan will optimize images it stores to save storage.")
+                    .font(.caption)
+                    .foregroundStyle(Color.secondary)
+
+                Toggle("Smart Separate", isOn: Bindable(ocrSettings).smartSeparateEnabled)
+                Text("When a scan shows two facing pages, MultiScan splits it into two pages along the gutter, using the recognized text's layout. Each half is cropped to its text with a margin for easier review.")
+                    .font(.caption)
+                    .foregroundStyle(Color.secondary)
+            }
+
+            Section("Intelligence") {
+                Toggle("Suggest project titles", isOn: $autoTitleProjects)
+                Text(ProjectTitleSuggester.isModelAvailable
+                     ? "After a new import, the on-device model proposes a title from the document's title page and running headers. You can always rename the project."
+                     : "Requires Apple Intelligence. The on-device model isn't available on this device right now, so new projects keep their date-based names.")
+                    .font(.caption)
+                    .foregroundStyle(Color.secondary)
+
+                Toggle("Detect chapters", isOn: $autoDetectChapters)
+                Text("Marks pages that begin a chapter, part, or section so the sidebar, Digest, and exports can group them. You can edit or remove any mark from a page's context menu.")
                     .font(.caption)
                     .foregroundStyle(Color.secondary)
             }
@@ -118,6 +143,156 @@ struct ViewerSettingsView: View {
         .formStyle(.grouped)
     }
 }
+
+// MARK: - OCR Engine (DEBUG builds only)
+
+#if DEBUG
+/// Chooses what produces page text on import. Vision always runs for layout; this picks what *also* runs and wins. Debug-only until a downloadable model ships — see `OCREngine.swift`.
+struct OCREngineSettingsView: View {
+    private let settings = OCREngineSettings.shared
+
+    @State private var availableModels: [String] = []
+    @State private var connectionStatus: String?
+    @State private var isTestingConnection = false
+    @State private var showModelFolderPicker = false
+
+    var body: some View {
+        @Bindable var settings = settings
+
+        Form {
+            Section {
+                Picker("Engine", selection: $settings.kind) {
+                    ForEach(OCREngineKind.availableOnThisPlatform, id: \.self) { kind in
+                        Text(kind.label).tag(kind)
+                    }
+                }
+                Text("Apple Vision always runs to capture the page layout. With a model engine selected, the model's Markdown transcription becomes the page text and Vision's transcript is kept alongside it.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("OCR Engine (Debug)")
+            }
+
+            if settings.kind == .coreAI {
+                Section("On-device model") {
+                    LabeledContent("Model folder") {
+                        Text(settings.coreAIModelURL?.lastPathComponent ?? String(localized: "None"))
+                            .foregroundStyle(settings.coreAIModelURL == nil ? .secondary : .primary)
+                            .lineLimit(1)
+                    }
+                    Button("Choose Exported Model Folder…") { showModelFolderPicker = true }
+                    Text("An export from the coreai-models tooling: a folder with the .aimodel and its tokenizer. The model must accept an image and produce text. Loading happens on the first page of an import and can take a while unless the model was compiled ahead of time.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    #if !canImport(CoreAILanguageModels)
+                    Label("The CoreAILanguageModels module isn't linked yet; imports will fall back to Vision. Add the apple/coreai-models package to the MultiScan target.", systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                    #endif
+                }
+            }
+
+            #if os(macOS)
+            if settings.kind == .lmStudio {
+                Section("Local server") {
+                    TextField("Server URL", text: Binding(
+                        get: { settings.lmStudioBaseURL.absoluteString },
+                        set: { if let url = URL(string: $0) { settings.lmStudioBaseURL = url } }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                    Text("LM Studio's default is http://localhost:1234. Any OpenAI-compatible chat-completions server works. Load a vision-capable model (one that accepts images) in LM Studio first.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if availableModels.isEmpty {
+                        TextField("Model identifier (optional)", text: $settings.lmStudioModelID)
+                            .textFieldStyle(.roundedBorder)
+                    } else {
+                        Picker("Model", selection: $settings.lmStudioModelID) {
+                            Text("Server default").tag("")
+                            ForEach(availableModels, id: \.self) { Text($0).tag($0) }
+                        }
+                    }
+
+                    HStack {
+                        Button(isTestingConnection ? "Testing…" : "Test Connection") { testConnection() }
+                            .disabled(isTestingConnection)
+                        if let connectionStatus {
+                            Text(connectionStatus)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
+                    }
+                }
+            }
+            #endif
+
+            if settings.kind != .vision {
+                Section("Prompt") {
+                    TextEditor(text: $settings.transcriptionPrompt)
+                        .font(.caption.monospaced())
+                        .frame(minHeight: 120)
+                    HStack {
+                        Button("Reset to Default") { settings.resetPrompt() }
+                        Spacer()
+                        LabeledContent("Timeout per page") {
+                            TextField("", value: $settings.transformerTimeout, format: .number)
+                                .frame(width: 60)
+                                .multilineTextAlignment(.trailing)
+                            Text("s")
+                        }
+                    }
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .fileImporter(isPresented: $showModelFolderPicker, allowedContentTypes: [.folder], allowsMultipleSelection: false) { result in
+            if case .success(let urls) = result, let url = urls.first {
+                // The folder is copied into Application Support so the app keeps access without a security-scoped bookmark.
+                settings.coreAIModelURL = Self.installModelFolder(from: url) ?? url
+            }
+        }
+    }
+
+    #if os(macOS)
+    private func testConnection() {
+        isTestingConnection = true
+        connectionStatus = nil
+        let base = settings.lmStudioBaseURL
+        Task {
+            defer { isTestingConnection = false }
+            do {
+                let models = try await LMStudioTranscriber.listModels(baseURL: base)
+                availableModels = models
+                connectionStatus = models.isEmpty
+                    ? String(localized: "Connected, but no models are loaded.")
+                    : String(localized: "Connected: \(models.count) models available.")
+            } catch {
+                connectionStatus = error.localizedDescription
+            }
+        }
+    }
+    #endif
+
+    /// Copies an exported model folder into `Application Support/MultiScan/Models/<name>` and returns the new location.
+    private static func installModelFolder(from url: URL) -> URL? {
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+        guard let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return nil }
+        let destination = support.appending(path: "MultiScan/Models/\(url.lastPathComponent)", directoryHint: .isDirectory)
+        do {
+            try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if FileManager.default.fileExists(atPath: destination.path) { try FileManager.default.removeItem(at: destination) }
+            try FileManager.default.copyItem(at: url, to: destination)
+            return destination
+        } catch {
+            print("Model install failed: \(error)")
+            return nil
+        }
+    }
+}
+#endif
 
 // MARK: - CloudKit debug tools (DEBUG builds only)
 
@@ -250,6 +425,9 @@ private struct CloudKitDebugSection: View {
 enum SettingsPane: String, CaseIterable, Identifiable {
     case importAndStorage
     case viewer
+    #if DEBUG
+    case ocrEngine
+    #endif
 
     var id: String { rawValue }
 
@@ -257,6 +435,9 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         switch self {
         case .importAndStorage: String(localized: "Import and Storage")
         case .viewer: String(localized: "Viewer")
+        #if DEBUG
+        case .ocrEngine: String(localized: "OCR Engine")
+        #endif
         }
     }
 
@@ -264,6 +445,9 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         switch self {
         case .importAndStorage: "square.and.arrow.down"
         case .viewer: "eye"
+        #if DEBUG
+        case .ocrEngine: "cpu"
+        #endif
         }
     }
 }
@@ -291,6 +475,10 @@ struct SettingsView: View {
                 ImportAndStorageSettingsView()
             case .viewer:
                 ViewerSettingsView()
+            #if DEBUG
+            case .ocrEngine:
+                OCREngineSettingsView()
+            #endif
             }
         }
         .navigationTitle(selectedPane.wrappedValue.displayName)
@@ -351,6 +539,16 @@ struct SettingsSheetView: View {
                 } label: {
                     Label("Viewer", systemImage: "eye")
                 }
+
+                #if DEBUG
+                NavigationLink {
+                    OCREngineSettingsView()
+                        .navigationTitle("OCR Engine")
+                        .navigationBarTitleDisplayMode(.inline)
+                } label: {
+                    Label("OCR Engine (Debug)", systemImage: "cpu")
+                }
+                #endif
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)

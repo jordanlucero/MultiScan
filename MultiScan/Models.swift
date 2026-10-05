@@ -21,7 +21,10 @@ nonisolated final class Page {
     var createdAt: Date = Date()
     var isDone: Bool = false
     var thumbnailData: Data?
-    var boundingBoxesData: Data? // Encoded array of CGRect from VisionKit
+
+    /// Legacy (1.x/2.0) encoded array of `CGRect` line boxes from `VNRecognizeTextRequest`.
+    /// Kept for existing rows; new imports write the richer `visionLayoutData` instead and leave this nil.
+    var boundingBoxesData: Data?
     var lastModified: Date = Date()
 
     /// User rotation in degrees (0, 90, 180, 270) - non-destructive, applied at display time
@@ -40,8 +43,8 @@ nonisolated final class Page {
     @Attribute(.externalStorage)
     var imageData: Data?
 
-    /// Rich text content stored as RTF data for CloudKit compatibility.
-    /// Pre-2.0 data is JSON-encoded AttributedString; `RichTextArchiver` sniffs the format on read and migrates lazily (every write produces RTF).
+    /// Rich text content stored as RTF (text only) or RTFD (text + inline attachments) data for CloudKit compatibility.
+    /// Pre-2.0 data is JSON-encoded AttributedString; `RichTextArchiver` sniffs the format on read and migrates lazily (every write produces RTF/RTFD).
     /// Use the `attributedText` computed property for convenient access.
     @Attribute(.externalStorage)
     var richTextData: Data?
@@ -53,6 +56,8 @@ nonisolated final class Page {
     /// Plain-text mirror of `richTextData`, kept in sync by the `attributedText` setter (and `init`).
     /// Stored as a real column so `#Predicate` full-text search runs in SQLite, Spotlight gets `textContent` without decoding RTF, and per-keystroke page filtering never touches external storage.
     ///
+    /// Inline attachments (artwork captures, tables) are *not* mirrored here: their U+FFFC placeholder characters are stripped (`String.strippingAttachmentCharacters()`), so search and statistics see only real text.
+    ///
     /// **Encrypted in CloudKit.** This is the only plaintext copy of a page's OCR output that mirrors as a readable CloudKit field — every other text/image blob is `.externalStorage`, which maps to a `CKAsset` and is encrypted by CloudKit automatically. Encryption is CloudKit-side only: locally it stays an ordinary SQLite column, so `#Predicate` search is unaffected. Do not add `#Index` here — CloudKit rejects indexes on encrypted fields.
     @Attribute(.allowsCloudEncryption)
     var plainText: String = ""
@@ -60,17 +65,46 @@ nonisolated final class Page {
     /// When `plainText` was last derived from `richTextData`. `nil` or older than `lastModified` means the mirror is stale (e.g., written by a build without this column) and is re-derived on backfill.
     var plainTextUpdatedAt: Date?
 
+    // MARK: - 2.0 additive fields (no SwiftData schema-version bump needed — see CLAUDE.md "Storage additions")
+
+    /// Structured Vision result for this page's image: paragraphs, lines, tables, and their normalized regions, encoded as a `VisionDocumentLayout` (binary plist).
+    ///
+    /// **Always written by Vision, whatever OCR engine produced the page text.** When the user picks a local transformer model (Core AI / LM Studio), Vision still runs so Smart Separate, future layout features, and the `visionTranscript` fallback have the geometry they need. External storage: a dense page can carry several hundred lines.
+    @Attribute(.externalStorage)
+    var visionLayoutData: Data?
+
+    /// Vision's plain transcript of this page's image (`DocumentObservation.Container.Text.transcript`), stored even when another engine wrote `richTextData`, so both results survive side by side. `nil` for legacy rows and for pages created before 2.0.
+    var visionTranscript: String?
+
+    /// Identifier of the OCR engine whose output became `richTextData` at import — see `OCREngineKind.provenanceIdentifier(…)` (e.g. `"vision"`, `"lmstudio:qwen2.5-vl-7b"`). `nil` for legacy rows (which were all Vision).
+    var ocrEngine: String?
+
+    /// Non-nil when this page begins a chapter / section / part. The value is the heading shown in the thumbnail sidebar, the page grid, the Digest, and exports.
+    /// Set manually (page context menu ▸ Chapter) or by `ChapterDetector` from repeated-header analysis; the user's manual edits win (`sectionTitleIsAutomatic` records which).
+    var sectionTitle: String?
+
+    /// `true` when `sectionTitle` was assigned by `ChapterDetector`, so a later automatic pass may revise it; `false` once the user edited it by hand (automatic passes then leave it alone).
+    var sectionTitleIsAutomatic: Bool = false
+
+    /// Smart Separate provenance: `0` = the page is a whole scanned image; `1` / `2` = the first (left) / second (right) half of a two-page spread the import split automatically. Display only — lets the UI explain where a page came from.
+    var splitPosition: Int = 0
+
+    /// Artwork / illustration captures cropped from this page's image and placed inline in its text. Cascade: deleting the page deletes its captures.
+    @Relationship(deleteRule: .cascade) var captures: [PageCapture]? = []
+
     #Index<Page>([\.uuid])
 
     /// Rich text accessor that encodes/decodes `richTextData` via RichTextArchiver.
     /// This is the single funnel for local text writes. Refreshes the plain-text mirror and timestamps.
+    ///
+    /// Encoding picks the format: RTF when the text has no attachments, RTFD (flattened package) when it does — see `RichTextArchiver.richTextData(from:)`.
     var attributedText: NSAttributedString {
         get {
             RichTextArchiver.attributedString(from: richTextData)
         }
         set {
-            richTextData = RichTextArchiver.rtfData(from: newValue)
-            plainText = newValue.string
+            richTextData = RichTextArchiver.richTextData(from: newValue)
+            plainText = InlineAttachments.searchablePlainText(of: newValue)
             let now = Date()
             lastModified = now
             plainTextUpdatedAt = now
@@ -78,7 +112,22 @@ nonisolated final class Page {
         }
     }
 
-    init(pageNumber: Int, text: String, imageData: Data?, originalFileName: String? = nil, boundingBoxesData: Data? = nil) {
+    /// Creates a page from OCR output.
+    /// - Parameters:
+    ///   - text: plain transcript, used for `plainText` and — when `richTextData` is nil — encoded as the page's rich text on the storage font.
+    ///   - richTextData: pre-encoded RTF/RTFD when the engine produced formatting (markdown-based transcribers). `nil` encodes `text`.
+    ///   - boundingBoxesData: legacy line boxes (new imports pass `nil` and supply `visionLayoutData`).
+    init(
+        pageNumber: Int,
+        text: String,
+        imageData: Data?,
+        originalFileName: String? = nil,
+        boundingBoxesData: Data? = nil,
+        richTextData: Data? = nil,
+        visionLayoutData: Data? = nil,
+        visionTranscript: String? = nil,
+        ocrEngine: String? = nil
+    ) {
         self.pageNumber = pageNumber
         self.imageData = imageData
         self.originalFileName = originalFileName
@@ -89,15 +138,19 @@ nonisolated final class Page {
         let now = Date()
         self.lastModified = now
         self.uuid = UUID()
-        self.plainText = text
+        self.plainText = text.strippingAttachmentCharacters()
         self.plainTextUpdatedAt = now
+        self.visionLayoutData = visionLayoutData
+        self.visionTranscript = visionTranscript
+        self.ocrEngine = ocrEngine
+        self.captures = []
         // Encode directly to avoid touching lastModified via the computed setter during init
-        self.richTextData = RichTextArchiver.rtfData(
+        self.richTextData = richTextData ?? RichTextArchiver.rtfData(
             from: NSAttributedString(string: text, attributes: [.font: PageTextStyle.storageFont])
         )
     }
 
-    /// Decode stored bounding boxes
+    /// Decode stored legacy bounding boxes (1.x/2.0 imports). New imports use `visionLayout`.
     var boundingBoxes: [CGRect] {
         guard let data = boundingBoxesData,
               let boxes = try? JSONDecoder().decode([CGRect].self, from: data) else {
@@ -106,9 +159,25 @@ nonisolated final class Page {
         return boxes
     }
 
+    /// Decodes the structured Vision layout, if this page has one (2.0+ imports).
+    var visionLayout: VisionDocumentLayout? {
+        VisionDocumentLayout.decode(visionLayoutData)
+    }
+
+    /// Non-optional captures array for convenient read access.
+    var unwrappedCaptures: [PageCapture] {
+        captures ?? []
+    }
+
     /// The localized "Page N" label used by thumbnails, the page grid, rotors, and accessibility labels.
     var title: String {
         String(localized: "Page \(pageNumber)", comment: "Thumbnail label with page number")
+    }
+
+    /// The number printed on the physical page, per the project's numbering settings (`PageNumbering`), e.g. "iv" for front matter or "17" once counting starts. `nil` when the project hasn't configured printed numbering.
+    var printedPageLabel: String? {
+        guard let document else { return nil }
+        return PageNumbering.printedLabel(forProjectPage: pageNumber, in: document)
     }
 }
 
@@ -141,6 +210,14 @@ nonisolated final class Document {
     /// Optional so legacy rows fall back to the derived page dates in `lastModifiedDate`.
     var lastModified: Date?
 
+    // MARK: - 2.0 additive fields
+
+    /// Printed page numbering plan (`PrintedNumberingPlan`, JSON): ranges of project pages with a numbering style and start value — typically Roman front matter from page 1 and Arabic numbering from the first body page, optionally more (an appendix restarting at 1). `nil` = not configured; the UI then shows project page numbers only. One small blob rather than scattered scalars so a CloudKit merge can never mix two devices' half-plans.
+    var printedNumberingData: Data?
+
+    /// `true` when `name` was proposed by the on-device model (`ProjectTitleSuggester`) and the user hasn't renamed it since. Renaming by hand clears it, so an automatic pass never overwrites a user's title.
+    var isAutoTitled: Bool = false
+
     #Index<Document>([\.uuid])
 
     init(name: String, totalPages: Int = 0) {
@@ -159,6 +236,29 @@ nonisolated final class Document {
     /// Non-optional pages array for convenient access. Returns empty array if nil.
     var unwrappedPages: [Page] {
         pages ?? []
+    }
+
+    /// Pages sorted by page number — the order every list, export, and the Digest show.
+    var sortedPages: [Page] {
+        unwrappedPages.sorted { $0.pageNumber < $1.pageNumber }
+    }
+
+    /// Typed view of `printedNumberingData`. Setting `nil` turns printed numbering off.
+    var printedNumbering: PrintedNumberingPlan? {
+        get { PrintedNumberingPlan.decode(printedNumberingData) }
+        set { printedNumberingData = newValue?.encoded() }
+    }
+
+    /// Every artwork capture in the project that is still flagged as a draft, in page order — the export panel lists these as "revisit this page" reminders.
+    var draftCaptures: [PageCapture] {
+        sortedPages.flatMap { page in
+            page.unwrappedCaptures.filter(\.isDraft).sorted { $0.createdAt < $1.createdAt }
+        }
+    }
+
+    /// Pages that begin a chapter/section, in page order.
+    var chapterStartPages: [Page] {
+        sortedPages.filter { $0.sectionTitle != nil }
     }
 
     // MARK: - Computed Properties
@@ -200,6 +300,12 @@ nonisolated final class Document {
             if let boundingBoxesData = page.boundingBoxesData {
                 totalBytes += Int64(boundingBoxesData.count)
             }
+            if let visionLayoutData = page.visionLayoutData {
+                totalBytes += Int64(visionLayoutData.count)
+            }
+            for capture in page.unwrappedCaptures {
+                totalBytes += Int64(capture.imageData?.count ?? 0) + Int64(capture.thumbnailData?.count ?? 0)
+            }
         }
         if let textExportCache = textExportCache {
             totalBytes += Int64(textExportCache.count)
@@ -208,3 +314,12 @@ nonisolated final class Document {
     }
 }
 
+// MARK: - Attachment placeholder stripping
+
+nonisolated extension String {
+    /// Removes the U+FFFC object-replacement characters that stand in for inline attachments (artwork captures, tables) in `NSAttributedString.string`, so plain-text mirrors, statistics, search, and Smart Cleanup only ever see real text.
+    func strippingAttachmentCharacters() -> String {
+        guard contains("\u{FFFC}") else { return self }
+        return replacingOccurrences(of: "\u{FFFC}", with: "")
+    }
+}

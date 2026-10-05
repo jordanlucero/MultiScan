@@ -66,6 +66,21 @@ struct PageAdjustmentToggles: View {
     }
 }
 
+/// "Capture Artwork…" — opens the crop overlay for a page. Shown wherever a page is in context (viewer context menu, page context menu, Image menu, iPhone More menu).
+struct CaptureArtworkButton: View {
+    let page: Page?
+    let action: () -> Void
+    var showsKeyboardShortcut = false
+
+    var body: some View {
+        Button(action: action) {
+            Label("Capture Artwork…", systemImage: "crop")
+        }
+        .keyboardShortcut(showsKeyboardShortcut ? KeyboardShortcut("A", modifiers: [.command, .shift]) : nil)
+        .disabled(page == nil)
+    }
+}
+
 // MARK: - Review
 
 /// Marks the current page reviewed / not reviewed.
@@ -102,6 +117,56 @@ struct PageOrderButton: View {
     }
 }
 
+// MARK: - Chapters
+
+/// "Set Chapter Title…" / "Edit Chapter Title…" + "Remove Chapter Mark". The editing alert is owned by whoever presents these (`chapterTitleEditor`).
+struct ChapterMenuItems: View {
+    let page: Page?
+    let onEdit: () -> Void
+
+    var body: some View {
+        let hasChapter = page?.sectionTitle != nil
+        Button(action: onEdit) {
+            Label(hasChapter ? "Edit Chapter Title…" : "Mark Chapter Start…", systemImage: "bookmark")
+        }
+        .disabled(page == nil)
+
+        if hasChapter {
+            Button {
+                page?.sectionTitle = nil
+                page?.sectionTitleIsAutomatic = false
+                page?.document?.lastModified = Date()
+            } label: {
+                Label("Remove Chapter Mark", systemImage: "bookmark.slash")
+            }
+        }
+    }
+}
+
+extension View {
+    /// The one chapter-title alert: a text field prefilled with the current title. Saving writes `sectionTitle` and marks it manual so automatic detection never overrides it.
+    func chapterTitleEditor(isPresented: Binding<Bool>, page: Page?, draft: Binding<String>) -> some View {
+        alert(
+            page?.sectionTitle == nil ? "Mark Chapter Start" : "Edit Chapter Title",
+            isPresented: isPresented
+        ) {
+            TextField("Chapter title", text: draft)
+            Button("Save") {
+                let trimmed = draft.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard let page, !trimmed.isEmpty else { return }
+                page.sectionTitle = trimmed
+                page.sectionTitleIsAutomatic = false
+                page.document?.lastModified = Date()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            if let page {
+                Text("Page \(page.pageNumber) will begin this chapter in the sidebar, the Digest, and exports.")
+            }
+        }
+    }
+}
+
 // MARK: - Delete
 
 extension View {
@@ -122,7 +187,7 @@ extension View {
 
 // MARK: - Page Context Menu
 
-/// The one per-page context menu, shared by the thumbnail sidebar (macOS + iPad) and the iPhone page grid: info header, export, rotation, adjustments, move up/down, insert (iOS), delete — with its confirmation dialog.
+/// The one per-page context menu, shared by the thumbnail sidebar (macOS + iPad) and the iPhone page grid: info header, export/copy, capture, chapter, rotation, adjustments, move up/down, insert (iOS), delete — with its confirmation dialog and the chapter editor.
 struct PageContextMenu: ViewModifier {
     let page: Page
     let document: Document
@@ -131,9 +196,12 @@ struct PageContextMenu: ViewModifier {
     /// Insert-at-position callbacks; the Int is the page number to insert after (0 = at the beginning). Shown on iOS only — macOS appends through the File menu.
     var onInsertFromPhotos: ((Int) -> Void)?
     var onInsertFromFiles: ((Int) -> Void)?
+    var onCaptureArtwork: ((Page) -> Void)?
 
     @Environment(\.modelContext) private var modelContext
     @State private var showDeleteConfirmation = false
+    @State private var isEditingChapter = false
+    @State private var chapterDraft = ""
 
     /// Whether this page has a neighbor to swap with (adjacent page number exists)
     private var canMoveUp: Bool {
@@ -150,16 +218,43 @@ struct PageContextMenu: ViewModifier {
                 // Page info header (non-interactive)
                 Section {
                     Text("Page \(page.pageNumber) of \(document.totalPages)")
+                    if let printed = page.printedPageLabel {
+                        Text("Printed page \(printed)", comment: "Context menu header: the number printed on the physical page")
+                            .foregroundStyle(.secondary)
+                    }
                     if let filename = page.originalFileName {
                         Text(filename)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let engine = page.ocrEngine, engine != "vision" {
+                        Text("Recognized by \(engine)", comment: "Context menu header: OCR engine that produced the page text")
                             .foregroundStyle(.secondary)
                     }
                 }
 
                 Section {
-                    ShareLink(item: RichText(page.attributedText),
+                    // `exportableText` swaps capture references for real images and tables for native tables (macOS) before anything leaves the app.
+                    ShareLink(item: RichText(TextExporter.exportableText(for: page), suggestedName: "\(document.name) — \(page.title)"),
                               preview: SharePreview(String(localized: "Page \(page.pageNumber) Text"))) {
-                        Label("Export Page Text…", systemImage: "square.and.arrow.up")
+                        Label("Share Page Text…", systemImage: "square.and.arrow.up")
+                    }
+                    Button {
+                        RichText(TextExporter.exportableText(for: page), suggestedName: "\(document.name) — \(page.title)").copyToPasteboard()
+                    } label: {
+                        Label("Copy Page Text", systemImage: "doc.on.doc")
+                    }
+                }
+
+                if let onCaptureArtwork {
+                    Section {
+                        CaptureArtworkButton(page: page) { onCaptureArtwork(page) }
+                    }
+                }
+
+                Section {
+                    ChapterMenuItems(page: page) {
+                        chapterDraft = page.sectionTitle ?? ""
+                        isEditingChapter = true
                     }
                 }
 
@@ -211,6 +306,7 @@ struct PageContextMenu: ViewModifier {
                     navigationState.deletePage(page, modelContext: modelContext)
                 }
             }
+            .chapterTitleEditor(isPresented: $isEditingChapter, page: page, draft: $chapterDraft)
     }
 
     #if os(iOS)
@@ -240,14 +336,16 @@ extension View {
         in document: Document,
         navigationState: NavigationState,
         onInsertFromPhotos: ((Int) -> Void)? = nil,
-        onInsertFromFiles: ((Int) -> Void)? = nil
+        onInsertFromFiles: ((Int) -> Void)? = nil,
+        onCaptureArtwork: ((Page) -> Void)? = nil
     ) -> some View {
         modifier(PageContextMenu(
             page: page,
             document: document,
             navigationState: navigationState,
             onInsertFromPhotos: onInsertFromPhotos,
-            onInsertFromFiles: onInsertFromFiles
+            onInsertFromFiles: onInsertFromFiles,
+            onCaptureArtwork: onCaptureArtwork
         ))
     }
 }
@@ -261,6 +359,17 @@ struct ExportProjectTextButton: View {
     var body: some View {
         Button(action: action) {
             Label("Export Project Text…", systemImage: "square.and.arrow.up.on.square")
+        }
+    }
+}
+
+/// Opens the Digest reading view.
+struct OpenDigestButton: View {
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label("Read in Digest", systemImage: "book.pages")
         }
     }
 }

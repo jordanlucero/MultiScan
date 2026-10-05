@@ -4,11 +4,16 @@
 //
 //  Print-panel-style export view with preview and options.
 //
-//  Cache-based export.
+//  Cache-based export. Three ways out (2.1):
+//  - **Copy** puts RTF/RTFD + plain text on the pasteboard — the fastest path into a word processor.
+//  - **Save As…** uses `fileExporter` with a real default filename (the project's name) and the richest format the content supports (RTFD when illustrations are embedded, RTF otherwise).
+//  - **Share** hands the share sheet *data*, not a temp file, so Messages/Notes/Mail receive text (see `RichTextSupport.swift`).
+//  The panel also surfaces draft-capture reminders so the user sees what still needs a better scan before the text leaves the app.
 //
 
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 struct ExportPanelView: View {
     /// Document to export (enables cache-based export for performance)
@@ -21,6 +26,8 @@ struct ExportPanelView: View {
     @State private var isLoading = false
     @State private var exportTask: Task<Void, Never>?
     @State private var debounceTask: Task<Void, Never>?
+    @State private var isSaving = false
+    @State private var showCopyConfirmation = false
 
     /// Convenience accessor for page count display
     private var pageCount: Int { document.unwrappedPages.count }
@@ -33,6 +40,14 @@ struct ExportPanelView: View {
             .onDisappear {
                 exportTask?.cancel()
                 debounceTask?.cancel()
+            }
+            .fileExporter(
+                isPresented: $isSaving,
+                document: RichTextFileDocument(richText: exportResult.richText, contentType: exportResult.richText.preferredFileType),
+                contentType: exportResult.richText.preferredFileType,
+                defaultFilename: exportResult.richText.fileBaseName
+            ) { result in
+                if case .failure(let error) = result { print("Export save failed: \(error)") }
             }
     }
 
@@ -51,7 +66,7 @@ struct ExportPanelView: View {
 
                 Divider()
 
-                ExportOptionsPane(settings: settings)
+                ExportOptionsPane(settings: settings, draftReminders: exportResult.draftReminders)
             }
             .navigationTitle("Export")
             .navigationBarTitleDisplayMode(.inline)
@@ -63,10 +78,28 @@ struct ExportPanelView: View {
                         Image(systemName: "xmark")
                     }
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    ShareLink(item: exportResult.richText, preview: SharePreview("Project Text")) {
+                ToolbarItemGroup(placement: .primaryAction) {
+                    Button {
+                        copyToPasteboard()
+                    } label: {
+                        Label(showCopyConfirmation ? "Copied" : "Copy", systemImage: showCopyConfirmation ? "checkmark" : "doc.on.doc")
+                            .contentTransition(.symbolEffect(.replace))
+                    }
+                    .disabled(exportResult.plainText.isEmpty)
+                    .accessibilityLabel("Copy exported text")
+
+                    Button {
+                        isSaving = true
+                    } label: {
+                        Label("Save", systemImage: "square.and.arrow.down")
+                    }
+                    .disabled(exportResult.plainText.isEmpty)
+                    .accessibilityLabel("Save exported text to Files")
+
+                    ShareLink(item: exportResult.richText, preview: SharePreview(exportResult.richText.suggestedName)) {
                         Image(systemName: "square.and.arrow.up")
                     }
+                    .disabled(exportResult.plainText.isEmpty)
                     .buttonStyle(.glassProminent)
                 }
             }
@@ -84,8 +117,15 @@ struct ExportPanelView: View {
 
             Divider()
 
-            ExportOptionsPane(settings: settings, richText: exportResult.richText)
-                .frame(width: 280)
+            ExportOptionsPane(
+                settings: settings,
+                draftReminders: exportResult.draftReminders,
+                richText: exportResult.richText,
+                isCopyConfirmed: showCopyConfirmation,
+                onCopy: copyToPasteboard,
+                onSave: { isSaving = true }
+            )
+            .frame(width: 300)
         }
         #endif
     }
@@ -121,6 +161,15 @@ struct ExportPanelView: View {
 
             guard !Task.isCancelled else { return }
             exportResult = result
+        }
+    }
+
+    private func copyToPasteboard() {
+        exportResult.richText.copyToPasteboard()
+        showCopyConfirmation = true
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            showCopyConfirmation = false
         }
     }
 }
@@ -183,30 +232,79 @@ struct ExportPreviewPane: View {
 
 struct ExportOptionsPane: View {
     @Bindable var settings: ExportSettings
+    let draftReminders: [String]
     #if os(macOS)
     let richText: RichText
+    let isCopyConfirmed: Bool
+    let onCopy: () -> Void
+    let onSave: () -> Void
     #endif
 
     var body: some View {
         #if os(iOS)
         ScrollView {
-            ExportOptionControls(settings: settings)
-                .padding()
+            VStack(alignment: .leading, spacing: 16) {
+                DraftReminderNotice(reminders: draftReminders)
+                ExportOptionControls(settings: settings)
+            }
+            .padding()
         }
-        .frame(maxHeight: 320)
+        .frame(maxHeight: 360)
         #else
         VStack(alignment: .leading, spacing: 20) {
             Text("Export Options")
                 .font(.headline)
 
-            ExportOptionControls(settings: settings)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    DraftReminderNotice(reminders: draftReminders)
+                    ExportOptionControls(settings: settings)
+                }
+            }
 
-            Spacer()
+            Spacer(minLength: 0)
 
-            ExportActionButtons(richText: richText)
+            ExportActionButtons(richText: richText, isCopyConfirmed: isCopyConfirmed, onCopy: onCopy, onSave: onSave)
         }
         .padding()
         #endif
+    }
+}
+
+/// "You flagged N illustrations as drafts" — shown above the options whenever the project has draft captures.
+struct DraftReminderNotice: View {
+    let reminders: [String]
+
+    var body: some View {
+        if !reminders.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                Label(
+                    reminders.count == 1
+                        ? String(localized: "1 illustration is still a draft", comment: "Export panel notice")
+                        : String(localized: "\(reminders.count) illustrations are still drafts", comment: "Export panel notice"),
+                    systemImage: "flag.fill"
+                )
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.orange)
+
+                ForEach(reminders.prefix(6), id: \.self) { reminder in
+                    Text(reminder)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if reminders.count > 6 {
+                    Text("and \(reminders.count - 6) more", comment: "Export panel: overflow count of draft reminders")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Text("Revisit those pages for a higher-quality scan, then recapture the illustration. The exported text lists them at the end.")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(10)
+            .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+            .accessibilityElement(children: .combine)
+        }
     }
 }
 
@@ -252,14 +350,28 @@ struct ExportOptionControls: View {
             }
             .disabled(!settings.createVisualSeparation)
             .opacity(settings.createVisualSeparation ? 1.0 : 0.5)
+
+            // Content
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Content")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                Toggle("Chapter headings", isOn: $settings.includeChapterHeadings)
+                Toggle("Embed illustrations", isOn: $settings.includeCaptures)
+                Toggle("Draft reminders", isOn: $settings.includeDraftReminders)
+            }
         }
     }
 }
 
 #if os(macOS)
-/// Separate so toggling an export option doesn't rebuild the ShareLink.
+/// Separate so toggling an export option doesn't rebuild the buttons.
 struct ExportActionButtons: View {
     let richText: RichText
+    let isCopyConfirmed: Bool
+    let onCopy: () -> Void
+    let onSave: () -> Void
 
     @Environment(\.dismiss) private var dismiss
 
@@ -272,10 +384,27 @@ struct ExportActionButtons: View {
 
             Spacer()
 
-            // TODO: Dismiss panel after successful share. SwiftUI's ShareLink has no completion callback as of now (double-check)
-            ShareLink(item: richText, preview: SharePreview("Project Text")) {
-                Text("Export…")
+            Button {
+                onCopy()
+            } label: {
+                Label(isCopyConfirmed ? "Copied" : "Copy", systemImage: isCopyConfirmed ? "checkmark" : "doc.on.doc")
+                    .contentTransition(.symbolEffect(.replace))
             }
+            .disabled(richText.plainText.isEmpty)
+            .keyboardShortcut("c", modifiers: [.command])
+            .help("Copy the exported text to the clipboard")
+
+            Button("Save As…") {
+                onSave()
+            }
+            .disabled(richText.plainText.isEmpty)
+            .keyboardShortcut("s", modifiers: [.command])
+            .help("Save the exported text as a file")
+
+            ShareLink(item: richText, preview: SharePreview(richText.suggestedName)) {
+                Text("Share…")
+            }
+            .disabled(richText.plainText.isEmpty)
             .keyboardShortcut(.defaultAction)
         }
         .padding(.top, 8)
@@ -332,6 +461,7 @@ private struct ExportPanelPreviewHelper: View {
             let page = Page(pageNumber: i, text: "", imageData: nil)
             page.attributedText = richText
             page.originalFileName = locale == "en" ? "page-\(i).jpg" : "pagina-\(i).jpg"
+            if i == 2 { page.sectionTitle = locale == "en" ? "Chapter Two" : "Capítulo dos" }
             document.pages?.append(page)
         }
 

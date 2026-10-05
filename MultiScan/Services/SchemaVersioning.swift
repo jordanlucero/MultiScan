@@ -38,6 +38,11 @@
 //  |         | AttributedString to RTF (TextKit 2 engine). Same property/   |
 //  |         | type, so the SwiftData schema is unchanged — but v1 apps     |
 //  |         | cannot decode RTF text and must not write over it.           |
+//  | 3       | 2.1: Page.richTextData may now be *RTFD* (flattened package) |
+//  |         | when a page carries inline attachments (artwork captures,    |
+//  |         | tables). Pages without attachments stay RTF. A 2.0 build     |
+//  |         | decodes RTFD as RTF → empty text → could save it back, so   |
+//  |         | 2.0 must be gated. New PageCapture model + additive fields.  |
 //
 
 import Foundation
@@ -68,7 +73,14 @@ nonisolated enum SchemaVersioning {
     /// Version 2 (app 2.0): rich text data format changed to RTF. Older app builds
     /// decode `richTextData` as JSON and would see empty text (and could overwrite
     /// it), so they must be gated behind the "Update Required" flow.
-    static let currentVersion = 2
+    ///
+    /// Version 3 (app 2.1): `richTextData` may be RTFD (a flattened `FileWrapper`
+    /// package) for pages with inline attachments. 2.0 builds call the RTF decoder on
+    /// it, get an empty string, and would write that back — the same hazard v2 guarded
+    /// against, so the gate moves up. Pages without attachments are still plain RTF,
+    /// and the SwiftData/CloudKit schema change (new `PageCapture` record type, new
+    /// optional/defaulted fields) is additive and needs no gate of its own.
+    static let currentVersion = 3
 
     // ────────────────────────────────────────────────────────────────────────
     // MARK: Storage Keys
@@ -216,7 +228,7 @@ func previewContainer() -> ModelContainer {
         cloudKitDatabase: .none
     )
     return try! ModelContainer(
-        for: Document.self, Page.self, SchemaMetadata.self,
+        for: Document.self, Page.self, PageCapture.self, SchemaMetadata.self,
         configurations: config
     )
 }

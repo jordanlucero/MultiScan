@@ -10,6 +10,10 @@
 //
 //  The toolbar is declared once (`reviewToolbar`) and attached to the detail content in both layouts. Items whose presence depends on the size class use `.hidden(_:)`; page navigation carries `.visibilityPriority(.high)` so it outlasts the rest in a narrow window; only genuinely per-OS item sets (discrete Mac buttons vs. the iOS "More" menu) are split with `#if os`.
 //
+//  ## 2.1 sessions owned here
+//  - **Artwork capture** (`captureSession`): opened from the viewer's context menu (seeded at the pointer), the Image/More menu, a page's context menu, or an existing capture's "Recapture…". Presented as a sheet (regular) or full-screen cover (compact). On completion the reference attachment goes into the live editor (`PageTextController.insertCapture`) when the captured page is the current one, or into the page's stored text otherwise.
+//  - **Digest** (`showDigest`), **Page Numbering** (`showPageNumbering`), and the current page's **chapter editor** (`showChapterEditor`) — all reachable from the menu bar through `FocusedValues`.
+//
 
 import SwiftUI
 import SwiftData
@@ -48,6 +52,14 @@ struct ReviewView: View {
     @State private var showAddFromFiles = false
     @State private var selectedPhotos: [PhotosPickerItem] = []
     @State private var isAddingPages = false
+
+    // 2.1 sessions
+    @State private var captureSession: ArtworkCaptureSession?
+    @State private var showArtworkCapture = false   // menu-bar trigger; opens `captureSession` centered on the current page
+    @State private var showDigest = false
+    @State private var showPageNumbering = false
+    @State private var showChapterEditor = false
+    @State private var chapterTitleDraft = ""
 
     /// Page number to insert new pages after (nil = append to end). Set by the iOS insert menus.
     @State private var insertAfterPageNumber: Int?
@@ -93,6 +105,10 @@ struct ReviewView: View {
             .focusedSceneValue(\.showAddFromPhotos, $showAddFromPhotos)
             .focusedSceneValue(\.showAddFromFiles, $showAddFromFiles)
             .focusedSceneValue(\.showDeletePageConfirmation, $showDeletePageConfirmation)
+            .focusedSceneValue(\.showArtworkCapture, $showArtworkCapture)
+            .focusedSceneValue(\.showDigest, $showDigest)
+            .focusedSceneValue(\.showChapterEditor, $showChapterEditor)
+            .focusedSceneValue(\.showPageNumbering, $showPageNumbering)
             .sheet(isPresented: $showExportPanel, onDismiss: restoreTextSheet) {
                 ExportPanelView(document: document)
             }
@@ -109,6 +125,22 @@ struct ReviewView: View {
                     }
                 )
             }
+            .sheet(isPresented: $showPageNumbering, onDismiss: restoreTextSheet) {
+                PageNumberingSettingsView(document: document)
+            }
+            .modifier(DigestPresentation(isPresented: $showDigest, isCompact: isCompact, onDismiss: restoreTextSheet) {
+                DigestView(document: document)
+            })
+            .modifier(CapturePresentation(session: $captureSession, isCompact: isCompact, onDismiss: restoreTextSheet) { session in
+                ArtworkCaptureView(
+                    session: session,
+                    onCancel: { captureSession = nil },
+                    onCapture: { capture, isNew in
+                        finishCapture(capture, isNew: isNew, session: session)
+                        captureSession = nil
+                    }
+                )
+            })
             .fileImporter(
                 isPresented: $showAddFromFiles,
                 allowedContentTypes: [.image, .pdf, .folder],
@@ -118,6 +150,16 @@ struct ReviewView: View {
             }
             .deletePageConfirmation(isPresented: $showDeletePageConfirmation, pageNumber: navigationState.currentPageNumber ?? 0) {
                 navigationState.deleteCurrentPage(modelContext: modelContext)
+            }
+            .chapterTitleEditor(isPresented: $showChapterEditor, page: navigationState.currentPage, draft: $chapterTitleDraft)
+            .onChange(of: showChapterEditor) { _, presenting in
+                if presenting { chapterTitleDraft = navigationState.currentPage?.sectionTitle ?? "" }
+            }
+            .onChange(of: showArtworkCapture) { _, requested in
+                // Menu bar / keyboard: open the overlay centered on the current page.
+                guard requested else { return }
+                showArtworkCapture = false
+                if let page = navigationState.currentPage { beginCapture(on: page, at: nil) }
             }
             .onAppear(perform: start)
             .onDisappear {
@@ -139,6 +181,15 @@ struct ReviewView: View {
             }
             .onChange(of: showExportPanel) { _, showing in
                 if showing { showTextSheet = false }
+            }
+            .onChange(of: showDigest) { _, showing in
+                if showing { textController?.saveNow(); showTextSheet = false }
+            }
+            .onChange(of: showPageNumbering) { _, showing in
+                if showing { showTextSheet = false }
+            }
+            .onChange(of: captureSession == nil) { _, isNil in
+                if !isNil { showTextSheet = false }
             }
             .onChange(of: showProgress) { _, showing in
                 // The popover presents as a sheet on iPhone, where the text sheet must step aside.
@@ -188,7 +239,10 @@ struct ReviewView: View {
                 onInsertFromFiles: { insertAfter in
                     insertAfterPageNumber = insertAfter
                     showAddFromFiles = true
-                }
+                },
+                onCaptureArtwork: { page in beginCapture(on: page, at: nil) },
+                onOpenDigest: { showDigest = true },
+                onEditPageNumbering: { showPageNumbering = true }
             )
             .navigationSplitViewColumnWidth(min: 150, ideal: 200, max: 400)
         } detail: {
@@ -220,6 +274,13 @@ struct ReviewView: View {
                         },
                         onAddFiles: { insertAfter, urls in
                             Task { await addPages(fileURLs: urls, insertAfter: insertAfter) }
+                        },
+                        onCaptureArtwork: { page in
+                            // The grid dismisses itself first; present the capture once it is gone.
+                            Task { @MainActor in
+                                try? await Task.sleep(for: .milliseconds(350))
+                                beginCapture(on: page, at: nil)
+                            }
                         }
                     )
                 }
@@ -233,7 +294,9 @@ struct ReviewView: View {
     /// The image viewer with the title, toolbar, and rotors — the detail column of the split view and the root of the compact stack.
     @ViewBuilder
     private var detailContent: some View {
-        let viewer = ImageViewer(navigationState: navigationState)
+        let viewer = ImageViewer(navigationState: navigationState, onCaptureArtwork: { point in
+            if let page = navigationState.currentPage { beginCapture(on: page, at: point) }
+        })
             // Onscreen awareness: lets Siri/Apple Intelligence refer to "this page".
             .appEntityIdentifier(currentPageEntityIdentifier)
             .toolbarRole(.editor)
@@ -332,12 +395,6 @@ struct ReviewView: View {
 
         #if os(iOS)
         // Compact width has no thumbnail sidebar; the page grid sheet stands in for it.
-        //ToolbarItem(placement: .primaryAction) {
-        //    Button { showPageGrid = true } label: {
-        //        Label("Pages", systemImage: "square.grid.3x3")
-        //    }
-        //}
-        // not in iOS?? .hidden(!isCompact)
         if isCompact {
             ToolbarItem(placement: .primaryAction) {
                 Button { showPageGrid = true } label: {
@@ -431,15 +488,32 @@ struct ReviewView: View {
 
             Divider()
 
-            // Image adjustments
+            // Image adjustments + artwork capture
             if let page = navigationState.currentPage {
                 Section("Image") {
                     PageRotationButtons(page: page)
                     PageAdjustmentToggles(page: page)
+                    CaptureArtworkButton(page: page) { beginCapture(on: page, at: nil) }
+                }
+
+                Divider()
+
+                Section("Chapter") {
+                    ChapterMenuItems(page: page) { showChapterEditor = true }
                 }
 
                 Divider()
             }
+
+            // Project
+            Section("Project") {
+                OpenDigestButton { showDigest = true }
+                Button { showPageNumbering = true } label: {
+                    Label("Page Numbering…", systemImage: "number")
+                }
+            }
+
+            Divider()
 
             // Panels
             if !isCompact {
@@ -511,14 +585,22 @@ struct ReviewView: View {
     private func loadTextController(for page: Page?) {
         guard textController?.page !== page else { return }
         textController?.detach()
-        textController = page.map { PageTextController(page: $0) }
+        textController = page.map(makeTextController)
         scheduleCleanupAnalysis()
     }
 
-    /// Rebuilds the controller on the page's stored text after it was rewritten behind the editor's back (batch Smart Cleanup).
+    /// Rebuilds the controller on the page's stored text after it was rewritten behind the editor's back (batch Smart Cleanup, a capture appended to stored text).
     private func reloadTextController() {
         textController?.detach()
-        textController = navigationState.currentPage.map { PageTextController(page: $0) }
+        textController = navigationState.currentPage.map(makeTextController)
+    }
+
+    private func makeTextController(for page: Page) -> PageTextController {
+        let controller = PageTextController(page: page)
+        controller.onRecaptureRequested = { capture in
+            beginCapture(on: capture.page ?? page, at: nil, recapturing: capture)
+        }
+        return controller
     }
 
     private func saveNow() {
@@ -529,6 +611,36 @@ struct ReviewView: View {
 
     private func restoreTextSheet() {
         showTextSheet = true
+    }
+
+    // MARK: - Artwork capture
+
+    /// Opens the capture overlay for `page`, seeded at `point` (normalized, upper-left) or the page's center.
+    private func beginCapture(on page: Page, at point: CGPoint?, recapturing capture: PageCapture? = nil) {
+        textController?.saveNow()
+        captureSession = ArtworkCaptureSession(page: page, seedPoint: point, existingCapture: capture)
+    }
+
+    /// Puts the finished capture into the page text — through the live editor when it is the current page (undoable), or by appending to the stored text otherwise.
+    private func finishCapture(_ capture: PageCapture, isNew: Bool, session: ArtworkCaptureSession) {
+        let page = session.page
+        if let textController, textController.page === page {
+            if isNew {
+                textController.insertCapture(capture)
+            } else {
+                textController.captureDidChange(capture)
+            }
+        } else if isNew {
+            CaptureService.appendAttachmentToStoredText(for: capture, on: page)
+            if navigationState.currentPage === page { reloadTextController() }
+        } else {
+            CaptureImageStore.shared.register(capture)
+        }
+        AccessibilityNotification.Announcement(
+            isNew
+                ? String(localized: "Illustration captured and placed in the page text.")
+                : String(localized: "Illustration recaptured.")
+        ).post()
     }
 
     // MARK: - Smart Cleanup
@@ -614,6 +726,52 @@ struct ReviewView: View {
     }
 }
 
+// MARK: - Presentation helpers
+
+/// Digest: full-screen on iPhone, a large sheet elsewhere.
+private struct DigestPresentation<Digest: View>: ViewModifier {
+    @Binding var isPresented: Bool
+    let isCompact: Bool
+    let onDismiss: () -> Void
+    @ViewBuilder let digest: () -> Digest
+
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        if isCompact {
+            content.fullScreenCover(isPresented: $isPresented, onDismiss: onDismiss, content: digest)
+        } else {
+            content.sheet(isPresented: $isPresented, onDismiss: onDismiss) {
+                digest().presentationSizing(.page)
+            }
+        }
+        #else
+        content.sheet(isPresented: $isPresented, onDismiss: onDismiss, content: digest)
+        #endif
+    }
+}
+
+/// Artwork capture: full-screen on iPhone (the crop gesture wants the whole screen), a sheet elsewhere.
+private struct CapturePresentation<Overlay: View>: ViewModifier {
+    @Binding var session: ArtworkCaptureSession?
+    let isCompact: Bool
+    let onDismiss: () -> Void
+    @ViewBuilder let makeOverlay: (ArtworkCaptureSession) -> Overlay
+
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        if isCompact {
+            content.fullScreenCover(item: $session, onDismiss: onDismiss, content: makeOverlay)
+        } else {
+            content.sheet(item: $session, onDismiss: onDismiss) { session in
+                makeOverlay(session).presentationSizing(.page)
+            }
+        }
+        #else
+        content.sheet(item: $session, onDismiss: onDismiss, content: makeOverlay)
+        #endif
+    }
+}
+
 // MARK: - Accessibility Rotors
 
 /// Both rotors derive from one sorted array
@@ -634,6 +792,13 @@ private struct PageRotors: ViewModifier {
                 // `pages` is already sorted, so filtering preserves page order.
                 ForEach(pages.filter { !$0.isDone }) { page in
                     AccessibilityRotorEntry(page.title, id: page.pageNumber) {
+                        onSelect(page.pageNumber)
+                    }
+                }
+            }
+            .accessibilityRotor("Chapters") {
+                ForEach(pages.filter { $0.sectionTitle != nil }) { page in
+                    AccessibilityRotorEntry(page.sectionTitle ?? page.title, id: page.pageNumber) {
                         onSelect(page.pageNumber)
                     }
                 }

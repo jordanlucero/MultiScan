@@ -28,11 +28,15 @@ MultiScan is a multiplatform SwiftUI application (macOS, iOS, iPadOS) that uses 
 8. **Services/AppModelContainer.swift / ProjectStore.swift / SpotlightIndexer.swift / AppRouter.swift**: process-wide container (+ post-load maintenance), read-side model actor, Spotlight reconciler, deep-link router
 9. **Services/ProjectImportPipeline.swift / OCRService.swift / PDFImportService.swift / PlatformImage.swift**: the one import path (file/folder/Photos scanning lives in the pipeline), OCR and PDF rendering as stateless `nonisolated enum`s with `@concurrent` work, and the single image codec/orientation utility (HEIC/JPEG encoding, thumbnails, EXIF + rotation)
 10. **Services/Preferences.swift**: `DefaultsKey` (the `@AppStorage` keys shared across files) plus the `@Observable` UserDefaults-backed `ExportSettings` (→ `ExportOptions` value) and `NavigationSettings`
+11. **2.1 OCR layer** — `Services/OCREngine.swift` (`OCREngineKind`, `OCREngineConfiguration`, `OCREngineSettings.shared`), `Services/VisionDocumentRecognizer.swift` (`RecognizeDocumentsRequest` → `VisionDocumentLayout`), `Services/ModelTranscriber.swift` (Core AI / LM Studio transcribers), `Services/MarkdownTranscriptConverter.swift` (model markdown → attributed text), `Services/PageSplitter.swift` (Smart Separate). See "OCR Engines & Smart Separate (2.1)".
+12. **2.1 structure** — `PageCapture.swift` (artwork captures, `@Model`), `Services/InlineAttachments.swift` (capture/table reference attachments, `TextTableModel`), `Views/TextKit/AttachmentViewProviders.swift` (TextKit 2 view providers + `CaptureImageStore`), `Views/ArtworkCaptureView.swift` (crop overlay + `CaptureService`), `Services/ChapterDetector.swift`, `Services/PageNumbering.swift` (+ `Views/PageNumberingSettingsView.swift`), `Services/ProjectTitleSuggester.swift` (Foundation Models), `Views/DigestView.swift` (reading mode), `Views/PageStatusFilterMenu.swift` (shared filter control)
 
 ### Data Models
 - **Document**: Container for pages with metadata (name, emoji, storage size). Uses optional `pages` relationship with `unwrappedPages` accessor for CloudKit compatibility.
 - **Page**: Individual page with image, rich text, thumbnails, and display settings. All properties have default values for CloudKit sync.
+- **PageCapture** (2.1): an artwork/illustration crop of a page image placed inline in that page's text — pixels (external storage), 400 px thumbnail, source rect (four scalars), `isDraft`, caption. `Page.captures` cascades. The page text carries only a tiny *reference* attachment; see "Inline Attachments (2.1)".
 - **2.x additive fields** (no schema-version bump): `Document.uuid`, `Document.lastModified`, `Page.uuid`, `Page.plainText` (stored mirror of the RTF, replaces the old computed decode), `Page.plainTextUpdatedAt`. See "Storage additions (2.x)".
+- **2.1 additive fields**: `Page.visionLayoutData` / `visionTranscript` / `ocrEngine` / `sectionTitle` / `sectionTitleIsAutomatic` / `splitPosition` / `captures`; `Document.printedNumberingStartPage` / `printedNumberingStartValue` / `frontMatterNumberingStyle` / `isAutoTitled`. See "Storage additions (2.x)".
 
 ### Data Flow
 - SwiftData `@Model` classes for persistence
@@ -60,7 +64,7 @@ Both targets build with **`SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`** and **`S
 
 ## Testing
 
-`MultiScanTests` is a Swift Testing unit-test bundle hosted by the app (`TEST_HOST`), so tests `@testable import MultiScan` and exercise the real types — SwiftData models in in-memory containers (`Fixtures.makeProject`, `TestSupport.swift`), `NavigationState`, `PageTextController` without a text view, `SmartCleanupModel` edits, the export cache and exporter, `RichTextArchiver`, `TextManipulationService`, `PlatformImage`, `ProjectStore` (its own `ModelActor` over the test container), `SchemaValidationService`, `AppRouter`, and the preference objects. Run with ⌘U or:
+`MultiScanTests` is a Swift Testing unit-test bundle hosted by the app (`TEST_HOST`), so tests `@testable import MultiScan` and exercise the real types — SwiftData models in in-memory containers (`Fixtures.makeProject`, `TestSupport.swift`), `NavigationState`, `PageTextController` without a text view, `SmartCleanupModel` edits, the export cache and exporter, `RichTextArchiver`, `TextManipulationService`, `PlatformImage`, `ProjectStore` (its own `ModelActor` over the test container), `SchemaValidationService`, `AppRouter`, the preference objects, and (2.1) `PageSplitter`, `PageNumbering`, inline attachments + RTFD round trips + capture insertion, `MarkdownTranscriptConverter`, `ChapterDetector`, and the title suggester's dossier. Run with ⌘U or:
 
 ```bash
 xcodebuild -scheme MultiScan -destination 'platform=macOS' test
@@ -128,7 +132,9 @@ ReviewView (owns NavigationState, PageTextController, SmartCleanupModel, all she
 | View | macOS | iOS/iPadOS |
 |------|-------|------------|
 | `ReviewView` toolbar | Back + Prev/Next, then discrete icon buttons (order / review / progress / inspector) | Back + Prev/Next + page grid (compact only) + "More" (ellipsis) menu containing Smart Cleanup (compact only), review, image, panel (regular only), export actions, statistics; progress popover attaches to the "More" menu button (can't anchor to a menu item), so it opens below it on iPad and as a sheet on iPhone; no navigation title on iOS/iPadOS (macOS keeps title + page-count subtitle) |
-| `pageContextMenu` (thumbnails + page grid) | Info, export, rotation, adjustments, move, delete | Same, plus "Insert Pages Before/After" (insert-at-position is deliberately iOS-only; `ReviewView` passes the callbacks on both platforms, the menu shows them under `#if os(iOS)`) |
+| `pageContextMenu` (thumbnails + page grid) | Info (incl. printed page + OCR engine), share/copy, capture artwork, chapter, rotation, adjustments, move, delete | Same, plus "Insert Pages Before/After" (insert-at-position is deliberately iOS-only; `ReviewView` passes the callbacks on both platforms, the menu shows them under `#if os(iOS)`) |
+| `SlideGridView` (iPhone page grid) | — | 2.1: status filter (shared `PageStatusFilterMenu`) beside the search field in the **bottom bar** (`DefaultToolbarItem(kind: .search, placement: .bottomBar)` + `ToolbarSpacer` + `ToolbarItem(.bottomBar)`), synced into `NavigationState` like the sidebar; chapter sections |
+| `PageStatusFilterMenu` | Borderless menu button in the glass filter bar | Bottom-bar item. Active state = filled symbol variant + accent tint (Mail/Files convention); no custom capsule background (2.1 fix) |
 | `RichTextSidebar` header | Page # + copy button, B/I/U/S + remove-line-breaks toolbar | Page # + copy button only (see formatting note below); Remove Line Breaks moves into the Smart Cleanup pane (iPad) or the More menu (iPhone) |
 | `ExportPanelView` | Two-pane HStack (preview left, options right), radio-group picker | Vertical NavigationStack sheet (preview top, options below), segmented picker, share/dismiss in the nav bar |
 | `HomeView` | Bare content in the window toolbar | Wrapped in NavigationStack, "MultiScan" title, gear (Settings) + plus toolbar; grid is fixed 2 columns on iPhone portrait, adaptive otherwise |
@@ -322,7 +328,7 @@ The app tracks schema versions to gracefully handle data incompatibilities and p
    └─ SpotlightIndexer.scheduleReconcile (bring the Spotlight index up to date)
 ```
 
-The container itself lives in `AppModelContainer.shared` (a main-actor static) so App Intents, entity
+The schema is `Document`, `Page`, `PageCapture`, `SchemaMetadata` (every `ModelContainer`/`previewContainer`/`makeManagedObjectModel` call lists all four). The container itself lives in `AppModelContainer.shared` (a main-actor static) so App Intents, entity
 queries, and the indexer reach it outside the SwiftUI environment; `MultiScanApp.init()` forces its
 creation first, then registers `AppRouter.shared` / `ProjectStore.shared` with `AppDependencyManager`.
 
@@ -350,7 +356,8 @@ Critical issues require user action:
 | Version | App Version | Changes |
 |---------|-------------|---------|
 | 1 | 1.5.1+ | Initial tracked version. Document, Page, SchemaMetadata models. |
-| 2 | 2.0 | `Page.richTextData` **format** changed from JSON-encoded `AttributedString` to RTF (TextKit 2 engine). Property name/type unchanged, so the SwiftData/CloudKit schema is identical — but v1 apps decode the blob as JSON and would see (and could save back) empty text, so they must be gated. Migration is lazy: reads accept both formats, writes produce RTF. `SchemaMetadata.recordSuccessfulLoad()` raises the stored version so other devices' gates fire via CloudKit. Additive fields — `Document.uuid`, `Document.lastModified`, `Page.uuid`, `Page.plainText`, `Page.plainTextUpdatedAt` — with lazy backfill at launch. CloudKit production schema must be re-promoted once for the new fields.  |  | |
+| 2 | 2.0 | `Page.richTextData` **format** changed from JSON-encoded `AttributedString` to RTF (TextKit 2 engine). Property name/type unchanged, so the SwiftData/CloudKit schema is identical — but v1 apps decode the blob as JSON and would see (and could save back) empty text, so they must be gated. Migration is lazy: reads accept both formats, writes produce RTF. `SchemaMetadata.recordSuccessfulLoad()` raises the stored version so other devices' gates fire via CloudKit. Additive fields — `Document.uuid`, `Document.lastModified`, `Page.uuid`, `Page.plainText`, `Page.plainTextUpdatedAt` — with lazy backfill at launch. CloudKit production schema must be re-promoted once for the new fields. |
+| 3 | 2.1 | `Page.richTextData` may be **flattened RTFD** when the page has inline attachments (captures, tables); text-only pages stay RTF. A 2.0 build decodes RTFD as RTF → empty text → could save it back, so 2.0 is gated. New `PageCapture` model + the 2.1 additive fields (no gate needed for those). Re-run `-initializeCloudKitSchema` (new record type `CD_PageCapture`) and re-promote. |
 
 ### When to Bump Schema Version
 
@@ -418,13 +425,23 @@ Viewport-based layout means only the fragments intersecting the visible viewport
 
 **⚠️ Never touch `layoutManager` (macOS) on these views** — reading the TextKit 1 property silently downgrades the view to the compatibility text engine.
 
+### 2.1 review findings (applied)
+- **Automatic quote/dash substitution and text replacement are off** on both editors (`isAutomatic…Enabled = false` / `smartQuotesType = .no` …): the editor corrects a *transcription*, and silently turning `"` into `“` changes what the page says. Continuous spell checking stays on (macOS) — it highlights misrecognitions. iOS autocorrection is left at the system default (open question).
+- **Per-editor undo manager on macOS.** `PageTextEditor.Coordinator.undoManager(for:)` returns `PageTextController.editorUndoManager`, so clearing typing history on page switch no longer wipes the window's page-reorder undo. ⌘Z goes to the text view when it has focus and to the window otherwise.
+- **No per-keystroke copy.** While a view is attached, `PageTextController.currentText` reads the live `NSTextStorage`; the stored snapshot is refreshed only on detach/view swap. Statistics still read `.string` per keystroke (O(n), unavoidable without TextKit-level counting).
+- `PageTextView.contentStorage` is the `NSTextStorage` (the attributed string), **not** the TextKit 2 `NSTextContentStorage` — the name predates 2.1 and is documented rather than churned.
+- `importsGraphics` stays `false` / no image paste on iOS: arbitrary pasted images are not a supported attachment kind and would be dropped at save time.
+
+### Inline Attachments (2.1)
+Artwork captures and tables are `NSTextAttachment`s whose payload is a small file with a MultiScan UTType (declared in `Info.plist` → `UTExportedTypeDeclarations`): `co.jservices.multiscan.capture` (`.multiscancapture`, contents = `PageCapture.uuid`) and `co.jservices.multiscan.table` (`.multiscantable`, contents = `TextTableModel` JSON). RTFD restores attachments as plain `NSTextAttachment`s with a `fileWrapper`, so **identity lives in the file type + contents, never in a Swift subclass** (`InlineAttachments.kind(of:)`). Rendering: `NSTextAttachment.registerViewProviderClass(_:forFileType:)` at launch (`InlineAttachmentViewProviders.registerAll()` in `MultiScanApp.init`) → `CaptureAttachmentViewProvider` / `TableAttachmentViewProvider` (`NSTextAttachmentViewProvider`, `tracksTextAttachmentViewBounds = true`, bounds from `attachmentBounds(for:location:textContainer:proposedLineFragment:position:)`). Views draw from `CaptureImageStore.shared` (main-actor thumbnail cache keyed by uuid; `PageTextController` registers a page's captures on init) and refresh via `CaptureImageStore.didChangeNotification`. Clicking/tapping a capture shows a **native menu** (Mark as Draft / Recapture… / Remove) that dispatches to `CaptureImageStore.actionHandler` — the live controller — because anchoring a SwiftUI popover to a TextKit fragment is fragile. Why references and not pixels: `PageCapture.swift` header. **Plain-text mirrors**: `InlineAttachments.searchablePlainText(of:)` strips capture placeholders (U+FFFC) and flattens tables to tab-separated text; `TextStatistics` ignores U+FFFC. Export (`TextExporter.resolveAttachments`) swaps captures for real JPEG attachments (or `[Illustration]` notes) and tables for tab-separated text on both platforms (macOS `NSTextTable` export is a follow-up). Tables are **read-only** in 2.1.
+
 **⚠️ Don't put geometry-changing transitions or effects (`.scale`, animated `scaleEffect`) on a view tree that contains the macOS editor.** `ContentView` switches Home ↔ review with `.transition(.opacity)` only. A scale transition lays the AppKit-hosted scroll view out at fractional per-frame sizes; the TextKit 2 text view re-fits its content size each pass, every re-fit invalidates SwiftUI's host layout mid-layout, and if it doesn't settle within one display cycle AppKit throws "more Update Constraints in Window passes than there are views in the window" (measured: 17 `-[NSTextView setFrameSize:]` calls during one project open with the old `.scale(0.98)` transition).
 
 **Future extension points** (per the "Elevate your app's text experience" session): the framework text views conform to `NSTextViewportLayoutControllerDelegate`, so `PageTextView` subclass overrides can add line numbers, collapsible ranges, or attachment view-provider reuse. Inline table support will use `NSTextTableBlock`, which flows through the RTF storage format with no schema change.
 
 ## Rich Text Storage Architecture
 
-Page text is persisted as **RTF `Data` with `@Attribute(.externalStorage)`**, exposed via a computed `attributedText: NSAttributedString` property. RTF is `NSAttributedString`'s native document format: encode/decode is one framework call, and it round-trips fonts, B/I/U/S, paragraph styles, and (macOS) `NSTextTable`/`NSTextTableBlock`. It's still a plain `Data` blob, so CloudKit external storage (CKAsset) and the SwiftData schema are unchanged.
+Page text is persisted as **RTF `Data` with `@Attribute(.externalStorage)`** — or, since 2.1, **flattened RTFD** when the text carries inline attachments — exposed via a computed `attributedText: NSAttributedString` property. RTF is `NSAttributedString`'s native document format: encode/decode is one framework call, and it round-trips fonts, B/I/U/S, and paragraph styles. RTFD (`NSFileWrapper`'s serialized representation) adds the attachments as files inside the package; MultiScan's attachments are tiny *references* (see "Inline Attachments (2.1)"), so an RTFD page is barely larger than an RTF one. Either way it's still a plain `Data` blob, so CloudKit external storage (CKAsset) and the SwiftData schema are unchanged. `RichTextArchiver.richTextData(from:)` picks the format; `attributedString(from:)` sniffs `{\rtf`, `rtfd`, then legacy JSON, and finally tries the RTFD decoder as a last resort. Writing RTFD is the format change behind schema version 3.
 
 ### Page Model (`Models.swift`)
 ```swift
@@ -468,31 +485,25 @@ Migration is **lazy**: reads accept both formats forever; every write produces R
 Fonts are normalized at the pipeline boundaries so content is portable and each platform's editor feels native:
 - **Storage/export font**: Helvetica Neue 13pt (`PageTextStyle.storageFont`) — resolvable by every word processor; system fonts would encode as private names (".SFNS") other apps can't resolve.
 - **Display font**: platform body font (`PageTextStyle.displayFont`), applied when loading text into the editor.
-- `RichTextArchiver.normalizing(_:to:)` swaps each run's font for the base font carrying that run's bold/italic traits, strips display-only colors (pasted content!), and passes every other attribute through untouched.
+- `RichTextArchiver.normalizing(_:to:baseSizeOfExisting:)` swaps each run's font for the base font carrying that run's bold/italic traits **and relative size** (headings from markdown engines / chapter titles are `PageTextStyle.headingFont(level:base:)`: bold + 1.6×/1.35×/1.15×, which survives both directions), strips display-only colors (pasted content!), and passes every other attribute — attachments included — through untouched.
 
 ## Share Sheet / Transferable Architecture
 
-`RichText` (`Services/RichTextSupport.swift`) conforms to `Transferable`. It is a **Sendable value**: RTF is encoded eagerly at init (`RichText(_: NSAttributedString)`) or supplied pre-encoded (`RichText(rtfData:plainText:)`), so the wrapper can cross actor boundaries and export from Transferable's async closures without touching a live `NSAttributedString`.
+`RichText` (`Services/RichTextSupport.swift`) conforms to `Transferable`. It is a **Sendable value**: RTF (and RTFD, when the content has attachments) is encoded eagerly at init (`RichText(_: NSAttributedString, suggestedName:)`) or supplied pre-encoded (`RichText(rtfData:rtfdData:plainText:suggestedName:)`), so the wrapper can cross actor boundaries and export from Transferable's async closures without touching a live `NSAttributedString`.
 
-### Transfer Representations (Priority Order)
+### Transfer Representations (Priority Order) — 2.1
 ```swift
 static var transferRepresentation: some TransferRepresentation {
-    // 1. File-based RTF for Finder, Save to Files, Notes, etc.
-    FileRepresentation(exportedContentType: .rtf) { ... }
-        .suggestedFileName("Exported Text.rtf")
-
-    // 2. Data-based RTF for clipboard operations (Copy)
+    // 1. RTFD data (only when the content has images) — exportingCondition gates it
+    DataRepresentation(exportedContentType: .rtfd) { ... }.exportingCondition { $0.rtfdData != nil }
+    // 2. RTF data — rich text for Notes, Pages, Mail, TextEdit…
     DataRepresentation(exportedContentType: .rtf) { ... }
-
-    // 3. Plain text fallback - works everywhere
+    // 3. Plain text fallback - works everywhere (Messages)
     ProxyRepresentation { $0.plainText }
 }
 ```
 
-### Why Multiple Representations?
-- **FileRepresentation**: Required for apps like Notes, Finder, and "Save to Files" that expect file URLs. Without this, some apps show "empty URL" instead of content.
-- **DataRepresentation**: Powers clipboard Copy operations.
-- **ProxyRepresentation**: Universal fallback for apps that only accept plain text (e.g., Messages).
+**No `FileRepresentation` in the share path (2.1 export fix).** Transferable hands a destination the *first* representation it accepts, and nearly everything accepts a file URL — so 2.0's share sheet delivered a temp file named after a UUID (`SentTransferredFile` keeps the URL's own name; `.suggestedFileName` doesn't rename it). Sharing now delivers *text*. Saving a file is explicit: **Save As…** in the export panel uses `RichTextFileDocument` (a write-only `FileDocument`) with `.fileExporter`, defaulting to the project name and to `.rtfd` when illustrations are embedded (the flattened RTFD is un-flattened back into a real package via `FileWrapper(serializedRepresentation:)`), `.rtf` otherwise. **Copy** (`RichText.copyToPasteboard()`) puts RTFD + RTF + plain text on the pasteboard; every "copy page text" affordance routes through it.
 
 ### Error Handling
 ```swift
@@ -504,9 +515,10 @@ enum RichTextExportError: LocalizedError {
 `rtfDataOrThrow()` throws at share time if encoding failed; the plain text fallback still works.
 
 ### ShareLink Usage Locations
-- `ThumbnailSidebar.swift` — Context menu single-page export
-- `ExportPanelView.swift` — "Export…"/share button for full document export (uses `TextExportResult.richText`)
-- `MultiScanApp.swift` — File menu "Export Page Text…"
+- `PageMenuControls.swift` — page context menu "Share Page Text…" / "Copy Page Text"
+- `ExportPanelView.swift` — Share… (plus Copy and Save As…) for the full project (uses `TextExportResult.richText`)
+- `MultiScanCommands.swift` — File ▸ Share Page Text… / Copy Page Text (⌘⇧C)
+- `DigestView.swift` — Share the composed Digest
 
 ### App Compatibility
 | App | Behavior |
@@ -533,7 +545,7 @@ The app uses an always-editable text model with debounced auto-save. The editor 
 - Exposed to menu commands via `FocusedValues.pageTextController`
 
 ### Undo
-Typing undo is **native** to NSTextView/UITextView on both platforms (`allowsUndo` on macOS; automatic on iOS including shake-to-undo and three-finger swipe). Programmatic edits (formatting, Remove Line Breaks, Smart Cleanup) register snapshot-based undo on the view's UndoManager via `performEdit(actionName:_:)`, so they join the same stack. Undo history is cleared when a page loads (`attach`). macOS gained full undo in 2.0 (it had none before).
+Typing undo is **native** to NSTextView/UITextView on both platforms (`allowsUndo` on macOS; automatic on iOS including shake-to-undo and three-finger swipe). Programmatic edits (formatting, Remove Line Breaks, Smart Cleanup, inserting/removing captures) register snapshot-based undo via `performEdit(actionName:_:)`, so they join the same stack. On macOS the stack is the controller's own `editorUndoManager` (2.1), so clearing it on page load leaves page-reorder undo intact. Undo history is cleared when a page loads (`attach`). macOS gained full undo in 2.0 (it had none before).
 
 ### Debounced Auto-Save (1 second)
 Text changes trigger a debounced save via `scheduleDebouncedSave()`:
@@ -575,6 +587,13 @@ Every save also updates `Page.plainText`/`plainTextUpdatedAt` and `Document.last
 | `Page.plainText: String` | Stored mirror of the RTF, set by the `attributedText` setter and `init`. Replaces the old computed property (which decoded RTF on every call), so the per-document page filters, `#Predicate` full-text search (`localizedStandardContains`), and Spotlight `textContent` never touch external storage. **`@Attribute(.allowsCloudEncryption)`** — see "Field Encryption". Never add `#Index` to it. |
 | `Page.plainTextUpdatedAt: Date?` | Staleness guard: if `nil` or older than `lastModified` (a build without the column wrote the RTF), the backfill re-derives `plainText` — from the export cache when it matches, otherwise one RTF decode. |
 | `Document.lastModified: Date?` | Bumped on rename/emoji (`DocumentCard`) and by every page text write (`Page.attributedText` setter). `lastModifiedDate` is the max of this, page dates, and `createdAt`. |
+| `Page.visionLayoutData: Data?` (2.1, external) | Binary-plist `VisionDocumentLayout`: paragraphs → lines, tables (cells with row/column ranges), lists, Vision's title, languages, all with **upper-left-origin normalized boxes** (Vision's lower-left origin is flipped once, in the recognizer). Written by **every** import regardless of the primary OCR engine. Derived data: regenerable by re-running Vision. |
+| `Page.visionTranscript: String?` (2.1) | Vision's plain transcript, kept even when a transformer engine wrote `richTextData`, so both reads survive side by side. |
+| `Page.ocrEngine: String?` (2.1) | Provenance of `richTextData`: `vision`, `coreai:<model>`, `lmstudio:<model>`, or `vision(fallback: <reason>)`. Shown in the page context menu header when not Vision. |
+| `Page.sectionTitle: String?` + `sectionTitleIsAutomatic` (2.1) | Chapter/section start marker and heading. Manual titles (`isAutomatic == false`) are never touched by `ChapterDetector`. |
+| `Page.splitPosition: Int` (2.1) | Smart Separate provenance: 0 whole scan, 1/2 first/second half of a split spread. |
+| `Document.printedNumberingStartPage/StartValue/frontMatterNumberingStyle` (2.1) | Printed page numbering (`PageNumbering`): project page N shows printed number M; earlier pages are Roman (`i, ii…`) or unnumbered. `Page.printedPageLabel` derives from these. |
+| `Document.isAutoTitled: Bool` (2.1) | The name came from `ProjectTitleSuggester`; cleared by a manual rename so the model never overwrites a user's title. |
 
 Backfill runs per document, decoding `textExportCache` once (no per-page external reads), saving per document with `Task.yield()` between. Two 2.x devices may assign different UUIDs to the same pre-existing row when iCloud sync is on; CloudKit converges (last writer wins) and the Spotlight reconcile self-heals.
 
@@ -922,6 +941,9 @@ Print-panel-style sheet with live preview:
 - Debounces setting changes by 300ms
 - ShareLink uses the pre-encoded `TextExportResult.richText` (no re-encoding at share time)
 
+### Content options (2.1)
+`ExportOptions.includeChapterHeadings` (a `Page.sectionTitle` becomes a level-2 heading before that page's text), `includeCaptures` (embed capture images → RTFD; off → `[Illustration]` notes), `includeDraftReminders` (inline `[Draft — rescan this illustration]` markers plus an "Illustrations to rescan" list at the end; `TextExportResult.draftReminders` feeds the panel's orange notice). `PageSnapshot` carries `sectionTitle`, `printedLabel`, and `captures` (image bytes read only when `includeCaptures`).
+
 ### Separator Logic
 - **Inline** (createVisualSeparation = false): Single space between pages
 - **Line Break**: Double newline + optional `[Page X of Y | filename | stats]`
@@ -996,6 +1018,25 @@ enum PDFImportError: LocalizedError {
 - **PDF pages**: Always rendered to HEIC (since we're creating new images, not preserving originals)
 - **Thumbnails**: Always HEIC at 400px max dimension, 0.7 quality (`PlatformImage.thumbnail` + `encode`, in `OCRService`)
 - **"Optimize Images…" on an existing project** (`HomeView.optimizeImages`): re-encodes each page on the cooperative pool and keeps the smaller result — never on the main actor
+
+## OCR Engines & Smart Separate (2.1)
+
+### Vision always runs
+`OCRService.processImageData` (`@concurrent`) decodes the bitmap, reads its EXIF orientation, and runs `VisionDocumentRecognizer.recognize(_:orientation:)` — the Swift Vision API's `RecognizeDocumentsRequest` (26+), **with the orientation passed to `ImageRequestHandler`** (the 2.0 `VNRecognizeTextRequest` read sideways phone photos). The result is a `VisionDocumentLayout` (paragraphs/lines/tables/lists/title, upper-left-origin normalized boxes) stored on `Page.visionLayoutData`, plus `visionTranscript`. This happens for every page whatever the primary engine, because Smart Separate, inline tables, chapter detection, and the title suggester all read the geometry/transcript.
+
+### Engines (`OCREngine.swift`)
+`OCREngineKind`: `.vision` (default; the only option in Release builds), `.coreAI` (an exported `.aimodel` folder loaded via `CoreAILanguageModel(resourcesAt:)` into a Foundation Models `LanguageModelSession`, prompted with `Attachment(image, orientation:)` — compiled only under `#if canImport(CoreAILanguageModels)`, i.e. once the `apple/coreai-models` package is added; otherwise `CoreAIUnavailableTranscriber` throws and the page falls back to Vision), `.lmStudio` (macOS only: OpenAI-compatible `POST /v1/chat/completions` with a base64 JPEG `image_url`, non-streaming). Transformer engines return **markdown**; `MarkdownTranscriptConverter` (Foundation's `AttributedString(markdown:)` with `.full` syntax → runs grouped by `presentationIntent`) produces the stored attributed string: headings → `PageTextStyle.headingFont`, lists → `• ` / `1. ` prefixes, tables → `TextTableModel` attachments. Failures/timeouts (`ModelTranscriber.withTimeout`) fall back to Vision's transcript and record `vision(fallback: …)` in `Page.ocrEngine`. `OCREngineSettings.shared.configuration` is snapshotted **once per import** in `ProjectImportPipeline.runOCR`. The picker lives in Settings ▸ **OCR Engine (DEBUG only)**; downloadable models (Background Assets) are out of scope. A `LanguageModel`/`LanguageModelExecutor` conformance for LM Studio (so the session API serves all three engines) is sketched at the bottom of `ModelTranscriber.swift` and blocked only on verifying two Foundation Models API details in Xcode.
+
+### Smart Separate (`PageSplitter.swift`)
+Optional (Settings ▸ Import ▸ Smart Separate, default off). From the layout's line boxes: a 200-bin horizontal coverage histogram → widest empty run centered in 30–70 % of the width → accepted as a gutter when ≥ 4 % wide (≥ 8 % overrides the landscape requirement `w/h ≥ 1.05`) and both sides carry ≥ 3 lines, ≥ 25 % of the lines, spanning ≥ 30 % of the height. Crops are each side's line-union grown by a 5 % buffer, clamped to the gutter center. `OCRService` orients the spread upright (`PlatformImage.oriented`), crops both halves to HEIC, and runs **Vision again on each half** (a half's paragraph grouping is not a sub-rectangle of the spread's), then the transformer if configured. Halves are named "<file> (1 of 2)" / "(2 of 2)" with `splitPosition` 1/2. Page numbers are assigned after each input image returns (`processImages`), since one image can yield two pages. Tested in `PageSplitterTests`.
+
+## Chapters, Printed Page Numbers, Auto Titles, Digest (2.1)
+
+- **Chapters** — `Page.sectionTitle` marks a chapter start; `ChapterGrouping.groups(for:)` turns the (filtered) page list into sections for `ThumbnailSidebar` and `SlideGridView` (sticky `ChapterSectionHeader`s), `TextExporter` emits headings, `DigestComposer` too, and a "Chapters" accessibility rotor exists. Editing: `ChapterMenuItems` + the shared `chapterTitleEditor` alert (page context menu, iPhone More menu, Edit ▸ Mark Chapter Start… ⌘⌥B). **`ChapterDetector`** runs after new imports (`DefaultsKey.autoDetectChapters`, default on) and from the sidebar's Project menu: explicit chapter lines (chapter/part/section/book + number/Roman/word, bare Roman numerals), repeated-header runs from Smart Cleanup's analysis (first page of each run; runs covering > 60 % of pages are the book title and are ignored), weak Vision-title candidates; merged within 1 page preferring stronger sources. Manual titles (`sectionTitleIsAutomatic == false`) are never overwritten.
+- **Printed page numbers** — `PageNumbering` + `Document.printedNumbering…`; `Page.printedPageLabel` shows as "· p. iv" in thumbnails/grid labels, in context-menu headers, and in capture reminders. Edited in `PageNumberingSettingsView` (sidebar Project menu, iPhone More menu, File ▸ Page Numbering…).
+- **Auto titles** — `ProjectTitleSuggester`: builds a compact dossier (first/second/last page leading lines, Vision titles, repeated headers, chapter titles as negatives, filename) → `SystemLanguageModel` guided generation (`@Generable TitleSuggestion { title, confidence }`, greedy) → renames when confidence ≥ 55 and the name is still the placeholder. Only on **new imports whose name was the date placeholder** (`createProject(..., allowsAutomaticTitle:)` — Home/Photos: true; picked folder, share-sheet title, intent name: false). Gated by `DefaultsKey.autoTitleProjects` (default on) and `SystemLanguageModel.default.availability`. Sets `Document.isAutoTitled`.
+- **Digest** — `DigestView` (sheet / full-screen cover) composes the whole project into one continuous text off the main actor (`DigestComposer.compose`, from `TextExporter.snapshots`): pages joined with a single space only when neither side supplies whitespace (compile-time only, never written back), chapter headings, optional page markers, captures rendered by the same view providers, tables flattened. `DigestSettings` (UserDefaults JSON) holds theme (`DigestTheme`: system/paper/sepia/night/high contrast), font (`DigestFontChoice`), size, kerning, line-height multiple. `ThemedRichTextView` is a `RichTextPreview` variant that does not stamp the label color. Entry points: sidebar "Digest" button, iPhone More ▸ Read in Digest, View ▸ Read in Digest (⌘⇧D).
+- **Artwork capture** — `ArtworkCaptureSession` (Identifiable, `@Observable`) → `ArtworkCaptureView` (fitted page image + draggable/resizable rectangle in normalized upper-left coordinates, draft toggle) → `CaptureService.crop` (`@concurrent`) + `CaptureService.store` → `PageTextController.insertCapture` (live editor, undoable) or `CaptureService.appendAttachmentToStoredText` (other pages). Entry points: viewer right-click / long-press "Capture Artwork Here…" (`ZoomableImageView.onCaptureArtwork`, point normalized in the platform scroll view), Image ▸ Capture Artwork… (⌘⇧A), page context menus, iPhone More menu, and "Recapture…" from an existing capture's menu (`PageTextController.onRecaptureRequested`). `ReviewView` owns the session and presents it as a sheet (regular) or full-screen cover (compact).
 
 ## Smart Cleanup
 

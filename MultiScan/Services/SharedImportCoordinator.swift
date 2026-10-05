@@ -85,8 +85,9 @@ final class SharedImportCoordinator {
             }
             isPreparing = false
 
-            let name = batch.name ?? prepared.suggestedName ?? ProjectImportPipeline.defaultProjectName()
-            try await pipeline.createProject(named: name, images: prepared.images)
+            let chosenName = batch.name ?? prepared.suggestedName
+            let name = chosenName ?? ProjectImportPipeline.defaultProjectName()
+            try await pipeline.createProject(named: name, images: prepared.images, allowsAutomaticTitle: chosenName == nil)
             AccessibilityNotification.Announcement(String(localized: "Scan complete. \(prepared.images.count) pages ready for review.")).post()
         } catch {
             errorMessage = error.localizedDescription

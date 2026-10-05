@@ -126,29 +126,17 @@ struct RichTextSidebar: View {
         }
     }
 
-    /// Copies the current page's text (RTF + plain text) to the pasteboard.
-    /// Uses the live editor content so unsaved edits are included.
+    /// Copies the current page's text (RTFD/RTF + plain text) to the pasteboard.
+    /// Uses the live editor content so unsaved edits are included. Capture references are swapped for real images first so a paste into Notes/Pages shows the illustration.
     private func copyCurrentPageText(_ page: Page) {
         let exportText = textController?.attributedTextForExport ?? page.attributedText
-        let rtfData = RichTextArchiver.rtfData(from: exportText)
-
-        #if os(macOS)
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        // Copy both RTF (for rich text apps) and plain text (as fallback)
-        if let rtfData {
-            pasteboard.setData(rtfData, forType: .rtf)
+        var hasImages = false
+        let captures = page.unwrappedCaptures.compactMap { capture -> TextExporter.CaptureSnapshot? in
+            guard let id = capture.uuid else { return nil }
+            return TextExporter.CaptureSnapshot(id: id, imageData: capture.imageData, isDraft: capture.isDraft, caption: capture.caption, reminder: capture.reminderDescription)
         }
-        pasteboard.setString(exportText.string, forType: .string)
-        #else
-        let pasteboard = UIPasteboard.general
-        // Copy both RTF (for rich text apps) and plain text (as fallback)
-        if let rtfData {
-            pasteboard.setData(rtfData, forPasteboardType: UTType.rtf.identifier)
-        }
-        pasteboard.string = exportText.string
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
-        #endif
+        let resolved = TextExporter.resolveAttachments(in: exportText, captures: captures, options: ExportSettings.currentOptions, baseFont: PageTextStyle.storageFont, hasImages: &hasImages)
+        RichText(resolved, suggestedName: "\(document.name) — \(page.title)").copyToPasteboard()
     }
 
     /// Padding above the header. The compact layout presents this view as a sheet, so extra clearance is needed for the drag indicator.

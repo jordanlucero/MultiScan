@@ -93,11 +93,14 @@ final class ProjectImportPipeline {
 
     /// Creates a project, runs OCR over `images`, and fills in the pages.
     /// The document is inserted immediately (so Home can show its progress card) and deleted again if OCR fails.
+    /// - Parameters:
+    ///   - allowsAutomaticTitle: `true` when `name` is the date placeholder rather than a human-chosen name (picked folder, share-sheet title, intent parameter). Only then does the on-device model get to propose a title — see `ProjectTitleSuggester`.
     /// - Returns: the new project's stable identity.
     @discardableResult
     func createProject(
         named name: String,
         images: [(data: Data, fileName: String)],
+        allowsAutomaticTitle: Bool = false,
         onPageProgress: ((Double) -> Void)? = nil
     ) async throws -> UUID {
         guard !images.isEmpty else { throw ImportError.noImages }
@@ -126,6 +129,16 @@ final class ProjectImportPipeline {
             TextExportCacheService.buildInitialCache(for: document, from: document.unwrappedPages)
             try context.save()
             MultiScanShortcuts.updateAppShortcutParameters()
+
+            // Post-import intelligence, both cheap enough to run inline on the main actor (they read the cache we just built, not external storage).
+            if UserDefaults.standard.object(forKey: DefaultsKey.autoDetectChapters) == nil || UserDefaults.standard.bool(forKey: DefaultsKey.autoDetectChapters) {
+                ChapterDetector.apply(to: document)
+                try context.save()
+            }
+            if allowsAutomaticTitle {
+                // The model call can take a few seconds; don't hold the import's completion for it. The suggester re-checks the name before writing.
+                Task { await ProjectTitleSuggester.suggestAndApply(to: document, placeholderName: name) }
+            }
             return document.uuid ?? UUID()
         } catch {
             context.delete(document)
@@ -185,10 +198,12 @@ final class ProjectImportPipeline {
     // MARK: Internals
 
     /// OCR with progress mirrored into `progress` (and the intent's per-page handler).
+    /// The engine configuration is snapshotted here, once per batch, so a settings change mid-import can't switch engines halfway through a project.
     private func runOCR(_ images: [(data: Data, fileName: String)], startingPageNumber: Int) async throws -> [ProcessedImage] {
         // Reset so a progress UI doesn't briefly show the previous import's final value
         progress = 0
-        return try await OCRService.processImages(images, startingPageNumber: startingPageNumber) { fraction in
+        let configuration = OCREngineSettings.shared.configuration
+        return try await OCRService.processImages(images, startingPageNumber: startingPageNumber, configuration: configuration) { fraction in
             progress = fraction
             pageProgressHandler?(fraction)
         }
@@ -203,9 +218,13 @@ final class ProjectImportPipeline {
                 text: result.text,
                 imageData: result.imageData,
                 originalFileName: result.originalFileName,
-                boundingBoxesData: result.boundingBoxesData
+                richTextData: result.richTextData,
+                visionLayoutData: result.visionLayoutData,
+                visionTranscript: result.visionTranscript,
+                ocrEngine: result.ocrEngine
             )
             page.thumbnailData = result.thumbnailData
+            page.splitPosition = result.splitPosition
             page.document = document
             document.pages?.append(page)
             return page

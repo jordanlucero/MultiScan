@@ -14,6 +14,12 @@ struct ThumbnailSidebar: View {
     /// Callbacks for inserting pages at a position. The Int is the page number to insert after (0 = insert at beginning). The context menu offers them on iOS only.
     var onInsertFromPhotos: ((Int) -> Void)?
     var onInsertFromFiles: ((Int) -> Void)?
+    /// Opens the artwork capture overlay for a page.
+    var onCaptureArtwork: ((Page) -> Void)?
+    /// Opens the Digest reading view.
+    var onOpenDigest: (() -> Void)?
+    /// Opens the project's page-numbering settings.
+    var onEditPageNumbering: (() -> Void)?
 
     @AppStorage(DefaultsKey.filterOption) private var filterOptionString = "all"
     @State private var searchText = ""
@@ -87,7 +93,8 @@ struct ThumbnailSidebar: View {
                     navigationState: navigationState,
                     isReorderEnabled: !isAnyFilterActive,
                     onInsertFromPhotos: onInsertFromPhotos,
-                    onInsertFromFiles: onInsertFromFiles
+                    onInsertFromFiles: onInsertFromFiles,
+                    onCaptureArtwork: onCaptureArtwork
                 )
             }
             .onChange(of: navigationState.currentPageNumber) { _, newValue in
@@ -98,6 +105,15 @@ struct ThumbnailSidebar: View {
                         proxy.scrollTo(page.persistentModelID, anchor: .center)
                     }
                 }
+            }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                // Project-level actions live above the list: Digest and page numbering.
+                SidebarProjectActions(
+                    document: document,
+                    onOpenDigest: onOpenDigest,
+                    onEditPageNumbering: onEditPageNumbering,
+                    onDetectChapters: { ChapterDetector.apply(to: document); navigationState.refreshPageOrder() }
+                )
             }
             .safeAreaInset(edge: searchBarEdge, spacing: 0) {
                 ThumbnailFilterBar(
@@ -137,9 +153,113 @@ struct ThumbnailSidebar: View {
     }
 }
 
+// MARK: - Project actions
+
+/// Digest / numbering / chapters, as a compact row at the top of the sidebar. A `Menu` keeps it to one row at the sidebar's minimum width.
+struct SidebarProjectActions: View {
+    let document: Document
+    var onOpenDigest: (() -> Void)?
+    var onEditPageNumbering: (() -> Void)?
+    var onDetectChapters: (() -> Void)?
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if let onOpenDigest {
+                Button(action: onOpenDigest) {
+                    Label("Digest", systemImage: "book.pages")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("Read the whole project as one continuous text")
+            }
+
+            Spacer()
+
+            Menu {
+                if let onEditPageNumbering {
+                    Button("Page Numbering…", systemImage: "number") { onEditPageNumbering() }
+                }
+                if let onDetectChapters {
+                    Button("Detect Chapters", systemImage: "list.bullet.indent") { onDetectChapters() }
+                }
+                if !document.chapterStartPages.isEmpty {
+                    Text("\(document.chapterStartPages.count) chapters", comment: "Sidebar project menu: chapter count")
+                }
+            } label: {
+                Label("Project", systemImage: "ellipsis.circle")
+                    .labelStyle(.iconOnly)
+            }
+            .menuIndicator(.hidden)
+            #if os(macOS)
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            #endif
+            .accessibilityLabel("Project options")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+    }
+}
+
+// MARK: - Chapter grouping
+
+/// Splits an ordered page list into chapter groups: a page with a `sectionTitle` starts a new group; pages before the first chapter form an untitled group.
+enum ChapterGrouping {
+    struct Group: Identifiable {
+        /// Stable across filter changes: the first page's identity.
+        let id: PersistentIdentifier
+        let title: String?
+        var pages: [Page]
+    }
+
+    static func groups(for pages: [Page]) -> [Group] {
+        var groups: [Group] = []
+        for page in pages {
+            if let title = page.sectionTitle, !title.isEmpty {
+                groups.append(Group(id: page.persistentModelID, title: title, pages: [page]))
+            } else if groups.isEmpty {
+                groups.append(Group(id: page.persistentModelID, title: nil, pages: [page]))
+            } else {
+                groups[groups.count - 1].pages.append(page)
+            }
+        }
+        return groups
+    }
+}
+
+/// Sticky chapter header in the sidebar / page grid.
+struct ChapterSectionHeader: View {
+    let title: String
+    let startPage: Page?
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "bookmark.fill")
+                .font(.caption2)
+                .foregroundStyle(Color.accentColor)
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .lineLimit(2)
+            Spacer()
+            if let startPage, startPage.sectionTitleIsAutomatic {
+                Image(systemName: "sparkles")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .help("Detected automatically")
+                    .accessibilityLabel("Detected automatically")
+            }
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.bar)
+        .accessibilityAddTraits(.isHeader)
+    }
+}
+
 // MARK: - Page List
 
-/// The scrolling thumbnail column. Takes an already-filtered page array so the filter doesn't re-run here, and keeps the reorder plumbing out of the sidebar's own body.
+/// The scrolling thumbnail column, grouped by chapter. Takes an already-filtered page array so the filter doesn't re-run here, and keeps the reorder plumbing out of the sidebar's own body.
 struct ThumbnailPageList: View {
     let pages: [Page]
     let document: Document
@@ -147,25 +267,36 @@ struct ThumbnailPageList: View {
     let isReorderEnabled: Bool
     var onInsertFromPhotos: ((Int) -> Void)?
     var onInsertFromFiles: ((Int) -> Void)?
+    var onCaptureArtwork: ((Page) -> Void)?
 
     var body: some View {
         let currentPageNumber = navigationState.currentPageNumber
+        let groups = ChapterGrouping.groups(for: pages)
 
-        LazyVStack(spacing: 10) {
-            ForEach(pages) { page in
-                ThumbnailView(page: page, isSelected: currentPageNumber == page.pageNumber) {
-                    navigationState.goToPage(pageNumber: page.pageNumber)
+        LazyVStack(spacing: 10, pinnedViews: [.sectionHeaders]) {
+            ForEach(groups) { group in
+                Section {
+                    ForEach(group.pages) { page in
+                        ThumbnailView(page: page, isSelected: currentPageNumber == page.pageNumber) {
+                            navigationState.goToPage(pageNumber: page.pageNumber)
+                        }
+                        .pageContextMenu(
+                            for: page,
+                            in: document,
+                            navigationState: navigationState,
+                            onInsertFromPhotos: onInsertFromPhotos,
+                            onInsertFromFiles: onInsertFromFiles,
+                            onCaptureArtwork: onCaptureArtwork
+                        )
+                        .id(page.persistentModelID)  // Use stable model ID for animation
+                    }
+                    .reorderable()
+                } header: {
+                    if let title = group.title {
+                        ChapterSectionHeader(title: title, startPage: group.pages.first)
+                    }
                 }
-                .pageContextMenu(
-                    for: page,
-                    in: document,
-                    navigationState: navigationState,
-                    onInsertFromPhotos: onInsertFromPhotos,
-                    onInsertFromFiles: onInsertFromFiles
-                )
-                .id(page.persistentModelID)  // Use stable model ID for animation
             }
-            .reorderable()
         }
         .padding()
         .animation(.easeInOut(duration: 0.3), value: navigationState.pageOrderVersion)
@@ -189,38 +320,13 @@ struct ThumbnailFilterBar: View {
     let visiblePageCount: Int
     let totalPageCount: Int
 
-    private var filterOption: PageFilterOption {
-        PageFilterOption(rawValue: filterOptionString) ?? .all
-    }
-
-    private var isFilterActive: Bool {
-        filterOption != .all
-    }
-
     var body: some View {
         HStack(spacing: 8) {
-            Menu {
-                Picker(selection: $filterOptionString, label: Text("Filter by status")) {
-                    ForEach(PageFilterOption.allCases, id: \.self) { option in
-                        Text(option.label).tag(option.rawValue)
-                    }
-                }
-                .pickerStyle(.inline)
-            } label: {
-                Image(systemName: "line.3.horizontal.decrease")
-            }
-            .menuStyle(.borderlessButton)
-            .background {
-                Capsule()
-                    .fill(isFilterActive ? Color.accentColor : .clear)
-                    .stroke(.tertiary.opacity(isFilterActive ? 0 : 1), lineWidth: 1)
-            }
-            .fixedSize()
-            .accessibilityLabel("Filter by status")
-            .accessibilityValue(isFilterActive
-                ? "\(String(localized: filterOption.label)), \(visiblePageCount) of \(totalPageCount) pages visible"
-                : "All \(totalPageCount) pages")
-            .help(isFilterActive ? "Filtering: \(String(localized: filterOption.label))" : "Filter pages")
+            PageStatusFilterMenu(
+                filterOptionString: $filterOptionString,
+                visiblePageCount: visiblePageCount,
+                totalPageCount: totalPageCount
+            )
 
             TextField("Search project", text: $searchText)
                 .textFieldStyle(.plain)
@@ -243,6 +349,31 @@ struct ThumbnailFilterBar: View {
         .padding(.vertical, 6)
         .glassEffect()
         .padding(8)
+    }
+}
+
+// MARK: - Page label
+
+/// "Page 5" plus the printed page number ("p. iv") when the project has printed numbering configured. Shared by the sidebar and the compact grid.
+struct PageLabelText: View {
+    let page: Page
+    let isSelected: Bool
+    var font: Font = .caption
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(page.title)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            if let printed = page.printedPageLabel {
+                Text("· p. \(printed)", comment: "Printed page number next to the project page number")
+                    .lineLimit(1)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .font(font)
+        .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+        .accessibilityHidden(true)
     }
 }
 
@@ -298,6 +429,23 @@ struct ThumbnailView: View {
                             Spacer()
                         }
                     }
+
+                    // Draft illustrations on this page: the reviewer's cue that a rescan is pending.
+                    if page.unwrappedCaptures.contains(where: \.isDraft) {
+                        VStack {
+                            Spacer()
+                            HStack {
+                                Image(systemName: "flag.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(.white)
+                                    .padding(4)
+                                    .background(.orange, in: Circle())
+                                    .padding(8)
+                                Spacer()
+                            }
+                        }
+                        .accessibilityLabel("Has draft illustrations")
+                    }
                 }
                 .aspectRatio(8.5/11, contentMode: .fit)
             }
@@ -309,12 +457,7 @@ struct ThumbnailView: View {
             .accessibilityAddTraits(isSelected ? .isSelected : [])
             .accessibilityHint(String(localized: "Opens this page", comment: "Accessibility hint for page thumbnail button"))
 
-            Text(page.title)
-                .font(.caption)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
-                .accessibilityHidden(true)
+            PageLabelText(page: page, isSelected: isSelected)
         }
     }
 }
@@ -325,6 +468,7 @@ struct ThumbnailView: View {
     let page1 = Page(pageNumber: 1, text: "Here's to the crazy ones.", imageData: nil, originalFileName: "page1.jpg")
     let page2 = Page(pageNumber: 2, text: "The misfits. The rebels. The troublemakers. The round pegs in the square holes.", imageData: nil, originalFileName: "page2.jpg")
     page2.isDone = true
+    page2.sectionTitle = "Chapter One"
     let page3 = Page(pageNumber: 3, text: "The ones who see things differently.", imageData: nil, originalFileName: "page3.jpg")
     document.pages = [page1, page2, page3]
 

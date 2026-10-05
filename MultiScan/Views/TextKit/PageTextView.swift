@@ -21,10 +21,21 @@
 //  ⚠️ Never touch `layoutManager` (macOS) on these views — accessing the TextKit 1
 //  property makes the view silently fall back to the compatibility text engine.
 //
-//  Future extension point: subclassing here is what enables the viewport-delegate
-//  customizations (line numbers, collapsible ranges, attachment view-provider reuse)
-//  by overriding the NSTextViewportLayoutControllerDelegate methods that the
-//  framework text views now conform to.
+//  ## Inline attachments
+//  Artwork captures and tables are `NSTextAttachment`s rendered by registered
+//  `NSTextAttachmentViewProvider`s (`AttachmentViewProviders.swift`). Nothing here is
+//  attachment-specific: the text view hosts whatever views the providers return. The one
+//  deliberate limit is `importsGraphics = false` / no image paste on iOS — arbitrary pasted
+//  images aren't a supported attachment kind yet, so they'd be silently dropped at save time.
+//
+//  ## Editing behavior for OCR review (2.1 review findings)
+//  - Automatic quote/dash substitution and text replacement are **off**: the editor exists to
+//    correct a transcription, and silently turning `"` into `“` or `--` into `—` changes what
+//    the page says. Spell checking stays **on** (macOS) because it highlights exactly the kind of
+//    misrecognition a reviewer is looking for.
+//  - `allowsUndo` on macOS with a per-editor `UndoManager` supplied by the delegate (see
+//    `PageTextEditor`), so clearing the typing history on page switch no longer wipes the
+//    window's page-reorder undo stack.
 //
 
 import SwiftUI
@@ -68,6 +79,14 @@ final class PageTextView: NSTextView {
             .foregroundColor: NSColor.labelColor
         ]
 
+        // OCR review: never rewrite what the user typed or what Vision read.
+        textView.isAutomaticQuoteSubstitutionEnabled = false
+        textView.isAutomaticDashSubstitutionEnabled = false
+        textView.isAutomaticTextReplacementEnabled = false
+        textView.isAutomaticSpellingCorrectionEnabled = false
+        // …but do point out likely misrecognitions.
+        textView.isContinuousSpellCheckingEnabled = editable
+
         let scrollView = NSScrollView()
         scrollView.documentView = textView
         scrollView.hasVerticalScroller = true
@@ -81,6 +100,7 @@ final class PageTextView: NSTextView {
 
 extension PageTextView {
     /// Non-optional text storage accessor (NSTextView exposes it as optional).
+    /// Despite the name this is the `NSTextStorage` — the attributed string — not the TextKit 2 `NSTextContentStorage` that wraps it.
     var contentStorage: NSTextStorage {
         textStorage ?? NSTextStorage()
     }
@@ -121,6 +141,12 @@ final class PageTextView: UITextView {
             .font: PageTextStyle.displayFont,
             .foregroundColor: UIColor.label
         ]
+
+        // OCR review: no silent rewriting of quotes/dashes. Autocorrection is left at the system default —
+        // on a touch keyboard it is doing real work; see the clarifying question in the 2.1 notes.
+        textView.smartQuotesType = .no
+        textView.smartDashesType = .no
+        textView.smartInsertDeleteType = .no
         return textView
     }
 }

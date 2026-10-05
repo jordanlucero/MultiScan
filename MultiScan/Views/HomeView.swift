@@ -237,8 +237,9 @@ struct HomeView: View {
         // Spinner will be replaced by document card's progress indicator
         isPreparingLocalImport = false
 
+        // A picked folder names the project; otherwise the date placeholder goes in and the on-device model may propose a real title afterwards.
         let documentName = prepared.suggestedName ?? ProjectImportPipeline.defaultProjectName()
-        await startOCRProcessing(images: prepared.images, documentName: documentName)
+        await startOCRProcessing(images: prepared.images, documentName: documentName, allowsAutomaticTitle: prepared.suggestedName == nil)
     }
 
     // MARK: - Photos Import Handling
@@ -259,7 +260,7 @@ struct HomeView: View {
         // Announce processing start before document card appears
         AccessibilityNotification.Announcement(String(localized: "Processing \(images.count) pages. This will take a few moments.")).post()
 
-        await startOCRProcessing(images: images, documentName: ProjectImportPipeline.defaultProjectName())
+        await startOCRProcessing(images: images, documentName: ProjectImportPipeline.defaultProjectName(), allowsAutomaticTitle: true)
         selectedPhotos = []
     }
 
@@ -279,9 +280,9 @@ struct HomeView: View {
 
     // MARK: - OCR Processing
 
-    private func startOCRProcessing(images: [(data: Data, fileName: String)], documentName: String) async {
+    private func startOCRProcessing(images: [(data: Data, fileName: String)], documentName: String, allowsAutomaticTitle: Bool) async {
         do {
-            try await pipeline.createProject(named: documentName, images: images)
+            try await pipeline.createProject(named: documentName, images: images, allowsAutomaticTitle: allowsAutomaticTitle)
             AccessibilityNotification.Announcement(String(localized: "Scan complete. \(images.count) pages ready for review.")).post()
         } catch {
             print("Failed to create project: \(error)")

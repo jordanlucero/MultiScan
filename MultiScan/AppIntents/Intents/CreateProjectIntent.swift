@@ -77,11 +77,11 @@ struct CreateProjectIntent: AppIntent, LongRunningIntent, CancellableIntent {
             progress.totalUnitCount = total
 
             let trimmedName = requestedName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let projectName = trimmedName.isEmpty
-                ? (prepared.suggestedName ?? ProjectImportPipeline.defaultProjectName())
-                : trimmedName
+            let chosenName = trimmedName.isEmpty ? prepared.suggestedName : trimmedName
+            let projectName = chosenName ?? ProjectImportPipeline.defaultProjectName()
 
-            return try await pipeline.createProject(named: projectName, images: prepared.images) { fraction in
+            // Only a placeholder name may be replaced by the model's suggestion; a Shortcut that named the project keeps its name.
+            return try await pipeline.createProject(named: projectName, images: prepared.images, allowsAutomaticTitle: chosenName == nil) { fraction in
                 progress.completedUnitCount = Int64((fraction * Double(total)).rounded(.down))
             }
         } onCancel: { _ in

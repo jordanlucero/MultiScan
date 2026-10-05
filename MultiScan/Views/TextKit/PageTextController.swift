@@ -4,19 +4,23 @@
 //
 //  The editing controller between a Page model and the TextKit 2 text view.
 //
-//  One controller exists per selected page (created on page switch, like the old EditablePageText). It owns the authoritative text snapshot, debounces auto-save, routes formatting and Smart Cleanup edits into the text view's storage with undo support on both platforms, and normalizes fonts at the storage boundary.
+//  One controller exists per selected page (created on page switch, like the old EditablePageText). It owns the authoritative text snapshot, debounces auto-save, routes formatting and Smart Cleanup edits into the text view's storage with undo support on both platforms, normalizes fonts at the storage boundary, and manages the page's inline artwork captures.
 //
 //  ## Ownership & Lifecycle
-//  - `init` decodes the page's persisted text once and normalizes it to the display font.
+//  - `init` decodes the page's persisted text once (RTF or RTFD), normalizes it to the display font, and registers the page's captures with `CaptureImageStore` so their attachment views can draw.
 //  - `attach(_:)` loads the snapshot into a platform text view (called by PageTextEditor).
-//  - `textDidChange()` (from the view delegate) refreshes the snapshot + statistics and schedules a debounced save.
+//  - `textDidChange()` (from the view delegate) refreshes statistics and schedules a debounced save. While a view is attached, **the view's storage is the authoritative text** (`currentText` reads it); the stored snapshot is only refreshed when the view detaches, so a keystroke no longer copies the whole page.
 //  - `detach()` performs a final save and severs the view link, so a debounce that fires after a page switch can never read another page's storage.
 //
 //  ## Undo
-//  Typing undo is native to NSTextView/UITextView (`allowsUndo` on macOS, automatic on iOS — including shake-to-undo and three-finger swipe). Programmatic edits (formatting, Remove Line Breaks, Smart Cleanup) register snapshot-based undo actions on the view's UndoManager, so they participate in the same stack on both platforms.
+//  Typing undo is native to NSTextView/UITextView. On macOS the text view uses this controller's `editorUndoManager` (handed over by `PageTextEditor`'s delegate), so clearing it on page load leaves the window's page-reorder history intact. Programmatic edits (formatting, Remove Line Breaks, Smart Cleanup, inserting/removing captures) register snapshot-based undo actions on the same manager, so they participate in the same stack on both platforms.
+//
+//  ## Captures
+//  `insertCapture(_:)` places a reference attachment on its own paragraph at the caret; `removeCapture(_:)` deletes the attachment *and* the model; `toggleDraft(forCapture:)` flips the flag and refreshes the attachment view. The controller is the `CaptureImageStore.actionHandler` while attached, so the attachment views' menus reach it.
 //
 
 import SwiftUI
+import SwiftData
 #if os(macOS)
 import AppKit
 #else
@@ -31,12 +35,17 @@ final class PageTextController {
     @ObservationIgnored let page: Page
     @ObservationIgnored private(set) weak var textView: PageTextView?
 
-    /// Authoritative snapshot of the editor content (display-font normalized).
-    /// Updated on every text change so saves never depend on view liveness.
-    @ObservationIgnored private var currentText: NSAttributedString
+    /// Snapshot of the editor content (display-font normalized) used while **no view is attached**: programmatic edits from the compact "More" menu, Smart Cleanup on iPhone, and the final save after detach all read and write it. While a view is attached, `currentText` reads the view's storage instead.
+    @ObservationIgnored private var snapshot: NSAttributedString
 
     @ObservationIgnored private var saveTask: Task<Void, Never>?
     @ObservationIgnored private(set) var hasUnsavedChanges = false
+
+    /// macOS: the editor's own undo manager (see the file comment). Unused on iOS, where the text view provides one.
+    @ObservationIgnored let editorUndoManager = UndoManager()
+
+    /// Host callback: the user asked to recapture (re-crop) an existing illustration. `ReviewView` opens the capture overlay seeded with the capture's rectangle.
+    @ObservationIgnored var onRecaptureRequested: ((PageCapture) -> Void)?
 
     /// Live statistics for the Statistics pane.
     private(set) var wordCount: Int
@@ -49,9 +58,23 @@ final class PageTextController {
     init(page: Page) {
         self.page = page
         let display = RichTextArchiver.normalizedForDisplay(page.attributedText)
-        self.currentText = display
+        self.snapshot = display
         self.wordCount = TextStatistics.wordCount(of: display.string)
-        self.charCount = display.string.count
+        self.charCount = TextStatistics.characterCount(of: display.string)
+        // Attachment views look their pixels up here; register before any view can ask.
+        CaptureImageStore.shared.register(page.unwrappedCaptures)
+    }
+
+    // MARK: - Authoritative text
+
+    /// The current editor content: the live storage while a view is attached, the snapshot otherwise.
+    private var currentText: NSAttributedString {
+        if let textView { return NSAttributedString(attributedString: textView.contentStorage) }
+        return snapshot
+    }
+
+    private var currentPlainString: String {
+        textView?.contentStorage.string ?? snapshot.string
     }
 
     // MARK: - View Attachment
@@ -59,9 +82,16 @@ final class PageTextController {
     /// Loads the controller's content into a platform text view. Idempotent for the same view; reloads when a new view instance appears (e.g., sheet reopened).
     func attach(_ textView: PageTextView) {
         if self.textView === textView { return }
+        // A previous view's content is the latest text; keep it before switching views.
+        if let previous = self.textView { snapshot = NSAttributedString(attributedString: previous.contentStorage) }
         self.textView = textView
-        textView.contentStorage.setAttributedString(currentText)
+        textView.contentStorage.setAttributedString(snapshot)
+        // Fresh page, fresh history — but only *this editor's* history (macOS) or the view's own (iOS).
+        #if os(macOS)
+        editorUndoManager.removeAllActions()
+        #else
         textView.undoManager?.removeAllActions()
+        #endif
         textView.selectedRange = NSRange(location: 0, length: 0)
         #if os(macOS)
         textView.scrollToBeginningOfDocument(nil)
@@ -71,18 +101,20 @@ final class PageTextController {
             self?.dynamicTypeDidChange()
         }
         #endif
+        CaptureImageStore.shared.actionHandler = self
     }
 
     #if os(iOS)
     /// Re-normalizes the live content to the current Dynamic Type body size.
     /// Display-only: `normalizedForStorage` strips sizes on save, so this never dirties the document or triggers a save.
     private func dynamicTypeDidChange() {
-        currentText = RichTextArchiver.normalizedForDisplay(currentText)
+        let renormalized = RichTextArchiver.normalizedForDisplay(RichTextArchiver.normalizedForStorage(currentText))
+        snapshot = renormalized
         guard let textView else { return }
         let selection = textView.selectedRange
-        textView.contentStorage.setAttributedString(currentText)
-        let location = min(selection.location, currentText.length)
-        let length = min(selection.length, currentText.length - location)
+        textView.contentStorage.setAttributedString(renormalized)
+        let location = min(selection.location, renormalized.length)
+        let length = min(selection.length, renormalized.length - location)
         textView.selectedRange = NSRange(location: location, length: length)
         textView.typingAttributes = [
             .font: PageTextStyle.displayFont,
@@ -93,7 +125,9 @@ final class PageTextController {
 
     /// Saves pending edits and severs the view link. Call before switching pages.
     func detach() {
+        if let textView { snapshot = NSAttributedString(attributedString: textView.contentStorage) }
         saveNow()
+        if CaptureImageStore.shared.actionHandler === self { CaptureImageStore.shared.actionHandler = nil }
         textView = nil
     }
 
@@ -101,16 +135,15 @@ final class PageTextController {
 
     /// Called by the view delegate on every user edit.
     func textDidChange() {
-        guard let textView else { return }
-        currentText = NSAttributedString(attributedString: textView.contentStorage)
+        guard textView != nil else { return }
         markEdited()
     }
 
     private func markEdited() {
         hasUnsavedChanges = true
-        let plain = currentText.string
+        let plain = currentPlainString
         wordCount = TextStatistics.wordCount(of: plain)
-        charCount = plain.count
+        charCount = TextStatistics.characterCount(of: plain)
         scheduleDebouncedSave()
     }
 
@@ -136,7 +169,7 @@ final class PageTextController {
         guard hasUnsavedChanges else { return }
         hasUnsavedChanges = false
 
-        // Normalize to the canonical storage font (also strips display-only colors)
+        // Normalize to the canonical storage font (also strips display-only colors). Attachments pass through; the setter picks RTFD when they're present.
         let storageText = RichTextArchiver.normalizedForStorage(currentText)
         page.attributedText = storageText
 
@@ -153,9 +186,9 @@ final class PageTextController {
 
     // MARK: - Content Access
 
-    /// Plain text of the live editor content (for cleanup range computation).
+    /// Plain text of the live editor content (for cleanup range computation). Includes attachment placeholders so ranges line up with the attributed string.
     var plainText: String {
-        currentText.string
+        currentPlainString
     }
 
     /// Live content normalized for export (copy button, share).
@@ -182,7 +215,7 @@ final class PageTextController {
 
     /// Replaces view + snapshot content, restoring a clamped selection.
     private func apply(_ text: NSAttributedString, selection: NSRange?) {
-        currentText = text
+        snapshot = text
         guard let textView else { return }
         textView.contentStorage.setAttributedString(text)
         if let selection {
@@ -192,8 +225,16 @@ final class PageTextController {
         }
     }
 
+    private var activeUndoManager: UndoManager? {
+        #if os(macOS)
+        textView == nil ? nil : editorUndoManager
+        #else
+        textView?.undoManager
+        #endif
+    }
+
     private func registerUndo(previous: NSAttributedString, previousSelection: NSRange?, actionName: String) {
-        guard let undoManager = textView?.undoManager else { return }
+        guard let undoManager = activeUndoManager else { return }
         #if os(macOS)
         textView?.breakUndoCoalescing()
         #endif
@@ -244,7 +285,8 @@ final class PageTextController {
         }
 
         // Uniform target state decided by the first character in the selection.
-        let firstFont = currentText.attribute(.font, at: range.location, effectiveRange: nil) as? PlatformFont
+        let text = currentText
+        let firstFont = text.attribute(.font, at: range.location, effectiveRange: nil) as? PlatformFont
         let targetState = !(isBoldToggle ? (firstFont?.isBold ?? false) : (firstFont?.isItalic ?? false))
 
         performEdit(actionName: actionName) { text in
@@ -312,6 +354,51 @@ final class PageTextController {
         saveNow()
     }
 
+    // MARK: - Inline captures
+
+    /// Inserts a reference attachment for `capture` on its own paragraph at the caret (or at the end when no view is attached), undoably, and saves.
+    /// The capture must already be inserted in the model context and attached to `page`.
+    func insertCapture(_ capture: PageCapture) {
+        guard let id = capture.uuid else { return }
+        CaptureImageStore.shared.register(capture)
+
+        let insertion = textView?.selectedRange.location ?? currentText.length
+        let font = PageTextStyle.displayFont
+        let attachment = InlineAttachments.makeCaptureAttachment(captureID: id)
+        let attachmentString = InlineAttachments.attributedString(for: attachment, font: font)
+
+        performEdit(actionName: String(localized: "Insert Illustration")) { text in
+            let location = min(insertion, text.length)
+            // Put the image on its own line: newline before unless at a paragraph start, newline after unless one follows.
+            let plain = text.string as NSString
+            var prefix = ""
+            var suffix = ""
+            if location > 0, plain.character(at: location - 1) != 0x0A { prefix = "\n" }
+            if location < plain.length, plain.character(at: location) != 0x0A { suffix = "\n" }
+            let piece = NSMutableAttributedString()
+            if !prefix.isEmpty { piece.append(NSAttributedString(string: prefix, attributes: [.font: font])) }
+            piece.append(attachmentString)
+            if !suffix.isEmpty { piece.append(NSAttributedString(string: suffix, attributes: [.font: font])) }
+            text.insert(piece, at: location)
+        }
+
+        // Caret after the inserted paragraph.
+        if let textView {
+            let newLocation = min(insertion + 2, textView.contentStorage.length)
+            textView.selectedRange = NSRange(location: newLocation, length: 0)
+        }
+        saveNow()
+    }
+
+    /// Replaces the pixels of an existing capture (recapture). The attachment stays in place; only the store entry is refreshed.
+    func captureDidChange(_ capture: PageCapture) {
+        CaptureImageStore.shared.register(capture)
+    }
+
+    private func capture(withID id: UUID) -> PageCapture? {
+        page.unwrappedCaptures.first { $0.uuid == id }
+    }
+
     // MARK: - Find
 
     /// Presents the platform find UI (find bar on macOS, find navigator on iOS).
@@ -325,5 +412,48 @@ final class PageTextController {
         #else
         textView.findInteraction?.presentFindNavigator(showingReplace: false)
         #endif
+    }
+}
+
+// MARK: - Capture attachment actions
+
+extension PageTextController: CaptureAttachmentActionHandling {
+    func toggleDraft(forCapture id: UUID) {
+        guard let capture = capture(withID: id) else { return }
+        capture.isDraft.toggle()
+        capture.lastModified = Date()
+        page.document?.lastModified = Date()
+        CaptureImageStore.shared.update(id, isDraft: capture.isDraft)
+        try? page.modelContext?.save()
+    }
+
+    func recapture(_ id: UUID) {
+        guard let capture = capture(withID: id) else { return }
+        onRecaptureRequested?(capture)
+    }
+
+    /// Removes the attachment from the text (undoable as a text edit) and deletes the capture model. The model deletion is not undoable — the pixels are gone once the context saves — so the confirmation lives in the attachment menu wording.
+    func removeCapture(_ id: UUID) {
+        performEdit(actionName: String(localized: "Remove Illustration")) { text in
+            guard let range = InlineAttachments.range(ofCapture: id, in: text) else { return }
+            // Also eat one adjoining newline so the paragraph the image lived on collapses.
+            var removal = range
+            let plain = text.string as NSString
+            if removal.upperBound < plain.length, plain.character(at: removal.upperBound) == 0x0A {
+                removal.length += 1
+            } else if removal.location > 0, plain.character(at: removal.location - 1) == 0x0A {
+                removal.location -= 1
+                removal.length += 1
+            }
+            text.deleteCharacters(in: removal)
+        }
+        if let capture = capture(withID: id) {
+            page.captures?.removeAll { $0.uuid == id }
+            page.modelContext?.delete(capture)
+            page.document?.recalculateStorageSize()
+        }
+        CaptureImageStore.shared.remove(id)
+        saveNow()
+        try? page.modelContext?.save()
     }
 }

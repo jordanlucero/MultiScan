@@ -238,11 +238,6 @@ struct PageContextMenu: ViewModifier {
                               preview: SharePreview(String(localized: "Page \(page.pageNumber) Text"))) {
                         Label("Share Page Text…", systemImage: "square.and.arrow.up")
                     }
-                    Button {
-                        RichText(TextExporter.exportableText(for: page), suggestedName: "\(document.name) — \(page.title)").copyToPasteboard()
-                    } label: {
-                        Label("Copy Page Text", systemImage: "doc.on.doc")
-                    }
                 }
 
                 if let onCaptureArtwork {

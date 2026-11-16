@@ -819,7 +819,7 @@ struct AddPagesFromPhotosSheet: View {
 
     var body: some View {
         VStack(spacing: 20) {
-            Text("Append Pages from Photos")
+            Text("Add Pages from Photos")
                 .font(.headline)
 
             if isAddingPages {

@@ -64,35 +64,19 @@ struct MultiScanCommands: Commands {
         CommandGroup(after: .newItem) {
             Divider()
 
-            Button("Append Pages from Photos…", systemImage: "plus") {
+            Button("Add Pages from Photos…", systemImage: "plus") {
                 showAddFromPhotos = true
             }
             .disabled(showAddFromPhotos == nil)
 
-            Button("Append Pages from Files…") {
+            Button("Add Pages from Files…") {
                 showAddFromFiles = true
             }
             .disabled(showAddFromFiles == nil)
 
             Divider()
 
-            // A ShareLink may not honor `.disabled()`, so the item is swapped for a disabled button when there is no page.
-            if let richText = currentPageRichText, let page = currentPage {
-                ShareLink("Share Page Text…",
-                          item: richText,
-                          preview: SharePreview(String(localized: "Page \(page.pageNumber) Text")))
-                Button("Copy Page Text") {
-                    richText.copyToPasteboard()
-                }
-                .keyboardShortcut("C", modifiers: [.command, .shift])
-            } else {
-                Button("Share Page Text…", systemImage: "square.and.arrow.up") {}
-                    .disabled(true)
-                Button("Copy Page Text") {}
-                    .disabled(true)
-            }
-
-            Button("Export Project Text…") {
+            Button("Export Project Text…", systemImage: "square.and.arrow.up") {
                 textController?.saveNow()
                 showExportPanel = true
             }
@@ -206,7 +190,7 @@ struct MultiScanCommands: Commands {
 
             // Viewer-wide display preference (not a page edit): when off, the system tone-maps HDR photos down to SDR. No effect on SDR images.
             Toggle(isOn: $viewerShowsHDR) {
-                Label("Show HDR", systemImage: "sun.max")
+                Label("Display HDR", systemImage: "sun.max")
             }
         }
     }

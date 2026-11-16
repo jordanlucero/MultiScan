@@ -743,6 +743,15 @@
         }
       }
     },
+    "Add Pages from Files…" : {
+
+    },
+    "Add Pages from Photos" : {
+
+    },
+    "Add Pages from Photos…" : {
+
+    },
     "Add Range" : {
 
     },
@@ -824,38 +833,6 @@
     },
     "and %lld more" : {
       "comment" : "Export panel: overflow count of draft reminders"
-    },
-    "Append Pages from Files…" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Anexar páginas desde archivos…"
-          }
-        }
-      }
-    },
-    "Append Pages from Photos" : {
-      "comment" : "Capital “Fotos” to refer to Apple Photos, not the photos themselves",
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Anexar páginas desde Fotos"
-          }
-        }
-      }
-    },
-    "Append Pages from Photos…" : {
-      "comment" : "Capital “Fotos” to refer to Apple Photos, not the photos themselves",
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Anexar páginas desde Fotos…"
-          }
-        }
-      }
     },
     "Apple Vision" : {
       "comment" : "OCR engine name"
@@ -1069,9 +1046,6 @@
 
     },
     "Copy exported text" : {
-
-    },
-    "Copy Page Text" : {
 
     },
     "Copy the Current Page's Text" : {
@@ -1383,6 +1357,9 @@
         }
       }
     },
+    "Display HDR" : {
+
+    },
     "Done" : {
       "localizations" : {
         "es-419" : {
@@ -1500,34 +1477,12 @@
         }
       }
     },
-    "Export Page Text…" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Exportar texto de la página…"
-          }
-        }
-      }
-    },
     "Export Project Text…" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Exportar texto del proyecto…"
-          }
-        }
-      }
-    },
-    "Export…" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Exportar…"
           }
         }
       }
@@ -2918,17 +2873,6 @@
     "Project page" : {
 
     },
-    "Project Text" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Texto del proyecto"
-          }
-        }
-      }
-    },
     "Projects" : {
       "localizations" : {
         "es-419" : {
@@ -3453,16 +3397,6 @@
     },
     "Share…" : {
 
-    },
-    "Show HDR" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mostrar HDR"
-          }
-        }
-      }
     },
     "Show Smart Cleanup" : {
       "localizations" : {

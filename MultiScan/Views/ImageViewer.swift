@@ -44,7 +44,7 @@ struct ImageViewer: View {
 
     // Settings
     @AppStorage(DefaultsKey.viewerBackground) private var viewerBackgroundRaw = ViewerBackground.system.rawValue
-    /// Show HDR photos with full headroom; when off, the system tone-maps them to SDR.
+    /// Display HDR photos with full headroom; when off, the system tone-maps them to SDR.
     /// Toggled from the Image menu (macOS + iPadOS menu bar).
     @AppStorage(DefaultsKey.viewerShowsHDR) private var viewerShowsHDR = true
 

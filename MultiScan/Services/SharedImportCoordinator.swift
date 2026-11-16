@@ -73,12 +73,11 @@ final class SharedImportCoordinator {
         AppRouter.shared.wantsHome = true
 
         let pipeline = ProjectImportPipeline.shared
-        let optimizeImages = UserDefaults.standard.bool(forKey: DefaultsKey.optimizeImagesOnImport)
 
         do {
             isPreparing = true
             defer { isPreparing = false }
-            let prepared = try await pipeline.prepare(urls: batch.fileURLs, optimizeImages: optimizeImages) { estimatedPageCount in
+            let prepared = try await pipeline.prepare(urls: batch.fileURLs) { estimatedPageCount in
                 if estimatedPageCount > 0 {
                     AccessibilityNotification.Announcement(String(localized: "Processing \(estimatedPageCount) pages. This will take a few moments.")).post()
                 }

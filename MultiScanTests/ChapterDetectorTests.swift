@@ -8,10 +8,12 @@ import Testing
 import SwiftData
 @testable import MultiScan
 
-@Suite("Chapter detection")
+@Suite("Chapter titles")
 struct ChapterDetectorTests {
     let container = Fixtures.container()
 
+    // Automatic chapter detection is on hold (see ChapterDetector.swift), so its tests are parked with it. They are kept, not deleted: they document what the heuristic detector was expected to do and come back with the feature.
+    /*
     @Test func explicitChapterLines() {
         #expect(ChapterDetector.explicitChapterTitle(fromLine: "Chapter 7", nextLine: "The Return") == "Chapter 7: The Return")
         #expect(ChapterDetector.explicitChapterTitle(fromLine: "CHAPTER SEVEN", nextLine: "It was late.") == "CHAPTER SEVEN")
@@ -72,11 +74,12 @@ struct ChapterDetectorTests {
         #expect(merged.map(\.pageNumber) == [3, 9])
         #expect(merged[0].title == "Chapter 1")
     }
+    */
 
-    @Test func titleSuggesterDossierIsCompact() {
+    @Test func titleSuggesterDossierIsCompact() async {
         let texts = ["THE GREAT BOOK\nby Someone\n\n1", "The Great Book\nChapter One\nBody\n2", "The Great Book\nMore body\n3", "The Great Book\nThe End\n4"]
         let document = Fixtures.makeProject(texts: texts, in: container.mainContext)
-        let dossier = ProjectTitleSuggester.dossier(for: document)
+        let dossier = await ProjectTitleSuggester.dossier(for: document)
         #expect(dossier.firstPageLines.first == "THE GREAT BOOK")
         #expect(dossier.pageCount == 4)
         #expect(dossier.repeatedHeaders.contains("The Great Book"))

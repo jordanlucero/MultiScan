@@ -10,6 +10,27 @@
 import SwiftUI
 import SwiftData
 
+// MARK: - Actions the review view performs
+
+/// What a page's menus can ask the review view to do. Each closure is optional: a menu shows an item only where its host can perform it. One value instead of a growing list of callback parameters on every list, cell, and menu — and the same value reaches the menu bar through `FocusedValues.pageActions`.
+struct PageActions {
+    /// Insert pages at a position; the Int is the page number to insert after (0 = at the beginning). The context menu offers these on iOS only — macOS appends through the File menu.
+    var insertFromPhotos: ((Int) -> Void)?
+    var insertFromFiles: ((Int) -> Void)?
+    /// Opens the artwork capture overlay for a page.
+    var captureArtwork: ((Page) -> Void)?
+    /// Smart Separate after import: looks at one page / at the whole project.
+    var separate: ((Page) -> Void)?
+    var separateProject: (() -> Void)?
+    /// Puts a separated scan back on one page.
+    var rejoin: ((Page) -> Void)?
+    /// Shows the whole scan a separated page was cut from.
+    var viewOriginalScan: ((Page) -> Void)?
+    /// Reads the page's text again with the configured engine / puts Apple Vision's text back.
+    var recognizeAgain: ((Page) -> Void)?
+    var restoreVisionText: ((Page) -> Void)?
+}
+
 // MARK: - Image
 
 /// Rotate Clockwise / Rotate Counterclockwise.
@@ -66,7 +87,7 @@ struct PageAdjustmentToggles: View {
     }
 }
 
-/// "Capture Artwork…" — opens the crop overlay for a page. Shown wherever a page is in context (viewer context menu, page context menu, Image menu, iPhone More menu).
+/// "Capture Artwork…" — opens the crop overlay for a page. Shown wherever a page is in context (viewer context menu, page context menu, Edit menu, iPhone More menu).
 struct CaptureArtworkButton: View {
     let page: Page?
     let action: () -> Void
@@ -78,6 +99,67 @@ struct CaptureArtworkButton: View {
         }
         .keyboardShortcut(showsKeyboardShortcut ? KeyboardShortcut("A", modifiers: [.command, .shift]) : nil)
         .disabled(page == nil)
+    }
+}
+
+/// Smart Separate for one page: Separate into Two Pages… (a whole scan) or Rejoin Separated Pages… (a page that was separated), and View Original Scan… — the whole image a separated page was cut from. The menu bar shows these as Edit ▸ Smart Separate; the page context menu and the iOS More menu list them inline.
+struct SmartSeparateMenuItems: View {
+    let page: Page?
+    let actions: PageActions
+
+    var body: some View {
+        if let page, page.isSeparated {
+            if let rejoin = actions.rejoin {
+                Button { rejoin(page) } label: {
+                    Label("Rejoin Separated Pages…", systemImage: "rectangle.portrait.on.rectangle.portrait")
+                }
+            }
+        } else if let separate = actions.separate {
+            Button { if let page { separate(page) } } label: {
+                Label("Separate into Two Pages…", systemImage: "rectangle.split.2x1")
+            }
+            .disabled(page.map { !PageSeparationService.canSeparate($0) } ?? true)
+        }
+
+        if let viewOriginalScan = actions.viewOriginalScan {
+            // Only a separated page has an original that differs from what the viewer already shows.
+            Button { if let page { viewOriginalScan(page) } } label: {
+                Label("View Original Scan…", systemImage: "photo")
+            }
+            .disabled(page?.isSeparated != true)
+        }
+    }
+}
+
+/// Reading a page's text again: Recognize Text Again… and, when a model wrote the current text, Restore Apple Vision Text….
+struct PageRecognitionMenuItems: View {
+    let page: Page?
+    let actions: PageActions
+
+    var body: some View {
+        if let recognizeAgain = actions.recognizeAgain {
+            Button { if let page { recognizeAgain(page) } } label: {
+                Label("Recognize Text Again…", systemImage: "text.viewfinder")
+            }
+            .disabled(page == nil)
+        }
+
+        if let page, let restore = actions.restoreVisionText, PageRecognitionService.textCameFromModel(page) {
+            Button { restore(page) } label: {
+                Label("Restore Apple Vision Text…", systemImage: "arrow.uturn.backward")
+            }
+        }
+    }
+}
+
+/// Scan-level actions for a page, inline: Smart Separate's items, then reading the text again. Used where there is no room for a submenu's extra step (page context menu, iOS More menu). Everything here that replaces or merges page text is confirmed by the host before it acts.
+struct PageScanMenuItems: View {
+    let page: Page?
+    let actions: PageActions
+
+    var body: some View {
+        SmartSeparateMenuItems(page: page, actions: actions)
+        PageRecognitionMenuItems(page: page, actions: actions)
     }
 }
 
@@ -187,16 +269,12 @@ extension View {
 
 // MARK: - Page Context Menu
 
-/// The one per-page context menu, shared by the thumbnail sidebar (macOS + iPad) and the iPhone page grid: info header, export/copy, capture, chapter, rotation, adjustments, move up/down, insert (iOS), delete — with its confirmation dialog and the chapter editor.
+/// The one per-page context menu, shared by the thumbnail sidebar (macOS + iPad) and the iPhone page grid: info header, export/copy, capture, chapter, scan actions (separate / rejoin / read again), rotation, adjustments, move up/down, insert (iOS), delete — with its confirmation dialog and the chapter editor.
 struct PageContextMenu: ViewModifier {
     let page: Page
     let document: Document
     let navigationState: NavigationState
-
-    /// Insert-at-position callbacks; the Int is the page number to insert after (0 = at the beginning). Shown on iOS only — macOS appends through the File menu.
-    var onInsertFromPhotos: ((Int) -> Void)?
-    var onInsertFromFiles: ((Int) -> Void)?
-    var onCaptureArtwork: ((Page) -> Void)?
+    var actions = PageActions()
 
     @Environment(\.modelContext) private var modelContext
     @State private var showDeleteConfirmation = false
@@ -240,9 +318,9 @@ struct PageContextMenu: ViewModifier {
                     }
                 }
 
-                if let onCaptureArtwork {
+                if let captureArtwork = actions.captureArtwork {
                     Section {
-                        CaptureArtworkButton(page: page) { onCaptureArtwork(page) }
+                        CaptureArtworkButton(page: page) { captureArtwork(page) }
                     }
                 }
 
@@ -251,6 +329,10 @@ struct PageContextMenu: ViewModifier {
                         chapterDraft = page.sectionTitle ?? ""
                         isEditingChapter = true
                     }
+                }
+
+                Section {
+                    PageScanMenuItems(page: page, actions: actions)
                 }
 
                 Section {
@@ -279,7 +361,7 @@ struct PageContextMenu: ViewModifier {
                 }
 
                 #if os(iOS)
-                if onInsertFromPhotos != nil || onInsertFromFiles != nil {
+                if actions.insertFromPhotos != nil || actions.insertFromFiles != nil {
                     Section {
                         insertMenu("Insert Pages Before", insertAfter: page.pageNumber - 1)
                         insertMenu("Insert Pages After", insertAfter: page.pageNumber)
@@ -307,14 +389,14 @@ struct PageContextMenu: ViewModifier {
     #if os(iOS)
     private func insertMenu(_ title: LocalizedStringKey, insertAfter: Int) -> some View {
         Menu {
-            if let onInsertFromPhotos {
+            if let insertFromPhotos = actions.insertFromPhotos {
                 Button("From Photos…", systemImage: "photo.on.rectangle") {
-                    onInsertFromPhotos(insertAfter)
+                    insertFromPhotos(insertAfter)
                 }
             }
-            if let onInsertFromFiles {
+            if let insertFromFiles = actions.insertFromFiles {
                 Button("From Files…", systemImage: "folder") {
-                    onInsertFromFiles(insertAfter)
+                    insertFromFiles(insertAfter)
                 }
             }
         } label: {
@@ -330,18 +412,9 @@ extension View {
         for page: Page,
         in document: Document,
         navigationState: NavigationState,
-        onInsertFromPhotos: ((Int) -> Void)? = nil,
-        onInsertFromFiles: ((Int) -> Void)? = nil,
-        onCaptureArtwork: ((Page) -> Void)? = nil
+        actions: PageActions = PageActions()
     ) -> some View {
-        modifier(PageContextMenu(
-            page: page,
-            document: document,
-            navigationState: navigationState,
-            onInsertFromPhotos: onInsertFromPhotos,
-            onInsertFromFiles: onInsertFromFiles,
-            onCaptureArtwork: onCaptureArtwork
-        ))
+        modifier(PageContextMenu(page: page, document: document, navigationState: navigationState, actions: actions))
     }
 }
 
@@ -354,17 +427,6 @@ struct ExportProjectTextButton: View {
     var body: some View {
         Button(action: action) {
             Label("Export Project Text…", systemImage: "square.and.arrow.up.on.square")
-        }
-    }
-}
-
-/// Opens the Digest reading view.
-struct OpenDigestButton: View {
-    var action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Label("Read in Digest", systemImage: "book.pages")
         }
     }
 }

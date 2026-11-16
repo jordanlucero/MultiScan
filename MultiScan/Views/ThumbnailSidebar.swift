@@ -11,15 +11,8 @@ struct ThumbnailSidebar: View {
     let document: Document
     let navigationState: NavigationState
 
-    /// Callbacks for inserting pages at a position. The Int is the page number to insert after (0 = insert at beginning). The context menu offers them on iOS only.
-    var onInsertFromPhotos: ((Int) -> Void)?
-    var onInsertFromFiles: ((Int) -> Void)?
-    /// Opens the artwork capture overlay for a page.
-    var onCaptureArtwork: ((Page) -> Void)?
-    /// Opens the Digest reading view.
-    var onOpenDigest: (() -> Void)?
-    /// Opens the project's page-numbering settings.
-    var onEditPageNumbering: (() -> Void)?
+    /// What the page context menu can ask the review view to do (insert pages, capture artwork, separate / rejoin, read the text again).
+    var actions = PageActions()
 
     @AppStorage(DefaultsKey.filterOption) private var filterOptionString = "all"
     @State private var searchText = ""
@@ -92,12 +85,12 @@ struct ThumbnailSidebar: View {
                     document: document,
                     navigationState: navigationState,
                     isReorderEnabled: !isAnyFilterActive,
-                    onInsertFromPhotos: onInsertFromPhotos,
-                    onInsertFromFiles: onInsertFromFiles,
-                    onCaptureArtwork: onCaptureArtwork
+                    actions: actions
                 )
             }
             .onChange(of: navigationState.currentPageNumber) { _, newValue in
+                // The selection must never sit inside a folded chapter.
+                navigationState.revealCurrentPage()
                 // Scroll to page by finding its stable ID
                 if let pageNumber = newValue,
                    let page = pages.first(where: { $0.pageNumber == pageNumber }) {
@@ -105,15 +98,6 @@ struct ThumbnailSidebar: View {
                         proxy.scrollTo(page.persistentModelID, anchor: .center)
                     }
                 }
-            }
-            .safeAreaInset(edge: .top, spacing: 0) {
-                // Project-level actions live above the list: Digest and page numbering.
-                SidebarProjectActions(
-                    document: document,
-                    onOpenDigest: onOpenDigest,
-                    onEditPageNumbering: onEditPageNumbering,
-                    onDetectChapters: { ChapterDetector.apply(to: document); navigationState.refreshPageOrder() }
-                )
             }
             .safeAreaInset(edge: searchBarEdge, spacing: 0) {
                 ThumbnailFilterBar(
@@ -153,160 +137,108 @@ struct ThumbnailSidebar: View {
     }
 }
 
-// MARK: - Project actions
+// MARK: - Chapter header
 
-/// Digest / numbering / chapters, as a compact row at the top of the sidebar. A `Menu` keeps it to one row at the sidebar's minimum width.
-struct SidebarProjectActions: View {
-    let document: Document
-    var onOpenDigest: (() -> Void)?
-    var onEditPageNumbering: (() -> Void)?
-    var onDetectChapters: (() -> Void)?
-
-    var body: some View {
-        HStack(spacing: 8) {
-            if let onOpenDigest {
-                Button(action: onOpenDigest) {
-                    Label("Digest", systemImage: "book.pages")
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .help("Read the whole project as one continuous text")
-            }
-
-            Spacer()
-
-            Menu {
-                if let onEditPageNumbering {
-                    Button("Page Numbering…", systemImage: "number") { onEditPageNumbering() }
-                }
-                if let onDetectChapters {
-                    Button("Detect Chapters", systemImage: "list.bullet.indent") { onDetectChapters() }
-                }
-                if !document.chapterStartPages.isEmpty {
-                    Text("\(document.chapterStartPages.count) chapters", comment: "Sidebar project menu: chapter count")
-                }
-            } label: {
-                Label("Project", systemImage: "ellipsis.circle")
-                    .labelStyle(.iconOnly)
-            }
-            .menuIndicator(.hidden)
-            #if os(macOS)
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-            #endif
-            .accessibilityLabel("Project options")
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-    }
-}
-
-// MARK: - Chapter grouping
-
-/// Splits an ordered page list into chapter groups: a page with a `sectionTitle` starts a new group; pages before the first chapter form an untitled group.
-enum ChapterGrouping {
-    struct Group: Identifiable {
-        /// Stable across filter changes: the first page's identity.
-        let id: PersistentIdentifier
-        let title: String?
-        var pages: [Page]
-    }
-
-    static func groups(for pages: [Page]) -> [Group] {
-        var groups: [Group] = []
-        for page in pages {
-            if let title = page.sectionTitle, !title.isEmpty {
-                groups.append(Group(id: page.persistentModelID, title: title, pages: [page]))
-            } else if groups.isEmpty {
-                groups.append(Group(id: page.persistentModelID, title: nil, pages: [page]))
-            } else {
-                groups[groups.count - 1].pages.append(page)
-            }
-        }
-        return groups
-    }
-}
-
-/// Sticky chapter header in the sidebar / page grid.
-struct ChapterSectionHeader: View {
+/// A chapter's header in the sidebar and the page grid: the title with a disclosure control that folds the chapter's pages away.
+///
+/// It is a `DisclosureGroup` used for its *label only* — the pages are not its content. They stay direct children of the enclosing lazy stack/grid `Section`, where they are created lazily and take part in drag reordering; putting them inside the disclosure group would make the whole chapter one eagerly-built child. What the group contributes is the platform's own disclosure control, its expand/collapse accessibility, and keyboard behavior.
+///
+/// Scrolls with the list (not pinned): a header that floats over the thumbnails is what this replaced.
+struct ChapterDisclosureHeader: View {
     let title: String
-    let startPage: Page?
+    let pageCount: Int
+    @Binding var isExpanded: Bool
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "bookmark.fill")
-                .font(.caption2)
-                .foregroundStyle(Color.accentColor)
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .lineLimit(2)
-            Spacer()
-            if let startPage, startPage.sectionTitleIsAutomatic {
-                Image(systemName: "sparkles")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .help("Detected automatically")
-                    .accessibilityLabel("Detected automatically")
+        DisclosureGroup(isExpanded: $isExpanded) {
+            EmptyView()
+        } label: {
+            HStack(spacing: 6) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                Spacer(minLength: 4)
+                if !isExpanded {
+                    // What is folded away, so a collapsed chapter still says how big it is.
+                    Text("\(pageCount)", comment: "Number of pages in a collapsed chapter")
+                        .font(.caption)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel(pageCount == 1 ? "1 page" : "\(pageCount) pages")
+                }
             }
+            .contentShape(Rectangle())
         }
-        .padding(.vertical, 4)
-        .padding(.horizontal, 6)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.bar)
+        // On iOS a disclosure group's label takes the accent tint, which makes a chapter title read like a link.
+        .tint(.primary)
         .accessibilityAddTraits(.isHeader)
+        .padding(.top, 6)
     }
 }
 
 // MARK: - Page List
 
-/// The scrolling thumbnail column, grouped by chapter. Takes an already-filtered page array so the filter doesn't re-run here, and keeps the reorder plumbing out of the sidebar's own body.
+/// The scrolling thumbnail column, in chapter sections. Takes an already-filtered page array so the filter doesn't re-run here, and keeps the reorder plumbing out of the sidebar's own body.
+///
+/// ## Reordering
+/// The documented shape for a sectioned reorderable list: every section's `ForEach` is `.reorderable(collectionID:)` with the section's identity, inside one `.reorderContainer(for:in:isEnabled:move:)`. A drop therefore says which *chapter* it landed in as well as which page it landed before, and `NavigationState.applyReorder` moves the pages into that chapter (see `ChapterSections` for why chapters are containers). A folded chapter contributes no rows, so dragging past it is a short trip; drop on either side of its header to put a page before or after the chapter.
 struct ThumbnailPageList: View {
     let pages: [Page]
     let document: Document
     let navigationState: NavigationState
     let isReorderEnabled: Bool
-    var onInsertFromPhotos: ((Int) -> Void)?
-    var onInsertFromFiles: ((Int) -> Void)?
-    var onCaptureArtwork: ((Page) -> Void)?
+    var actions = PageActions()
 
     var body: some View {
         let currentPageNumber = navigationState.currentPageNumber
-        let groups = ChapterGrouping.groups(for: pages)
+        let sections = ChapterSections.sections(for: pages)
+        let collapsed = navigationState.collapsedChapters
+        // One resolution of the numbering plan for the whole list (see `Document.printedPageLabels`).
+        let printedLabels = document.printedPageLabels()
 
-        LazyVStack(spacing: 10, pinnedViews: [.sectionHeaders]) {
-            ForEach(groups) { group in
+        LazyVStack(spacing: 10) {
+            ForEach(sections) { section in
                 Section {
-                    ForEach(group.pages) { page in
-                        ThumbnailView(page: page, isSelected: currentPageNumber == page.pageNumber) {
-                            navigationState.goToPage(pageNumber: page.pageNumber)
+                    if !collapsed.contains(section.id) {
+                        ForEach(section.pages) { page in
+                            ThumbnailView(
+                                page: page,
+                                isSelected: currentPageNumber == page.pageNumber,
+                                printedLabel: printedLabels[page.pageNumber]
+                            ) {
+                                navigationState.goToPage(pageNumber: page.pageNumber)
+                            }
+                            .pageContextMenu(for: page, in: document, navigationState: navigationState, actions: actions)
+                            .id(page.persistentModelID)  // Use stable model ID for animation
                         }
-                        .pageContextMenu(
-                            for: page,
-                            in: document,
-                            navigationState: navigationState,
-                            onInsertFromPhotos: onInsertFromPhotos,
-                            onInsertFromFiles: onInsertFromFiles,
-                            onCaptureArtwork: onCaptureArtwork
-                        )
-                        .id(page.persistentModelID)  // Use stable model ID for animation
+                        .reorderable(collectionID: section.id)
                     }
-                    .reorderable()
                 } header: {
-                    if let title = group.title {
-                        ChapterSectionHeader(title: title, startPage: group.pages.first)
+                    if let title = section.title {
+                        ChapterDisclosureHeader(
+                            title: title,
+                            pageCount: section.pages.count,
+                            isExpanded: Binding(
+                                get: { !navigationState.isChapterCollapsed(section.id) },
+                                set: { navigationState.setChapter(section.id, collapsed: !$0) }
+                            )
+                        )
                     }
                 }
             }
         }
         .padding()
         .animation(.easeInOut(duration: 0.3), value: navigationState.pageOrderVersion)
-        .reorderContainer(for: Page.self, isEnabled: isReorderEnabled) { difference in
+        .animation(.snappy(duration: 0.25), value: collapsed)
+        .reorderContainer(for: Page.self, in: PersistentIdentifier.self, isEnabled: isReorderEnabled) { difference in
             let targetID: PersistentIdentifier?
             switch difference.destination.position {
             case .before(let id): targetID = id
             case .end: targetID = nil
             }
-            navigationState.applyReorder(of: difference.sources, before: targetID)
+            navigationState.applyReorder(of: difference.sources, toChapter: difference.destination.collectionID, before: targetID)
         }
     }
 }
@@ -358,6 +290,8 @@ struct ThumbnailFilterBar: View {
 struct PageLabelText: View {
     let page: Page
     let isSelected: Bool
+    /// The printed page number, resolved once for the whole list by the caller (`Document.printedPageLabels()`), not per cell.
+    var printedLabel: String?
     var font: Font = .caption
 
     var body: some View {
@@ -365,7 +299,7 @@ struct PageLabelText: View {
             Text(page.title)
                 .lineLimit(1)
                 .truncationMode(.middle)
-            if let printed = page.printedPageLabel {
+            if let printed = printedLabel {
                 Text("· p. \(printed)", comment: "Printed page number next to the project page number")
                     .lineLimit(1)
                     .foregroundStyle(.tertiary)
@@ -383,6 +317,7 @@ struct PageLabelText: View {
 struct ThumbnailView: View {
     let page: Page
     let isSelected: Bool
+    var printedLabel: String?
     let action: () -> Void
 
     /// Cross-platform thumbnail using PlatformImage helper with user rotation applied
@@ -457,28 +392,33 @@ struct ThumbnailView: View {
             .accessibilityAddTraits(isSelected ? .isSelected : [])
             .accessibilityHint(String(localized: "Opens this page", comment: "Accessibility hint for page thumbnail button"))
 
-            PageLabelText(page: page, isSelected: isSelected)
+            PageLabelText(page: page, isSelected: isSelected, printedLabel: printedLabel)
         }
     }
 }
 
 #Preview("English") {
     let container = previewContainer()
-    let document = Document(name: "Sample Document", totalPages: 3)
+    let document = Document(name: "Sample Document", totalPages: 5)
     let page1 = Page(pageNumber: 1, text: "Here's to the crazy ones.", imageData: nil, originalFileName: "page1.jpg")
     let page2 = Page(pageNumber: 2, text: "The misfits. The rebels. The troublemakers. The round pegs in the square holes.", imageData: nil, originalFileName: "page2.jpg")
     page2.isDone = true
     page2.sectionTitle = "Chapter One"
     let page3 = Page(pageNumber: 3, text: "The ones who see things differently.", imageData: nil, originalFileName: "page3.jpg")
-    document.pages = [page1, page2, page3]
+    let page4 = Page(pageNumber: 4, text: "They're not fond of rules.", imageData: nil, originalFileName: "page4.jpg")
+    page4.sectionTitle = "Chapter Two: A Longer Title That Wraps"
+    let page5 = Page(pageNumber: 5, text: "And they have no respect for the status quo.", imageData: nil, originalFileName: "page5.jpg")
+    document.pages = [page1, page2, page3, page4, page5]
 
     let navigationState = NavigationState()
     navigationState.setupNavigation(for: document)
+    // The first chapter is folded, to show both states of the header.
+    navigationState.setChapter(page2.persistentModelID, collapsed: true)
 
     return ThumbnailSidebar(document: document, navigationState: navigationState)
     .modelContainer(container)
     .environment(\.locale, Locale(identifier: "en"))
-    .frame(width: 200, height: 600)
+    .frame(width: 200, height: 760)
 }
 
 #Preview("es-419") {

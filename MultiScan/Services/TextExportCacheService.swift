@@ -215,6 +215,19 @@ enum TextExportCacheService {
 
     // MARK: - Page Add/Remove
 
+    /// Replaces a page's entry wholesale — text, statistics, fingerprint *and* file name — after the page itself was rebuilt behind the editor (separated, rejoined, read again). `updateEntry` keeps the old file name, which is wrong once a page becomes "scan.jpg (1 of 2)".
+    /// Reads `page.attributedText`, so call it right after the write, while the text is in memory.
+    static func replaceEntry(for page: Page, in document: Document) {
+        guard var cache = loadCache(from: document) else {
+            rebuildCache(for: document)
+            return
+        }
+        cache.pages.removeAll { $0.pageNumber == page.pageNumber }
+        cache.pages.append(PageCacheEntry(from: page))
+        cache.pages.sort { $0.pageNumber < $1.pageNumber }
+        saveCache(cache, to: document)
+    }
+
     /// Adds new page entries to the cache.
     ///
     /// Call this after new pages are added to an existing document.

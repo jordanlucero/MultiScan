@@ -276,6 +276,61 @@ nonisolated enum TextManipulationService {
         length >= 5 ? 2 : 1
     }
 
+    /// Which characters a string contains, as 64 bits (one bit per character, by its first scalar modulo 64). One edit — an insertion, a deletion, or a substitution — can change at most two of these bits, so two strings within edit distance `k` have signatures differing in at most `2k` bits. Two characters sharing a bit only ever makes signatures look *more* alike, so the test never rejects a real match.
+    static func characterSignature(_ characters: [Character]) -> UInt64 {
+        var signature: UInt64 = 0
+        for character in characters {
+            let scalar = character.unicodeScalars.first?.value ?? 0
+            signature |= 1 << UInt64(scalar % 64)
+        }
+        return signature
+    }
+
+    /// Answers "is the edit distance between two strings at most `limit`?" — the only question header grouping asks — without computing the distance.
+    ///
+    /// Same answer as `editDistance(a, b) <= limit`, always; it just stops as soon as the answer is known. Grouping compares every distinct line of a document with every other one, so for a 500-page book this runs on the order of a hundred million times: the full distance (a whole table per pair, plus a `String` → `Array` conversion per call) made that take many minutes, which is what froze the app while it waited to name a long project.
+    /// - Lengths differing by more than `limit` can't be within it.
+    /// - Only the diagonal band of the table within `limit` of the main diagonal can hold a value ≤ `limit`, so only that band is filled.
+    /// - Row minima never decrease, so once a row's minimum exceeds `limit` the answer is no.
+    /// The two scratch rows are reused across calls (allocating per pair costs more than the comparison).
+    struct BoundedEditDistance {
+        private var previous: [Int] = []
+        private var current: [Int] = []
+
+        mutating func isWithin(_ limit: Int, _ a: [Character], _ b: [Character]) -> Bool {
+            let m = a.count
+            let n = b.count
+            if abs(m - n) > limit { return false }
+            if m == 0 || n == 0 { return max(m, n) <= limit }
+
+            let beyond = limit + 1 // stands for "more than the limit"; cells never need a larger value
+            if previous.count < n + 1 {
+                previous = [Int](repeating: beyond, count: n + 1)
+                current = [Int](repeating: beyond, count: n + 1)
+            }
+            for j in 0...n { previous[j] = j <= limit ? j : beyond }
+
+            for i in 1...m {
+                let low = max(1, i - limit)
+                let high = min(n, i + limit)
+                current[low - 1] = (low == 1 && i <= limit) ? i : beyond
+                var rowMinimum = current[low - 1]
+                for j in low...high {
+                    let value = a[i - 1] == b[j - 1]
+                        ? previous[j - 1]
+                        : 1 + min(previous[j], current[j - 1], previous[j - 1])
+                    current[j] = min(value, beyond)
+                    if current[j] < rowMinimum { rowMinimum = current[j] }
+                }
+                // The cell just past the band is read by the next row as "previous"; it must not hold a stale value.
+                if high < n { current[high + 1] = beyond }
+                if rowMinimum > limit { return false }
+                swap(&previous, &current)
+            }
+            return previous[n] <= limit
+        }
+    }
+
     /// Result of decomposing a header line into its text and number parts
     struct LineComponents: Sendable {
         let coreText: String    // normalized text without trailing/leading number
@@ -452,22 +507,32 @@ nonisolated enum TextManipulationService {
         // Phase 2: Merge groups whose OCR-normalized keys are within edit distance threshold
         let keys = Array(lineOccurrences.keys)
         var mergedGroups: [[String]] = []
-        var assigned: Set<String> = []
 
         // Sort by occurrence count (most common first becomes canonical)
         let sortedKeys = keys.sorted { (lineOccurrences[$0]?.count ?? 0) > (lineOccurrences[$1]?.count ?? 0) }
 
-        for key in sortedKeys {
-            if assigned.contains(key) { continue }
-            var group = [key]
-            assigned.insert(key)
+        // Every distinct line is compared with every other, so this loop is the hot path of the whole analysis (see `BoundedEditDistance`): characters are extracted once, "already grouped" is a flag per index rather than a string-set lookup, and the comparison stops as early as it can. The grouping itself is unchanged.
+        let characters = sortedKeys.map(Array.init)
+        let lengths = characters.map(\.count)
+        let signatures = characters.map(characterSignature)
+        var isAssigned = [Bool](repeating: false, count: sortedKeys.count)
+        var distance = BoundedEditDistance()
 
-            for otherKey in sortedKeys {
-                if assigned.contains(otherKey) { continue }
-                let maxAllowed = maxEditDistance(for: min(key.count, otherKey.count))
-                if editDistance(key, otherKey) <= maxAllowed {
-                    group.append(otherKey)
-                    assigned.insert(otherKey)
+        for index in sortedKeys.indices where !isAssigned[index] {
+            var group = [sortedKeys[index]]
+            isAssigned[index] = true
+            let length = lengths[index]
+            let signature = signatures[index]
+
+            for other in sortedKeys.indices where !isAssigned[other] {
+                let otherLength = lengths[other]
+                let maxAllowed = maxEditDistance(for: min(length, otherLength))
+                // Two necessary conditions that cost almost nothing and rule out nearly every pair of unrelated lines: the lengths can differ by at most the limit, and each edit changes which characters are present by at most two.
+                guard abs(length - otherLength) <= maxAllowed,
+                      (signature ^ signatures[other]).nonzeroBitCount <= 2 * maxAllowed else { continue }
+                if distance.isWithin(maxAllowed, characters[index], characters[other]) {
+                    group.append(sortedKeys[other])
+                    isAssigned[other] = true
                 }
             }
 

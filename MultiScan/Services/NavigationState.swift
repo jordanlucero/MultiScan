@@ -48,6 +48,31 @@ final class NavigationState {
     /// Version counter that increments when page order changes, used to trigger view updates
     private(set) var pageOrderVersion: Int = 0
 
+    // MARK: - Chapter sections (sidebar / page grid presentation state)
+
+    /// Chapters folded away in the thumbnail sidebar and the page grid, by the ID of the page that opens the chapter (`ChapterSection.id`). Session state shared by both lists; not stored with the project. Stale IDs (a mark removed, a page deleted) are harmless.
+    var collapsedChapters: Set<PersistentIdentifier> = []
+
+    func isChapterCollapsed(_ id: PersistentIdentifier) -> Bool {
+        collapsedChapters.contains(id)
+    }
+
+    func setChapter(_ id: PersistentIdentifier, collapsed: Bool) {
+        if collapsed {
+            collapsedChapters.insert(id)
+        } else {
+            collapsedChapters.remove(id)
+        }
+    }
+
+    /// Unfolds the chapter holding the current page, so the selection is never hidden inside a collapsed section. The lists call this when the current page changes.
+    func revealCurrentPage() {
+        guard !collapsedChapters.isEmpty, let document = selectedDocument, let current = currentPageNumber else { return }
+        let pages = document.sortedPages
+        guard let section = ChapterSections.sections(for: pages).last(where: { ($0.pages.first?.pageNumber ?? .max) <= current }) else { return }
+        collapsedChapters.remove(section.id)
+    }
+
     // MARK: - Current Page
 
     var currentPage: Page? {
@@ -430,67 +455,86 @@ final class NavigationState {
         movePage(page, by: 1)
     }
 
-    /// Moves a page one slot up (`offset` -1) or down (+1), registering undo.
+    /// Moves a page one visual slot up (`offset` -1) or down (+1), registering undo: within its chapter, or over the neighboring chapter header when it sits at the chapter's edge (see `ChapterSections`).
     /// Backs the Move Page Up/Down menu commands and thumbnail context menus.
     func movePage(_ page: Page, by offset: Int) {
         guard let document = selectedDocument else { return }
-        var order = document.unwrappedPages.sorted { $0.pageNumber < $1.pageNumber }
-        guard let index = order.firstIndex(where: { $0.persistentModelID == page.persistentModelID }),
-              order.indices.contains(index + offset) else { return }
-        order.swapAt(index, index + offset)
-        setPageOrder(order, actionName: offset < 0
+        let sections = ChapterSections.sections(for: document.sortedPages)
+        guard let arrangement = ChapterSections.applyingStep(of: page.persistentModelID, by: offset, in: sections) else { return }
+        apply(arrangement, actionName: offset < 0
             ? String(localized: "Move Page Up")
             : String(localized: "Move Page Down"))
+        // A page moved into a folded chapter shouldn't vanish.
+        if let landed = ChapterSections.sections(for: document.sortedPages).first(where: { $0.pages.contains { $0 === page } }) {
+            collapsedChapters.remove(landed.id)
+        }
     }
 
-    /// Applies a drag reorder from a `reorderContainer` (thumbnail sidebar / page grid): the dragged pages move in front of the page with `targetID` (nil = to the end).
-    func applyReorder(of pageIDs: [PersistentIdentifier], before targetID: PersistentIdentifier?) {
+    /// Applies a drag reorder from a `reorderContainer` (thumbnail sidebar / page grid): the dragged pages move into the chapter section `chapterID` (the reorder collection the drop landed in), in front of the page with `targetID` (nil = to that section's end).
+    func applyReorder(of pageIDs: [PersistentIdentifier], toChapter chapterID: PersistentIdentifier? = nil, before targetID: PersistentIdentifier?) {
         guard let document = selectedDocument, !pageIDs.isEmpty else { return }
-        var order = document.unwrappedPages.sorted { $0.pageNumber < $1.pageNumber }
-        let movingIDs = Set(pageIDs)
-        let moving = order.filter { movingIDs.contains($0.persistentModelID) }
-        guard !moving.isEmpty else { return }
-        order.removeAll { movingIDs.contains($0.persistentModelID) }
-        let insertIndex = targetID.flatMap { target in
-            order.firstIndex { $0.persistentModelID == target }
-        } ?? order.count
-        order.insert(contentsOf: moving, at: insertIndex)
-        setPageOrder(order, actionName: String(localized: "Reorder Pages"))
+        let sections = ChapterSections.sections(for: document.sortedPages)
+        let arrangement = ChapterSections.applyingMove(of: pageIDs, toSection: chapterID, before: targetID, in: sections)
+        apply(arrangement, actionName: String(localized: "Reorder Pages"))
     }
 
-    /// Looks up pages by ID and restores their order. Used by undo/redo, where only Sendable identifiers are captured; skips silently if pages were added/deleted since.
-    private func restorePageOrder(_ orderedIDs: [PersistentIdentifier], actionName: String) {
+    private func apply(_ arrangement: ChapterSections.Arrangement, actionName: String) {
+        // A chapter whose first page changed keeps its folded state.
+        for (old, new) in arrangement.renamedSections where collapsedChapters.contains(old) {
+            collapsedChapters.remove(old)
+            collapsedChapters.insert(new)
+        }
+        setPageOrder(arrangement.pages, chapterMarks: arrangement.marks, actionName: actionName)
+    }
+
+    /// Looks up pages by ID and restores their order and chapter marks. Used by undo/redo, where only Sendable values are captured; skips silently if pages were added/deleted since.
+    private func restorePageOrder(_ orderedIDs: [PersistentIdentifier], chapterMarks: [PersistentIdentifier: ChapterMark], actionName: String) {
         guard let document = selectedDocument else { return }
         let pagesByID = Dictionary(uniqueKeysWithValues: document.unwrappedPages.map { ($0.persistentModelID, $0) })
         let ordered = orderedIDs.compactMap { pagesByID[$0] }
         guard ordered.count == orderedIDs.count else { return }
-        setPageOrder(ordered, actionName: actionName)
+        setPageOrder(ordered, chapterMarks: chapterMarks, actionName: actionName)
     }
 
-    /// Renumbers the document's pages to match `orderedPages`, keeping the export cache and navigation state in sync. The current page stays selected by identity — the viewer keeps showing the same page at its new position, which also leaves the text editor attached so its undo stack survives the reorder. Registers an inverse action with `undoManager` so ⌘Z/⇧⌘Z walk order changes back and forth.
-    private func setPageOrder(_ orderedPages: [Page], actionName: String) {
+    /// Renumbers the document's pages to match `orderedPages` and puts each chapter mark on the page given in `chapterMarks` (every other page ends up unmarked), keeping the export cache and navigation state in sync. The current page stays selected by identity — the viewer keeps showing the same page at its new position, which also leaves the text editor attached so its undo stack survives the reorder. Registers an inverse action with `undoManager` so ⌘Z/⇧⌘Z walk the change — order *and* marks — back and forth.
+    private func setPageOrder(_ orderedPages: [Page], chapterMarks: [PersistentIdentifier: ChapterMark], actionName: String) {
         guard let document = selectedDocument else { return }
         let oldOrder = document.unwrappedPages.sorted { $0.pageNumber < $1.pageNumber }
+        let oldMarks = ChapterSections.marks(of: oldOrder)
 
         // A stale undo (pages added or deleted since) must not renumber a changed document
         guard orderedPages.count == oldOrder.count,
-              Set(orderedPages.map(\.persistentModelID)) == Set(oldOrder.map(\.persistentModelID)),
-              orderedPages.map(\.persistentModelID) != oldOrder.map(\.persistentModelID) else { return }
+              Set(orderedPages.map(\.persistentModelID)) == Set(oldOrder.map(\.persistentModelID)) else { return }
+        let orderChanged = orderedPages.map(\.persistentModelID) != oldOrder.map(\.persistentModelID)
+        let marksChanged = chapterMarks != oldMarks
+        guard orderChanged || marksChanged else { return }
 
         let currentPageID = currentPage?.persistentModelID
 
-        // Old page number -> new page number, for the cache and history remapping
-        var newNumbers: [Int: Int] = [:]
-        for (index, page) in orderedPages.enumerated() {
-            newNumbers[page.pageNumber] = index + 1
-        }
-        for (index, page) in orderedPages.enumerated() where page.pageNumber != index + 1 {
-            page.pageNumber = index + 1
-        }
-        TextExportCacheService.renumberEntries(newNumbers, in: document)
+        if orderChanged {
+            // Old page number -> new page number, for the cache and history remapping
+            var newNumbers: [Int: Int] = [:]
+            for (index, page) in orderedPages.enumerated() {
+                newNumbers[page.pageNumber] = index + 1
+            }
+            for (index, page) in orderedPages.enumerated() where page.pageNumber != index + 1 {
+                page.pageNumber = index + 1
+            }
+            TextExportCacheService.renumberEntries(newNumbers, in: document)
 
-        // Keep shuffled visit history pointing at the same pages
-        visitHistory = visitHistory.map { newNumbers[$0] ?? $0 }
+            // Keep shuffled visit history pointing at the same pages
+            visitHistory = visitHistory.map { newNumbers[$0] ?? $0 }
+        }
+
+        if marksChanged {
+            for page in orderedPages {
+                let mark = chapterMarks[page.persistentModelID]
+                if page.sectionTitle != mark?.title { page.sectionTitle = mark?.title }
+                let isAutomatic = mark?.isAutomatic ?? false
+                if page.sectionTitleIsAutomatic != isAutomatic { page.sectionTitleIsAutomatic = isAutomatic }
+            }
+            document.lastModified = Date()
+        }
 
         refreshPageOrder()
 
@@ -506,7 +550,7 @@ final class NavigationState {
         let oldOrderIDs = oldOrder.map(\.persistentModelID)
         undoManager?.registerUndo(withTarget: self) { state in
             MainActor.assumeIsolated {
-                state.restorePageOrder(oldOrderIDs, actionName: actionName)
+                state.restorePageOrder(oldOrderIDs, chapterMarks: oldMarks, actionName: actionName)
             }
         }
         undoManager?.setActionName(actionName)
@@ -527,6 +571,24 @@ final class NavigationState {
         let deletedPageNumber = page.pageNumber
         let wasCurrentPage = currentPageNumber == deletedPageNumber
 
+        // A printed-numbering range that starts on this page moves to the page taking its place (before anything is renumbered).
+        PageNumbering.pageWillBeDeleted(page, from: document)
+
+        // A chapter outlives its first page: the mark moves to the page taking its place, unless that page opens a chapter of its own.
+        if let title = page.sectionTitle,
+           let successor = document.unwrappedPages.first(where: { $0.pageNumber == deletedPageNumber + 1 }),
+           successor.sectionTitle == nil {
+            successor.sectionTitle = title
+            successor.sectionTitleIsAutomatic = page.sectionTitleIsAutomatic
+            if collapsedChapters.remove(page.persistentModelID) != nil {
+                collapsedChapters.insert(successor.persistentModelID)
+            }
+        }
+
+        // A separated page may be the last reader of its shared scan.
+        let scan = page.sharedScan
+        let scanIsOrphaned = scan.map { $0.unwrappedPages.allSatisfy { $0.persistentModelID == page.persistentModelID } } ?? false
+
         // Remove page entry from export cache (also renumbers subsequent pages)
         TextExportCacheService.removeEntry(pageNumber: deletedPageNumber, from: document)
 
@@ -538,10 +600,17 @@ final class NavigationState {
         // Remove from document's pages array
         document.pages?.removeAll { $0.persistentModelID == page.persistentModelID }
         document.totalPages -= 1
-        document.recalculateStorageSize()
 
-        // Delete the page from the model context
+        // Delete the page from the model context — and its scan, if no other page shows it
+        if let scan {
+            scan.pages?.removeAll { $0.persistentModelID == page.persistentModelID }
+            if scanIsOrphaned {
+                document.sharedScans?.removeAll { $0.persistentModelID == scan.persistentModelID }
+                modelContext.delete(scan)
+            }
+        }
         modelContext.delete(page)
+        document.recalculateStorageSize()
 
         // Refresh navigation state
         refreshPageOrder()
@@ -563,6 +632,23 @@ final class NavigationState {
 
     var totalPageCount: Int {
         selectedDocument?.unwrappedPages.count ?? 0
+    }
+
+    /// Points navigation back at a specific page after pages were inserted or removed around it (Smart Separate after import, rejoining). The current page is tracked by number, so a page added *before* it would otherwise silently swap what the viewer shows. Capture the page's ID before the change, call `refreshPageOrder()`, then this.
+    func reselectPage(withID id: PersistentIdentifier?) {
+        guard let id, let document = selectedDocument,
+              let page = document.unwrappedPages.first(where: { $0.persistentModelID == id }) else { return }
+        if isRandomized {
+            if visitHistory.indices.contains(historyIndex) {
+                visitHistory[historyIndex] = page.pageNumber
+            } else {
+                visitHistory = [page.pageNumber]
+                historyIndex = 0
+            }
+        } else if let index = originalOrder.firstIndex(of: page.pageNumber) {
+            sequentialIndex = index
+        }
+        updateCurrentPageNumber()
     }
 
     /// Refreshes the page ordering arrays after pages were added, removed, or renumbered.

@@ -13,12 +13,12 @@
 //  |-------------|--------------------------------------|--------------------------------------------------------------------|
 //  | `vision`    | on device, every platform            | `VisionDocumentRecognizer` (RecognizeDocumentsRequest)             |
 //  | `coreAI`    | on device, every platform            | a `.aimodel` resource folder loaded through `CoreAILanguageModel` into a Foundation Models `LanguageModelSession`, prompted with the page image (requires the `coreai-models` package — see `ModelTranscriber.swift`) |
-//  | `lmStudio`  | macOS, talking to a local server     | OpenAI-compatible `POST /v1/chat/completions` on `http://localhost:1234` with the page image as a base64 `image_url` |
+//  | `modelServer` | macOS, talking to a model server   | OpenAI-compatible `POST /v1/chat/completions` (streamed) with the page image as a base64 `image_url`. LM Studio and Ollama are presets; any server speaking that dialect works (llama.cpp's server, mlx-lm, Jan, a machine elsewhere on the network) |
 //
 //  ## Configuration storage
 //  `OCREngineSettings` is the usual `@Observable` + UserDefaults write-through object (see `Preferences.swift` for the pattern). It is read once per import by `ProjectImportPipeline`, so flipping the engine mid-import doesn't change engines halfway through a project.
 //
-//  2.0 ships the picker in **DEBUG builds only** (Settings ▸ OCR Engine). Release builds always use Vision until a downloadable model exists.
+//  2.0 ships the picker in **DEBUG builds only** (Settings ▸ OCR Engine). Release builds always use Vision until a downloadable model exists. The macOS sandbox's outgoing-network entitlement that the model server needs is likewise granted to Debug builds only (`ENABLE_OUTGOING_NETWORK_CONNECTIONS[config=Debug]`); when the engine ships, drop the condition.
 //
 
 import Foundation
@@ -28,13 +28,19 @@ import Observation
 nonisolated enum OCREngineKind: String, CaseIterable, Codable, Sendable {
     case vision
     case coreAI
-    case lmStudio
+    /// A model server speaking the OpenAI chat-completions dialect over HTTP (LM Studio, Ollama, …).
+    case modelServer
+
+    /// Reads a stored engine choice, accepting the name this case had while LM Studio was the only server ("lmStudio").
+    init?(storedValue: String) {
+        self.init(rawValue: storedValue == "lmStudio" ? OCREngineKind.modelServer.rawValue : storedValue)
+    }
 
     var label: LocalizedStringResource {
         switch self {
         case .vision: LocalizedStringResource("Apple Vision", comment: "OCR engine name")
         case .coreAI: LocalizedStringResource("On-device model (Core AI)", comment: "OCR engine name")
-        case .lmStudio: LocalizedStringResource("Local server (LM Studio)", comment: "OCR engine name")
+        case .modelServer: LocalizedStringResource("Local model server", comment: "OCR engine name")
         }
     }
 
@@ -43,7 +49,7 @@ nonisolated enum OCREngineKind: String, CaseIterable, Codable, Sendable {
         #if os(macOS)
         return allCases
         #else
-        // A phone can't host an LM Studio server; the setting would be a trap.
+        // A phone can't host a model server; the setting would be a trap.
         return [.vision, .coreAI]
         #endif
     }
@@ -53,7 +59,31 @@ nonisolated enum OCREngineKind: String, CaseIterable, Codable, Sendable {
         switch self {
         case .vision: return "vision"
         case .coreAI: return "coreai:" + (modelName ?? "unknown")
-        case .lmStudio: return "lmstudio:" + (modelName ?? "unknown")
+        // (Pages read while this engine was called "LM Studio" carry "lmstudio:<model>"; both just mean "not Vision" to the app.)
+        case .modelServer: return "server:" + (modelName ?? "unknown")
+        }
+    }
+}
+
+/// Model servers MultiScan knows the default address of. They all speak the same OpenAI-compatible API; a preset only fills in the URL.
+nonisolated enum ModelServerPreset: String, CaseIterable, Sendable {
+    case lmStudio
+    case ollama
+    case custom
+
+    var label: LocalizedStringResource {
+        switch self {
+        case .lmStudio: LocalizedStringResource("LM Studio", comment: "Model server preset")
+        case .ollama: LocalizedStringResource("Ollama", comment: "Model server preset")
+        case .custom: LocalizedStringResource("Other", comment: "Model server preset: a custom address")
+        }
+    }
+
+    /// The address the server listens on out of the box (`custom` has none of its own and reports LM Studio's).
+    var baseURL: URL {
+        switch self {
+        case .lmStudio, .custom: URL(string: "http://localhost:1234")!
+        case .ollama: URL(string: "http://localhost:11434")!
         }
     }
 }
@@ -68,9 +98,10 @@ nonisolated struct OCREngineConfiguration: Equatable, Sendable {
     /// Core AI: the exported model resource folder (the `.aimodel` plus tokenizer), chosen in the debug settings. `nil` → Vision fallback.
     var coreAIModelURL: URL?
 
-    /// LM Studio: server root (default `http://localhost:1234`) and the loaded model's identifier (empty = let the server pick its default/loaded model).
-    var lmStudioBaseURL: URL
-    var lmStudioModelID: String
+    /// Model server: its root URL (the client appends `/v1/…`), the model's identifier (empty = let the server use whatever it has loaded), and an optional API key sent as a bearer token (local servers usually need none).
+    var serverBaseURL: URL
+    var serverModelID: String
+    var serverAPIKey: String?
 
     /// The instruction sent to transformer engines. Users can tune it in the debug pane; the default asks for faithful markdown.
     var transcriptionPrompt: String
@@ -87,8 +118,9 @@ nonisolated struct OCREngineConfiguration: Equatable, Sendable {
         kind: .vision,
         smartSeparateEnabled: false,
         coreAIModelURL: nil,
-        lmStudioBaseURL: URL(string: "http://localhost:1234")!,
-        lmStudioModelID: "",
+        serverBaseURL: ModelServerPreset.lmStudio.baseURL,
+        serverModelID: "",
+        serverAPIKey: nil,
         transcriptionPrompt: defaultPrompt,
         transformerTimeout: 120
     )
@@ -98,7 +130,7 @@ nonisolated struct OCREngineConfiguration: Equatable, Sendable {
         switch kind {
         case .vision: return false
         case .coreAI: return coreAIModelURL != nil
-        case .lmStudio: return true
+        case .modelServer: return true
         }
     }
 }
@@ -111,8 +143,9 @@ final class OCREngineSettings {
     private static let kindKey = "ocrEngineKind"
     private static let smartSeparateKey = "ocrSmartSeparateEnabled"
     private static let coreAIModelURLKey = "ocrCoreAIModelURL"
-    private static let lmStudioBaseURLKey = "ocrLMStudioBaseURL"
-    private static let lmStudioModelIDKey = "ocrLMStudioModelID"
+    // The two keys keep their original strings, so a server configured while this was the "LM Studio" engine carries over.
+    private static let serverBaseURLKey = "ocrLMStudioBaseURL"
+    private static let serverModelIDKey = "ocrLMStudioModelID"
     private static let promptKey = "ocrTranscriptionPrompt"
     private static let timeoutKey = "ocrTransformerTimeout"
 
@@ -131,12 +164,29 @@ final class OCREngineSettings {
         didSet { defaults.set(coreAIModelURL?.path, forKey: Self.coreAIModelURLKey) }
     }
 
-    var lmStudioBaseURL: URL {
-        didSet { defaults.set(lmStudioBaseURL.absoluteString, forKey: Self.lmStudioBaseURLKey) }
+    var serverBaseURL: URL {
+        didSet { defaults.set(serverBaseURL.absoluteString, forKey: Self.serverBaseURLKey) }
     }
 
-    var lmStudioModelID: String {
-        didSet { defaults.set(lmStudioModelID, forKey: Self.lmStudioModelIDKey) }
+    var serverModelID: String {
+        didSet { defaults.set(serverModelID, forKey: Self.serverModelIDKey) }
+    }
+
+    /// Optional bearer token for the model server. Kept in the keychain, not in UserDefaults; the shared instance loads it once and writes changes through.
+    var serverAPIKey: String {
+        didSet {
+            guard persistsAPIKey, serverAPIKey != oldValue else { return }
+            ModelServerCredentialStore.save(serverAPIKey)
+        }
+    }
+
+    /// Only the instance backed by `UserDefaults.standard` touches the keychain; test instances keep the key in memory.
+    private let persistsAPIKey: Bool
+
+    /// The preset whose address is configured, or `.custom`.
+    var serverPreset: ModelServerPreset {
+        get { ModelServerPreset.allCases.first { $0 != .custom && $0.baseURL == serverBaseURL } ?? .custom }
+        set { if newValue != .custom { serverBaseURL = newValue.baseURL } }
     }
 
     var transcriptionPrompt: String {
@@ -159,8 +209,9 @@ final class OCREngineSettings {
             kind: effectiveKind,
             smartSeparateEnabled: smartSeparateEnabled,
             coreAIModelURL: coreAIModelURL,
-            lmStudioBaseURL: lmStudioBaseURL,
-            lmStudioModelID: lmStudioModelID,
+            serverBaseURL: serverBaseURL,
+            serverModelID: serverModelID,
+            serverAPIKey: serverAPIKey.isEmpty ? nil : serverAPIKey,
             transcriptionPrompt: transcriptionPrompt,
             transformerTimeout: transformerTimeout
         )
@@ -170,11 +221,13 @@ final class OCREngineSettings {
     init(defaults: UserDefaults) {
         self.defaults = defaults
         let fallback = OCREngineConfiguration.default
-        kind = defaults.string(forKey: Self.kindKey).flatMap(OCREngineKind.init(rawValue:)) ?? fallback.kind
+        kind = defaults.string(forKey: Self.kindKey).flatMap(OCREngineKind.init(storedValue:)) ?? fallback.kind
         smartSeparateEnabled = defaults.object(forKey: Self.smartSeparateKey) == nil ? fallback.smartSeparateEnabled : defaults.bool(forKey: Self.smartSeparateKey)
         coreAIModelURL = defaults.string(forKey: Self.coreAIModelURLKey).map { URL(fileURLWithPath: $0) }
-        lmStudioBaseURL = defaults.string(forKey: Self.lmStudioBaseURLKey).flatMap(URL.init(string:)) ?? fallback.lmStudioBaseURL
-        lmStudioModelID = defaults.string(forKey: Self.lmStudioModelIDKey) ?? fallback.lmStudioModelID
+        serverBaseURL = defaults.string(forKey: Self.serverBaseURLKey).flatMap(URL.init(string:)) ?? fallback.serverBaseURL
+        serverModelID = defaults.string(forKey: Self.serverModelIDKey) ?? fallback.serverModelID
+        persistsAPIKey = defaults === UserDefaults.standard
+        serverAPIKey = persistsAPIKey ? (ModelServerCredentialStore.load() ?? "") : ""
         transcriptionPrompt = defaults.string(forKey: Self.promptKey) ?? fallback.transcriptionPrompt
         let storedTimeout = defaults.double(forKey: Self.timeoutKey)
         transformerTimeout = storedTimeout > 0 ? storedTimeout : fallback.transformerTimeout

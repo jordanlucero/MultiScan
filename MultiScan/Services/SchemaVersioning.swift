@@ -230,7 +230,7 @@ func previewContainer() -> ModelContainer {
         cloudKitDatabase: .none
     )
     return try! ModelContainer(
-        for: Document.self, Page.self, PageCapture.self, SchemaMetadata.self,
+        for: Document.self, Page.self, PageCapture.self, SharedScan.self, SchemaMetadata.self,
         configurations: config
     )
 }

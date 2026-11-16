@@ -4,7 +4,7 @@
 //
 //  Searchable page grid presented as a sheet in the compact (iPhone) layout.
 //
-//  2.0: feature parity with the thumbnail sidebar — the grid filters by review status (the same `PageFilterOption` stored in `@AppStorage(DefaultsKey.filterOption)`) as well as by text, syncs both into `NavigationState` so Previous/Next honor the filter, and groups pages under their chapter titles. The search field sits in the bottom bar with the status filter next to it (`DefaultToolbarItem(kind: .search, placement: .bottomBar)` + a `ToolbarItem` — the iOS 26 Mail/Messages arrangement), so the sheet's top bar keeps just the title and the add/done actions.
+//  2.0: feature parity with the thumbnail sidebar — the grid filters by review status (the same `PageFilterOption` stored in `@AppStorage(DefaultsKey.filterOption)`) as well as by text, syncs both into `NavigationState` so Previous/Next honor the filter, and shows pages in the same collapsible chapter sections (`ChapterDisclosureHeader`, fold state shared through `NavigationState.collapsedChapters`) with the same collection-aware drag reordering (see `ThumbnailPageList`). The search field sits in the bottom bar with the status filter next to it (`DefaultToolbarItem(kind: .search, placement: .bottomBar)` + a `ToolbarItem` — the iOS 26 Mail/Messages arrangement), so the sheet's top bar keeps just the title and the add/done actions.
 //
 
 #if os(iOS)
@@ -22,8 +22,8 @@ struct SlideGridView: View {
     /// `insertAfter` is the page number to insert after (0 = insert at beginning, nil = append to end).
     var onAddPhotos: ((_ insertAfter: Int?, _ items: [PhotosPickerItem]) -> Void)? = nil
     var onAddFiles: ((_ insertAfter: Int?, _ urls: [URL]) -> Void)? = nil
-    /// Opens the artwork capture overlay for a page (compact entry point for "Capture Artwork…").
-    var onCaptureArtwork: ((Page) -> Void)? = nil
+    /// Page actions that are presented by the review view, not by this sheet (artwork capture, separate / rejoin, read again). The grid dismisses itself before handing one over — iOS presents one sheet per host.
+    var actions = PageActions()
 
     @AppStorage(DefaultsKey.filterOption) private var filterOptionString = "all"
     @State private var searchText = ""
@@ -57,60 +57,91 @@ struct SlideGridView: View {
         onAddPhotos != nil || onAddFiles != nil
     }
 
+    /// The context-menu actions for a cell. The pickers are presented from inside this sheet, so inserting stays local and hands the result up; everything the review view presents itself is forwarded after this sheet dismisses.
+    private var cellActions: PageActions {
+        var result = PageActions()
+        if onAddPhotos != nil {
+            result.insertFromPhotos = { insertAfter in
+                insertTargetPageNumber = insertAfter
+                showPhotoPicker = true
+            }
+        }
+        if onAddFiles != nil {
+            result.insertFromFiles = { insertAfter in
+                insertTargetPageNumber = insertAfter
+                showFileImporter = true
+            }
+        }
+        func forwarding(_ action: ((Page) -> Void)?) -> ((Page) -> Void)? {
+            guard let action else { return nil }
+            return { page in
+                dismiss()
+                action(page)
+            }
+        }
+        result.captureArtwork = forwarding(actions.captureArtwork)
+        result.separate = forwarding(actions.separate)
+        result.rejoin = forwarding(actions.rejoin)
+        result.viewOriginalScan = forwarding(actions.viewOriginalScan)
+        result.recognizeAgain = forwarding(actions.recognizeAgain)
+        result.restoreVisionText = forwarding(actions.restoreVisionText)
+        return result
+    }
+
     var body: some View {
         let pages = filteredPages
-        let groups = ChapterGrouping.groups(for: pages)
+        let sections = ChapterSections.sections(for: pages)
+        let collapsed = navigationState.collapsedChapters
+        let printedLabels = document.printedPageLabels()
 
         NavigationStack {
             ScrollView {
                 let currentPageNumber = navigationState.currentPageNumber
 
-                LazyVGrid(columns: columns, spacing: 12, pinnedViews: [.sectionHeaders]) {
-                    ForEach(groups) { group in
+                LazyVGrid(columns: columns, spacing: 12) {
+                    ForEach(sections) { section in
                         Section {
-                            ForEach(group.pages) { page in
-                                Button {
-                                    navigationState.goToPage(pageNumber: page.pageNumber)
-                                    dismiss()
-                                } label: {
-                                    SlideGridCell(page: page, isSelected: currentPageNumber == page.pageNumber)
-                                }
-                                .buttonStyle(.plain)
-                                // The pickers are presented from inside this sheet, so the insert callbacks stay local and hand the result up.
-                                .pageContextMenu(
-                                    for: page,
-                                    in: document,
-                                    navigationState: navigationState,
-                                    onInsertFromPhotos: onAddPhotos == nil ? nil : { insertAfter in
-                                        insertTargetPageNumber = insertAfter
-                                        showPhotoPicker = true
-                                    },
-                                    onInsertFromFiles: onAddFiles == nil ? nil : { insertAfter in
-                                        insertTargetPageNumber = insertAfter
-                                        showFileImporter = true
-                                    },
-                                    onCaptureArtwork: onCaptureArtwork == nil ? nil : { page in
+                            if !collapsed.contains(section.id) {
+                                ForEach(section.pages) { page in
+                                    Button {
+                                        navigationState.goToPage(pageNumber: page.pageNumber)
                                         dismiss()
-                                        onCaptureArtwork?(page)
+                                    } label: {
+                                        SlideGridCell(
+                                            page: page,
+                                            isSelected: currentPageNumber == page.pageNumber,
+                                            printedLabel: printedLabels[page.pageNumber]
+                                        )
                                     }
-                                )
+                                    .buttonStyle(.plain)
+                                    .pageContextMenu(for: page, in: document, navigationState: navigationState, actions: cellActions)
+                                }
+                                .reorderable(collectionID: section.id)
                             }
-                            .reorderable()
                         } header: {
-                            if let title = group.title {
-                                ChapterSectionHeader(title: title, startPage: group.pages.first)
+                            if let title = section.title {
+                                ChapterDisclosureHeader(
+                                    title: title,
+                                    pageCount: section.pages.count,
+                                    isExpanded: Binding(
+                                        get: { !navigationState.isChapterCollapsed(section.id) },
+                                        set: { navigationState.setChapter(section.id, collapsed: !$0) }
+                                    )
+                                )
                             }
                         }
                     }
                 }
                 .padding()
-                .reorderContainer(for: Page.self, isEnabled: !isAnyFilterActive) { difference in
+                .animation(.easeInOut(duration: 0.3), value: navigationState.pageOrderVersion)
+                .animation(.snappy(duration: 0.25), value: collapsed)
+                .reorderContainer(for: Page.self, in: PersistentIdentifier.self, isEnabled: !isAnyFilterActive) { difference in
                     let targetID: PersistentIdentifier?
                     switch difference.destination.position {
                     case .before(let id): targetID = id
                     case .end: targetID = nil
                     }
-                    navigationState.applyReorder(of: difference.sources, before: targetID)
+                    navigationState.applyReorder(of: difference.sources, toChapter: difference.destination.collectionID, before: targetID)
                 }
 
                 if pages.isEmpty {
@@ -183,6 +214,10 @@ struct SlideGridView: View {
                 }
                 insertTargetPageNumber = nil
             }
+            .onAppear {
+                // Open on the current page's chapter, even if it was folded earlier.
+                navigationState.revealCurrentPage()
+            }
             // Filter-aware Previous/Next on iPhone too.
             .onChange(of: filterOptionString, initial: true) { _, _ in
                 navigationState.activeStatusFilter = filterOption
@@ -200,6 +235,7 @@ struct SlideGridView: View {
 struct SlideGridCell: View {
     let page: Page
     let isSelected: Bool
+    var printedLabel: String?
 
     var body: some View {
         VStack(spacing: 6) {
@@ -235,7 +271,7 @@ struct SlideGridCell: View {
             }
 
             // Label: "Page 5" with the printed number when the project has one.
-            PageLabelText(page: page, isSelected: isSelected, font: .caption2)
+            PageLabelText(page: page, isSelected: isSelected, printedLabel: printedLabel, font: .caption2)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(page.title)

@@ -340,6 +340,8 @@ struct DocumentCardName: View {
         let trimmed = editedName.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty {
             document.name = trimmed
+            // The name is the user's now; an automatic title still on its way must not replace it (`ProjectTitleSuggester` checks the name, this keeps the flag honest).
+            document.isAutoTitled = false
             document.lastModified = Date()
             saveDocument(modelContext)
             MultiScanShortcuts.updateAppShortcutParameters()

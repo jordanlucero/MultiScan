@@ -15,12 +15,21 @@ struct ProcessedPageImage {
     let cgImage: CGImage
     let contentID: ContentID
 
-    /// Identity for zoom-reset decisions: changes on page switch or rotation
-    /// (zoom resets to fit), stays constant for contrast/black point tweaks
-    /// (image swaps in place, zoom and scroll position preserved).
+    /// Identity for zoom-reset decisions: changes on page switch, rotation, or a
+    /// change of the region shown (a page separated or rejoined in place) — zoom
+    /// resets to fit. Stays constant for contrast/black point tweaks (image swaps
+    /// in place, zoom and scroll position preserved).
     struct ContentID: Hashable {
         var pageID: PersistentIdentifier?
         var rotation: Int
+        var crop: CGRect?
+
+        func hash(into hasher: inout Hasher) {
+            hasher.combine(pageID)
+            hasher.combine(rotation)
+            hasher.combine(crop?.origin.x)
+            hasher.combine(crop?.width)
+        }
     }
 }
 

@@ -76,18 +76,27 @@ nonisolated final class Page {
     /// Vision's plain transcript of this page's image (`DocumentObservation.Container.Text.transcript`), stored even when another engine wrote `richTextData`, so both results survive side by side. `nil` for legacy rows and for pages created before 2.0.
     var visionTranscript: String?
 
-    /// Identifier of the OCR engine whose output became `richTextData` at import — see `OCREngineKind.provenanceIdentifier(…)` (e.g. `"vision"`, `"lmstudio:qwen2.5-vl-7b"`). `nil` for legacy rows (which were all Vision).
+    /// Identifier of the OCR engine whose output became `richTextData` at import — see `OCREngineKind.provenanceIdentifier(…)` (e.g. `"vision"`, `"server:qwen2.5-vl-7b"`). `nil` for legacy rows (which were all Vision).
     var ocrEngine: String?
 
     /// Non-nil when this page begins a chapter / section / part. The value is the heading shown in the thumbnail sidebar, the page grid, the Digest, and exports.
-    /// Set manually (page context menu ▸ Chapter) or by `ChapterDetector` from repeated-header analysis; the user's manual edits win (`sectionTitleIsAutomatic` records which).
+    /// Set by hand (page context menu ▸ Mark Chapter Start…). Reordering treats chapters as containers, so the mark can move to another page — see `ChapterSections`.
     var sectionTitle: String?
 
-    /// `true` when `sectionTitle` was assigned by `ChapterDetector`, so a later automatic pass may revise it; `false` once the user edited it by hand (automatic passes then leave it alone).
+    /// `true` when `sectionTitle` was assigned by automatic chapter detection rather than by the user. Detection is on hold (see `ChapterDetector.swift`), so nothing sets or reads this today; it stays in the schema for marks earlier builds made and for the feature's return.
     var sectionTitleIsAutomatic: Bool = false
 
-    /// Smart Separate provenance: `0` = the page is a whole scanned image; `1` / `2` = the first (left) / second (right) half of a two-page spread the import split automatically. Display only — lets the UI explain where a page came from.
+    /// Smart Separate: `0` = the page shows a whole scanned image; `1` / `2` = the first (left) / second (right) page of a two-page scan that was separated — at import or later (`PageSeparationService`).
     var splitPosition: Int = 0
+
+    /// The scan this page shows a region of, when Smart Separate split it off a two-page scan. `nil` for an ordinary page, whose image is its own `imageData`. See `SharedScan.swift`.
+    var sharedScan: SharedScan?
+
+    /// The region of the image this page shows: normalized (0…1), upper-left origin, in the EXIF-upright image *before* the user's `rotation`. The default (0, 0, 1, 1) is the whole image. Four scalars rather than a blob so the fields stay plain and mergeable in CloudKit (same reasoning as `PageCapture`'s rectangle). Use `imageCrop`.
+    var cropX: Double = 0
+    var cropY: Double = 0
+    var cropWidth: Double = 1
+    var cropHeight: Double = 1
 
     /// Artwork / illustration captures cropped from this page's image and placed inline in its text. Cascade: deleting the page deletes its captures.
     @Relationship(deleteRule: .cascade) var captures: [PageCapture]? = []
@@ -169,12 +178,57 @@ nonisolated final class Page {
         captures ?? []
     }
 
+    // MARK: - Image source (whole scan or a region of a shared one)
+
+    /// The region of the image this page shows, or `nil` for the whole image. See `cropX`.
+    var imageCrop: CGRect? {
+        get {
+            guard cropX != 0 || cropY != 0 || cropWidth != 1 || cropHeight != 1 else { return nil }
+            return CGRect(x: cropX, y: cropY, width: cropWidth, height: cropHeight)
+        }
+        set {
+            let rect = newValue ?? CGRect(x: 0, y: 0, width: 1, height: 1)
+            cropX = rect.origin.x
+            cropY = rect.origin.y
+            cropWidth = rect.width
+            cropHeight = rect.height
+        }
+    }
+
+    /// Whether Smart Separate split this page off a two-page scan.
+    var isSeparated: Bool {
+        sharedScan != nil
+    }
+
+    /// The image bytes this page draws from — its own, or the scan it shares with its facing page. **Every reader of a page's image goes through this (or `imageSource`), never `imageData` directly**, or separated pages show nothing.
+    var sourceImageData: Data? {
+        imageData ?? sharedScan?.imageData
+    }
+
+    /// Bytes + crop, ready to hand to `PlatformImage.processedCGImage(from:)` off the main actor.
+    var imageSource: PageImageSource? {
+        guard let data = sourceImageData else { return nil }
+        return PageImageSource(data: data, crop: imageCrop)
+    }
+
+    /// The other page(s) cut from the same scan.
+    var facingPages: [Page] {
+        (sharedScan?.unwrappedPages ?? []).filter { $0 !== self }
+    }
+
+    /// `true` once the page's text has been changed since import or the page was marked reviewed — what "this will replace the page's text" confirmations key on. Imports stamp `createdAt` and `lastModified` together; every later text write moves `lastModified`.
+    var hasBeenEditedOrReviewed: Bool {
+        isDone || lastModified.timeIntervalSince(createdAt) > 2
+    }
+
     /// The localized "Page N" label used by thumbnails, the page grid, rotors, and accessibility labels.
     var title: String {
         String(localized: "Page \(pageNumber)", comment: "Thumbnail label with page number")
     }
 
     /// The number printed on the physical page, per the project's numbering settings (`PageNumbering`), e.g. "iv" for front matter or "17" once counting starts. `nil` when the project hasn't configured printed numbering.
+    ///
+    /// Resolves the whole plan on every call (it has to find where each range's anchor page currently sits). Fine for one page; anything drawing many pages — the sidebar, the page grid, export — asks `Document.printedPageLabels()` once instead.
     var printedPageLabel: String? {
         guard let document else { return nil }
         return PageNumbering.printedLabel(forProjectPage: pageNumber, in: document)
@@ -212,11 +266,17 @@ nonisolated final class Document {
 
     // MARK: - 2.0 additive fields
 
-    /// Printed page numbering plan (`PrintedNumberingPlan`, JSON): ranges of project pages with a numbering style and start value — typically Roman front matter from page 1 and Arabic numbering from the first body page, optionally more (an appendix restarting at 1). `nil` = not configured; the UI then shows project page numbers only. One small blob rather than scattered scalars so a CloudKit merge can never mix two devices' half-plans.
+    /// Printed page numbering plan (`PrintedNumberingPlan`, JSON): ranges with a numbering style and start value — typically Roman front matter from the first page and Arabic numbering from the first body page, optionally more (an appendix restarting at 1). Each range is anchored to the **page it starts on** (`Page.uuid`), not to a position, so labels follow their pages through inserts, deletes, reorders, and Smart Separate. `nil` = not configured; the UI then shows project page numbers only. One small blob rather than scattered scalars so a CloudKit merge can never mix two devices' half-plans.
+    ///
+    /// Earlier schema-3 development builds wrote position-based ranges into this same field (plan version 1); `printedNumbering` converts those on read and `ProjectMaintenance` rewrites them at launch. See `PageNumbering.swift`.
     var printedNumberingData: Data?
 
     /// `true` when `name` was proposed by the on-device model (`ProjectTitleSuggester`) and the user hasn't renamed it since. Renaming by hand clears it, so an automatic pass never overwrites a user's title.
     var isAutoTitled: Bool = false
+
+    /// Original scans shared by pages that Smart Separate split apart (`SharedScan.swift`). Cascade: deleting the project deletes them.
+    @Relationship(deleteRule: .cascade, inverse: \SharedScan.document)
+    var sharedScans: [SharedScan]? = []
 
     #Index<Document>([\.uuid])
 
@@ -244,9 +304,22 @@ nonisolated final class Document {
     }
 
     /// Typed view of `printedNumberingData`. Setting `nil` turns printed numbering off.
+    /// Reads accept the position-based plan earlier development builds wrote and anchor it to the pages currently at those positions; writes always produce the current form.
     var printedNumbering: PrintedNumberingPlan? {
-        get { PrintedNumberingPlan.decode(printedNumberingData) }
+        get { PrintedNumberingPlan.decode(printedNumberingData, pages: sortedPages) }
         set { printedNumberingData = newValue?.encoded() }
+    }
+
+    /// Printed label for every numbered page, keyed by project page number — one resolution of the plan for callers that draw many pages. Empty when printed numbering is off.
+    func printedPageLabels() -> [Int: String] {
+        let pages = sortedPages
+        guard let plan = PrintedNumberingPlan.decode(printedNumberingData, pages: pages) else { return [:] }
+        return plan.resolved(against: pages).labels(pageCount: pages.count)
+    }
+
+    /// Non-optional shared scans for convenient read access.
+    var unwrappedSharedScans: [SharedScan] {
+        sharedScans ?? []
     }
 
     /// Every artwork capture in the project that is still flagged as a draft, in page order — the export panel lists these as "revisit this page" reminders.
@@ -306,6 +379,10 @@ nonisolated final class Document {
             for capture in page.unwrappedCaptures {
                 totalBytes += Int64(capture.imageData?.count ?? 0) + Int64(capture.thumbnailData?.count ?? 0)
             }
+        }
+        // A separated scan is stored once, however many pages show it.
+        for scan in unwrappedSharedScans {
+            totalBytes += Int64(scan.imageData?.count ?? 0)
         }
         if let textExportCache = textExportCache {
             totalBytes += Int64(textExportCache.count)

@@ -215,4 +215,72 @@ struct SmartCleanupAnalysisTests {
         #expect(result.isEmpty)
         #expect(TextManipulationService.buildOptions(from: result, forPageNumber: 1).isEmpty)
     }
+
+    // MARK: Bounded edit distance (header grouping's hot path)
+
+    @Test func boundedEditDistanceAgreesWithTheFullDistance() {
+        var bounded = TextManipulationService.BoundedEditDistance()
+        let fixed: [(String, String)] = [
+            ("kitten", "sitting"), ("", ""), ("", "ab"), ("abc", ""), ("same", "same"),
+            ("rite in the rain", "rile in the rain"), ("chapter one", "chapter 0ne"),
+            ("abcdef", "abdcef"), ("a", "b"), ("ab", "ba"), ("the running header", "the runing headers"),
+            ("xabcdefgh", "abcdefghx"), ("café olé", "cafe ole")
+        ]
+        // Plus random pairs that are mostly near each other, where the band and the early exit actually matter.
+        var seed: UInt64 = 42
+        func next(_ bound: Int) -> Int {
+            seed = seed &* 6364136223846793005 &+ 1442695040888963407
+            return Int((seed >> 33) % UInt64(bound))
+        }
+        let alphabet = Array("abcde ")
+        var pairs = fixed
+        for _ in 0..<600 {
+            var a = (0..<(3 + next(14))).map { _ in alphabet[next(alphabet.count)] }
+            let original = String(a)
+            for _ in 0..<next(4) {
+                switch next(3) {
+                case 0 where !a.isEmpty: a.remove(at: next(a.count))
+                case 1: a.insert(alphabet[next(alphabet.count)], at: next(a.count + 1))
+                default: if !a.isEmpty { a[next(a.count)] = alphabet[next(alphabet.count)] }
+                }
+            }
+            pairs.append((original, String(a)))
+        }
+        for (a, b) in pairs {
+            let exact = TextManipulationService.editDistance(a, b)
+            for limit in 0...3 {
+                // Both directions, and reusing one instance across strings of different lengths (its scratch rows are shared).
+                #expect(bounded.isWithin(limit, Array(a), Array(b)) == (exact <= limit), "\(a) / \(b) within \(limit) (distance \(exact))")
+                #expect(bounded.isWithin(limit, Array(b), Array(a)) == (exact <= limit), "\(b) / \(a) within \(limit) (distance \(exact))")
+            }
+            // The cheap pre-check must never reject a pair the real comparison would accept.
+            let differingBits = (TextManipulationService.characterSignature(Array(a)) ^ TextManipulationService.characterSignature(Array(b))).nonzeroBitCount
+            #expect(differingBits <= 2 * exact, "\(a) / \(b): \(differingBits) signature bits differ at distance \(exact)")
+        }
+    }
+
+    /// A book-length project: every line distinct except a running header with OCR variants. The analysis compares every distinct line with every other; before the bounded comparison this did not finish in ten minutes at a fifth of this size.
+    @Test(.timeLimit(.minutes(2)))
+    func headerAnalysisHandlesABookLengthProject() {
+        let words = "the quick brown fox jumps over the lazy dog while the patient reader turns another page of this rather ordinary printed book and wonders what happens next".split(separator: " ").map(String.init)
+        var seed = 1
+        var entries: [PageCacheEntry] = []
+        for page in 1...500 {
+            var lines = [page % 7 == 0 ? "The Great B0ok" : "The Great Book"]
+            for _ in 0..<34 {
+                var line: [String] = []
+                for _ in 0..<10 {
+                    seed = (seed &* 1103515245 &+ 12345) & 0x7fffffff
+                    line.append(words[seed % words.count])
+                }
+                lines.append(line.joined(separator: " "))
+            }
+            lines.append("\(page)")
+            entries.append(PageCacheEntry(pageNumber: page, fileName: nil, rtfData: Data(), plainText: lines.joined(separator: "\n"), wordCount: 0, charCount: 0, pageLastModified: nil))
+        }
+        let result = TextManipulationService.analyzeForSmartCleanup(cache: TextExportCache(pages: entries))
+        // The header is found on every page, OCR variants merged under the common spelling.
+        let header = result.sectionHeaders.first { $0.displayText == "The Great Book" }
+        #expect(header?.affectedPages.count == 500)
+    }
 }

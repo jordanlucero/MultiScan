@@ -18,7 +18,6 @@ import CloudKit
 struct ImportAndStorageSettingsView: View {
     @AppStorage(DefaultsKey.optimizeImagesOnImport) private var optimizeImagesOnImport = false
     @AppStorage(DefaultsKey.autoTitleProjects) private var autoTitleProjects = true
-    @AppStorage(DefaultsKey.autoDetectChapters) private var autoDetectChapters = true
 
     private let ocrSettings = OCREngineSettings.shared
 
@@ -36,7 +35,7 @@ struct ImportAndStorageSettingsView: View {
                     .foregroundStyle(Color.secondary)
 
                 Toggle("Smart Separate", isOn: Bindable(ocrSettings).smartSeparateEnabled)
-                Text("When a scan shows two facing pages, MultiScan splits it into two pages along the gutter, using the recognized text's layout. Each half is cropped to its text with a margin for easier review.")
+                Text("When a scan shows two facing pages, MultiScan makes it two pages along the gutter, using the recognized text's layout. Both pages keep sharing the original scan, so they can be rejoined later. You can also separate scans after import, from a page's menu or for a whole project.")
                     .font(.caption)
                     .foregroundStyle(Color.secondary)
             }
@@ -49,10 +48,7 @@ struct ImportAndStorageSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(Color.secondary)
 
-                Toggle("Detect chapters", isOn: $autoDetectChapters)
-                Text("Marks pages that begin a chapter, part, or section so the sidebar, Digest, and exports can group them. You can edit or remove any mark from a page's context menu.")
-                    .font(.caption)
-                    .foregroundStyle(Color.secondary)
+                // "Detect chapters" lived here. Automatic chapter detection is on hold (see ChapterDetector.swift); chapters are marked by hand from a page's context menu.
             }
 
             Section("iCloud") {
@@ -166,7 +162,7 @@ struct OCREngineSettingsView: View {
                         Text(kind.label).tag(kind)
                     }
                 }
-                Text("Apple Vision always runs to capture the page layout. With a model engine selected, the model's Markdown transcription becomes the page text and Vision's transcript is kept alongside it.")
+                Text("Apple Vision always runs to capture the page layout. With a model engine selected, the model's Markdown transcription becomes the page text and Vision's transcript is kept alongside it — a page's context menu can put it back, or read the page again with the engine chosen here.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } header: {
@@ -193,26 +189,43 @@ struct OCREngineSettingsView: View {
             }
 
             #if os(macOS)
-            if settings.kind == .lmStudio {
-                Section("Local server") {
-                    TextField("Server URL", text: Binding(
-                        get: { settings.lmStudioBaseURL.absoluteString },
-                        set: { if let url = URL(string: $0) { settings.lmStudioBaseURL = url } }
+            if settings.kind == .modelServer {
+                Section("Model server") {
+                    Picker("Server", selection: $settings.serverPreset) {
+                        ForEach(ModelServerPreset.allCases, id: \.self) { preset in
+                            Text(preset.label).tag(preset)
+                        }
+                    }
+                    TextField("Address", text: Binding(
+                        get: { settings.serverBaseURL.absoluteString },
+                        set: { if let url = URL(string: $0.trimmingCharacters(in: .whitespaces)), url.scheme != nil { settings.serverBaseURL = url } }
                     ))
                     .textFieldStyle(.roundedBorder)
-                    Text("LM Studio's default is http://localhost:1234. Any OpenAI-compatible chat-completions server works. Load a vision-capable model (one that accepts images) in LM Studio first.")
+                    .autocorrectionDisabled()
+                    Text("Any server with an OpenAI-compatible chat API works: LM Studio (start its local server), Ollama, llama.cpp, mlx-lm, or a machine on your network. Load a vision-capable model — one that accepts images — first.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
                     if availableModels.isEmpty {
-                        TextField("Model identifier (optional)", text: $settings.lmStudioModelID)
+                        TextField("Model identifier (optional)", text: $settings.serverModelID)
                             .textFieldStyle(.roundedBorder)
+                            .autocorrectionDisabled()
                     } else {
-                        Picker("Model", selection: $settings.lmStudioModelID) {
+                        Picker("Model", selection: $settings.serverModelID) {
                             Text("Server default").tag("")
+                            // Keep a typed identifier selectable even if the server didn't list it.
+                            if !settings.serverModelID.isEmpty, !availableModels.contains(settings.serverModelID) {
+                                Text(settings.serverModelID).tag(settings.serverModelID)
+                            }
                             ForEach(availableModels, id: \.self) { Text($0).tag($0) }
                         }
                     }
+
+                    SecureField("API key (optional)", text: $settings.serverAPIKey)
+                        .textFieldStyle(.roundedBorder)
+                    Text("Sent as a bearer token. Most local servers don't need one. Stored in your keychain.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
 
                     HStack {
                         Button(isTestingConnection ? "Testing…" : "Test Connection") { testConnection() }
@@ -221,9 +234,14 @@ struct OCREngineSettingsView: View {
                             Text(connectionStatus)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                                .lineLimit(2)
+                                .lineLimit(3)
                         }
                     }
+                }
+                .onChange(of: settings.serverBaseURL) {
+                    // A different server has different models.
+                    availableModels = []
+                    connectionStatus = nil
                 }
             }
             #endif
@@ -259,11 +277,12 @@ struct OCREngineSettingsView: View {
     private func testConnection() {
         isTestingConnection = true
         connectionStatus = nil
-        let base = settings.lmStudioBaseURL
+        let base = settings.serverBaseURL
+        let apiKey = settings.serverAPIKey
         Task {
             defer { isTestingConnection = false }
             do {
-                let models = try await LMStudioTranscriber.listModels(baseURL: base)
+                let models = try await ModelServerTranscriber.listModels(baseURL: base, apiKey: apiKey)
                 availableModels = models
                 connectionStatus = models.isEmpty
                     ? String(localized: "Connected, but no models are loaded.")

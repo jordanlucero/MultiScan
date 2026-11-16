@@ -24,8 +24,8 @@ nonisolated enum DefaultsKey {
     static let viewerShowsHDR = "viewerShowsHDR"
     /// Suggest a project title with the on-device model after a new import (Foundation Models). Default on; silently inert where Apple Intelligence is unavailable.
     static let autoTitleProjects = "autoTitleProjects"
-    /// Mark chapter starts automatically after a new import (`ChapterDetector`). Default on.
-    static let autoDetectChapters = "autoDetectChapters"
+    // On hold with automatic chapter detection (see ChapterDetector.swift). The key string is kept here so the setting comes back under the same name:
+    // static let autoDetectChapters = "autoDetectChapters"
     /// Include "[Illustration]" placeholders and draft reminders in exported text.
     static let exportIncludeDraftReminders = "exportIncludeDraftReminders"
 }

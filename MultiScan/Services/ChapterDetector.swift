@@ -2,24 +2,63 @@
 //  ChapterDetector.swift
 //  MultiScan
 //
-//  Finds where chapters / parts / sections begin and labels those pages (`Page.sectionTitle`), so the thumbnail sidebar, the page grid, the Digest, and exports can group pages.
+//  ⏸ ON HOLD — automatic chapter detection is switched off.
 //
-//  ## Signals (strongest first)
-//  1. **Explicit chapter lines.** A page whose first non-empty line (or Vision-detected title) reads like "Chapter 7", "CHAPTER SEVEN", "Part II", "Book One", "7. The Return", or a bare Roman numeral on its own line. Regex-based; see `chapterLinePattern`.
-//  2. **Running-header runs.** Smart Cleanup already groups near-identical lines that repeat across near-contiguous pages (`TextManipulationService.detectSectionHeaders`). The first page of each run is where that header *starts* — a chapter boundary in most books. Runs covering more than 60 % of the project are the book's own title (alternating-header books put it on every other page) and are ignored; runs shorter than 2 pages are noise.
-//  3. **Vision titles.** `VisionDocumentLayout.title` on a page that isn't otherwise a chapter start but whose title is distinct, large, and not repeated elsewhere is treated as a weak candidate — only used when nothing stronger marked a chapter within the previous 2 pages.
+//  Chapters are marked by hand for now (page context menu ▸ Mark Chapter Start…, Edit ▸ Mark Chapter Start…, the iPhone More menu). Nothing runs after an import, there is no "Detect chapters" setting, and there is no "Detect Chapters" command.
 //
-//  Candidates within one page of each other collapse to the earliest (a chapter opener often has both the explicit line and the first running header).
+//  The feature is meant to come back built on the on-device foundation model (Foundation Models, the way `ProjectTitleSuggester` proposes project titles) rather than on the heuristics below. Until then the heuristic implementation is kept — commented out, with its tests (`ChapterDetectorTests`) — as the starting point: its signals (explicit "Chapter 7" lines, running-header runs from Smart Cleanup's analysis, Vision titles) are the evidence a model-based detector would be prompted with.
 //
-//  ## Applying
-//  `apply(to:cache:)` writes `sectionTitle` only on pages the user hasn't hand-edited (`sectionTitleIsAutomatic == true` or no title yet) and clears stale automatic titles. Manual titles always win. It is called after a new import and from the sidebar's "Detect Chapters" action; it is **not** re-run on every save — the user's structure shouldn't shift under them.
+//  What stays live:
+//  - `Page.sectionTitle` and everything that reads it (sidebar and page-grid sections, Digest, export headings, the Chapters rotor) — manual marks work exactly as before.
+//  - `Page.sectionTitleIsAutomatic` stays in the schema. Marks made by earlier builds' detection keep the flag; nothing reads it today, and a future detector needs it to tell its own marks from the user's.
+//  - `ChapterDetector.cleanedTitle(_:)` below, which `ProjectTitleSuggester` uses to tidy running headers.
 //
-//  Pure analysis is `nonisolated` and tested; `apply` runs on the main context.
+//  To bring detection back: restore the commented block (or replace `detect` with a model-backed implementation that keeps `apply`'s rule — never touch a mark the user made), restore the call in `ProjectImportPipeline.createProject`, the `DefaultsKey.autoDetectChapters` key and its toggle in `ImportAndStorageSettingsView`, and the tests.
 //
 
 import Foundation
 
 nonisolated enum ChapterDetector {
+
+    /// Trims, collapses whitespace, drops a trailing page number, caps length.
+    static func cleanedTitle(_ text: String) -> String {
+        var title = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let decomposed = TextManipulationService.decomposeHeaderLine(TextManipulationService.normalize(title))
+        if decomposed.pageNumber != nil, !decomposed.coreText.isEmpty {
+            // Remove the edge number from the *original-case* text by dropping the matching token.
+            var tokens = title.split(separator: " ").map(String.init)
+            if let last = tokens.last, TextManipulationService.parseNumericToken(TextManipulationService.normalize(last)) != nil { tokens.removeLast() }
+            else if let first = tokens.first, TextManipulationService.parseNumericToken(TextManipulationService.normalize(first)) != nil { tokens.removeFirst() }
+            title = tokens.joined(separator: " ")
+        }
+        title = title.components(separatedBy: .whitespaces).filter { !$0.isEmpty }.joined(separator: " ")
+        if title.count > 80 { title = String(title.prefix(79)) + "…" }
+        return title
+    }
+}
+
+/*
+ ───────────────────────────────────────────────────────────────────────────────
+ ON HOLD: the heuristic detector, as it was. Not compiled.
+ ───────────────────────────────────────────────────────────────────────────────
+
+ //  Finds where chapters / parts / sections begin and labels those pages (`Page.sectionTitle`), so the thumbnail sidebar, the page grid, the Digest, and exports can group pages.
+ //
+ //  ## Signals (strongest first)
+ //  1. **Explicit chapter lines.** A page whose first non-empty line (or Vision-detected title) reads like "Chapter 7", "CHAPTER SEVEN", "Part II", "Book One", "7. The Return", or a bare Roman numeral on its own line. Regex-based; see `chapterLinePattern`.
+ //  2. **Running-header runs.** Smart Cleanup already groups near-identical lines that repeat across near-contiguous pages (`TextManipulationService.detectSectionHeaders`). The first page of each run is where that header *starts* — a chapter boundary in most books. Runs covering more than 60 % of the project are the book's own title (alternating-header books put it on every other page) and are ignored; runs shorter than 2 pages are noise.
+ //  3. **Vision titles.** `VisionDocumentLayout.title` on a page that isn't otherwise a chapter start but whose title is distinct, large, and not repeated elsewhere is treated as a weak candidate — only used when nothing stronger marked a chapter within the previous 2 pages.
+ //
+ //  Candidates within one page of each other collapse to the earliest (a chapter opener often has both the explicit line and the first running header).
+ //
+ //  ## Applying
+ //  `apply(to:cache:)` writes `sectionTitle` only on pages the user hasn't hand-edited (`sectionTitleIsAutomatic == true` or no title yet) and clears stale automatic titles. Manual titles always win. It is called after a new import and from the sidebar's "Detect Chapters" action; it is **not** re-run on every save — the user's structure shouldn't shift under them.
+ //
+ //  Pure analysis is `nonisolated` and tested; `apply` runs on the main context.
+ //
+
+
+nonisolated extension ChapterDetector {
 
     /// One proposed chapter boundary.
     struct Candidate: Equatable, Sendable {
@@ -171,22 +210,6 @@ nonisolated enum ChapterDetector {
         return trimmed.split(separator: " ").count <= 10
     }
 
-    /// Trims, collapses whitespace, drops a trailing page number, caps length.
-    static func cleanedTitle(_ text: String) -> String {
-        var title = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let decomposed = TextManipulationService.decomposeHeaderLine(TextManipulationService.normalize(title))
-        if decomposed.pageNumber != nil, !decomposed.coreText.isEmpty {
-            // Remove the edge number from the *original-case* text by dropping the matching token.
-            var tokens = title.split(separator: " ").map(String.init)
-            if let last = tokens.last, TextManipulationService.parseNumericToken(TextManipulationService.normalize(last)) != nil { tokens.removeLast() }
-            else if let first = tokens.first, TextManipulationService.parseNumericToken(TextManipulationService.normalize(first)) != nil { tokens.removeFirst() }
-            title = tokens.joined(separator: " ")
-        }
-        title = title.components(separatedBy: .whitespaces).filter { !$0.isEmpty }.joined(separator: " ")
-        if title.count > 80 { title = String(title.prefix(79)) + "…" }
-        return title
-    }
-
     // MARK: Applying (main context)
 
     /// Marks chapter starts on `document`, honoring manual titles. Returns the number of pages changed.
@@ -219,3 +242,4 @@ nonisolated enum ChapterDetector {
         return changed
     }
 }
+*/

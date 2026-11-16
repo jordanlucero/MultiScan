@@ -11,8 +11,9 @@
 //  The toolbar is declared once (`reviewToolbar`) and attached to the detail content in both layouts. Items whose presence depends on the size class use `.hidden(_:)`; page navigation carries `.visibilityPriority(.high)` so it outlasts the rest in a narrow window; only genuinely per-OS item sets (discrete Mac buttons vs. the iOS "More" menu) are split with `#if os`.
 //
 //  ## 2.0 sessions owned here
-//  - **Artwork capture** (`captureSession`): opened from the viewer's context menu (seeded at the pointer), the Image/More menu, a page's context menu, or an existing capture's "Recapture…". Presented as a sheet (regular) or full-screen cover (compact). On completion the reference attachment goes into the live editor (`PageTextController.insertCapture`) when the captured page is the current one, or into the page's stored text otherwise.
-//  - **Digest** (`showDigest`), **Page Numbering** (`showPageNumbering`), and the current page's **chapter editor** (`showChapterEditor`) — all reachable from the menu bar through `FocusedValues`.
+//  - **Artwork capture** (`captureSession`): opened from the viewer's context menu (seeded at the pointer), the Edit/More menu, a page's context menu, or an existing capture's "Recapture…". Presented as a sheet (regular) or full-screen cover (compact). On completion the reference attachment goes into the live editor (`PageTextController.insertCapture`) when the captured page is the current one, or into the page's stored text otherwise.
+//  - **Digest** (`showDigest`), **Page Numbering** (`showPageNumbering`), and the current page's **chapter editor** (`showChapterEditor`) — all reachable from the menu bar through `FocusedValues`. Digest has exactly two entry points: View ▸ Read in Digest in the menu bar (macOS and iPadOS), and on iOS/iPadOS a toolbar button with low visibility priority, so it is the first thing to fold into the toolbar's overflow when space runs out.
+//  - **Smart Separate after import** (`smartSeparate`) and the page operations that rewrite text behind the editor — rejoining separated pages, reading a page again, restoring Apple Vision's text (`pendingOperation` → confirmation → `perform`). All of them are offered through one `PageActions` value (`pageActions`) handed to the sidebar, the page grid, the More menu, and — via `FocusedValues.pageActions` — the menu bar.
 //
 
 import SwiftUI
@@ -61,6 +62,18 @@ struct ReviewView: View {
     @State private var showChapterEditor = false
     @State private var chapterTitleDraft = ""
 
+    /// Smart Separate after import (one page or the whole project).
+    @State private var smartSeparate = SmartSeparateModel()
+    /// The page on screen when a separation started; navigation is pinned to it while later pages are renumbered.
+    @State private var pageBeforeSeparation: PersistentIdentifier?
+    /// A page operation waiting for the user's confirmation (each one rewrites page text).
+    @State private var pendingOperation: PendingPageOperation?
+    /// The separated page whose original (whole) scan is being shown.
+    @State private var originalScanPage: Page?
+    /// Shown while a page operation runs.
+    @State private var busyMessage: String?
+    @State private var operationError: String?
+
     /// Page number to insert new pages after (nil = append to end). Set by the iOS insert menus.
     @State private var insertAfterPageNumber: Int?
 
@@ -72,12 +85,16 @@ struct ReviewView: View {
     @AppStorage(DefaultsKey.showThumbnails) private var showThumbnails = true
     @AppStorage(DefaultsKey.showTextPanel) private var showTextPanel = true
     @AppStorage(DefaultsKey.showSmartCleanup) private var showSmartCleanup = false
-    @AppStorage(DefaultsKey.optimizeImagesOnImport) private var optimizeImagesOnImport = false
 
     init(document: Document, onDismiss: @escaping () -> Void) {
         self.document = document
         self.onDismiss = onDismiss
         _cleanup = State(initialValue: SmartCleanupModel(document: document))
+    }
+
+    /// A confirmation dialog or alert declared on this view is up (or about to be).
+    private var isShowingDialog: Bool {
+        pendingOperation != nil || operationError != nil || showChapterEditor || showDeletePageConfirmation
     }
 
     /// Compact width selects the iPhone layout. Size classes don't exist on macOS.
@@ -97,9 +114,14 @@ struct ReviewView: View {
 
     // MARK: - Body
 
+    /// Built in three steps — focused values, presentations, lifecycle — because one modifier chain this long is more than the type checker will solve in one expression.
     var body: some View {
-        layout
-            // Menu bar commands (MultiScanCommands) act on the focused window through these.
+        lifecycle(presentations(focusedValues(layout)))
+    }
+
+    /// Menu bar commands (MultiScanCommands) act on the focused window through these.
+    private func focusedValues(_ content: some View) -> some View {
+        content
             .focusedSceneValue(\.navigationState, navigationState)
             .focusedSceneValue(\.showExportPanel, $showExportPanel)
             .focusedSceneValue(\.showAddFromPhotos, $showAddFromPhotos)
@@ -109,6 +131,49 @@ struct ReviewView: View {
             .focusedSceneValue(\.showDigest, $showDigest)
             .focusedSceneValue(\.showChapterEditor, $showChapterEditor)
             .focusedSceneValue(\.showPageNumbering, $showPageNumbering)
+            .focusedSceneValue(\.pageActions, pageActions)
+    }
+
+    /// Sheets, dialogs, alerts, and the progress badge.
+    private func presentations(_ content: some View) -> some View {
+        content
+            .overlay(alignment: .top) {
+                if let busyMessage {
+                    HStack(spacing: 10) {
+                        ProgressView().controlSize(.small)
+                        Text(busyMessage)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .glassEffect()
+                    .padding(.top, 12)
+                    .transition(.opacity)
+                    .accessibilityElement(children: .combine)
+                }
+            }
+            .animation(.default, value: busyMessage)
+            .sheet(isPresented: Bindable(smartSeparate).isPresented, onDismiss: restoreTextSheet) {
+                SmartSeparateSheet(model: smartSeparate)
+            }
+            .sheet(item: $originalScanPage, onDismiss: restoreTextSheet) { page in
+                OriginalScanView(page: page)
+            }
+            .confirmationDialog(
+                pendingOperation?.title ?? "",
+                isPresented: Binding(get: { pendingOperation != nil }, set: { if !$0 { pendingOperation = nil } }),
+                titleVisibility: .visible,
+                presenting: pendingOperation
+            ) { operation in
+                Button(operation.confirmLabel) { perform(operation) }
+                Button("Cancel", role: .cancel) {}
+            } message: { operation in
+                Text(operation.message)
+            }
+            .alert("Couldn't Finish", isPresented: Binding(get: { operationError != nil }, set: { if !$0 { operationError = nil } })) {
+                Button("OK") {}
+            } message: {
+                Text(operationError ?? "")
+            }
             .sheet(isPresented: $showExportPanel, onDismiss: restoreTextSheet) {
                 ExportPanelView(document: document)
             }
@@ -152,6 +217,11 @@ struct ReviewView: View {
                 navigationState.deleteCurrentPage(modelContext: modelContext)
             }
             .chapterTitleEditor(isPresented: $showChapterEditor, page: navigationState.currentPage, draft: $chapterTitleDraft)
+    }
+
+    /// Session start/stop, the compact text sheet's choreography, and save protection.
+    private func lifecycle(_ content: some View) -> some View {
+        content
             .onChange(of: showChapterEditor) { _, presenting in
                 if presenting { chapterTitleDraft = navigationState.currentPage?.sectionTitle ?? "" }
             }
@@ -187,6 +257,16 @@ struct ReviewView: View {
             }
             .onChange(of: showPageNumbering) { _, showing in
                 if showing { showTextSheet = false }
+            }
+            .onChange(of: smartSeparate.isPresented) { _, showing in
+                if showing { showTextSheet = false }
+            }
+            .onChange(of: originalScanPage == nil) { _, isNil in
+                if !isNil { showTextSheet = false }
+            }
+            .onChange(of: isShowingDialog) { _, showing in
+                // iPhone: the persistent text sheet holds this view's one presentation slot, so a dialog or alert declared here cannot appear while it is up (verified in the simulator — the confirmation simply never showed). It steps aside and comes back, like it does for the progress popover.
+                if isCompact { showTextSheet = !showing }
             }
             .onChange(of: captureSession == nil) { _, isNil in
                 if !isNil { showTextSheet = false }
@@ -229,22 +309,8 @@ struct ReviewView: View {
 
     private var regularLayout: some View {
         NavigationSplitView(columnVisibility: columnVisibility) {
-            ThumbnailSidebar(
-                document: document,
-                navigationState: navigationState,
-                onInsertFromPhotos: { insertAfter in
-                    insertAfterPageNumber = insertAfter
-                    showAddFromPhotos = true
-                },
-                onInsertFromFiles: { insertAfter in
-                    insertAfterPageNumber = insertAfter
-                    showAddFromFiles = true
-                },
-                onCaptureArtwork: { page in beginCapture(on: page, at: nil) },
-                onOpenDigest: { showDigest = true },
-                onEditPageNumbering: { showPageNumbering = true }
-            )
-            .navigationSplitViewColumnWidth(min: 150, ideal: 200, max: 400)
+            ThumbnailSidebar(document: document, navigationState: navigationState, actions: pageActions)
+                .navigationSplitViewColumnWidth(min: 150, ideal: 200, max: 400)
         } detail: {
             detailContent
         }
@@ -275,13 +341,8 @@ struct ReviewView: View {
                         onAddFiles: { insertAfter, urls in
                             Task { await addPages(fileURLs: urls, insertAfter: insertAfter) }
                         },
-                        onCaptureArtwork: { page in
-                            // The grid dismisses itself first; present the capture once it is gone.
-                            Task { @MainActor in
-                                try? await Task.sleep(for: .milliseconds(350))
-                                beginCapture(on: page, at: nil)
-                            }
-                        }
+                        // The grid dismisses itself first; whatever these present waits until it is gone.
+                        actions: pageActions.deferred(by: .milliseconds(350))
                     )
                 }
                 .onChange(of: showPageGrid) { _, showing in
@@ -406,6 +467,15 @@ struct ReviewView: View {
         ToolbarItem(placement: .primaryAction) {
             moreMenu
         }
+
+        // Digest: the one on-screen entry point on iPhone and iPad, in every size class (the menu bar has View ▸ Read in Digest). Low priority, so when the bar runs out of room this is what moves into the overflow menu first.
+        ToolbarItem(placement: .primaryAction) {
+            Button { showDigest = true } label: {
+                Label("Read in Digest", systemImage: "book.pages")
+            }
+            .help("Read the whole project as one continuous text")
+        }
+        .visibilityPriority(.low)
         #else
         macToolbarItems
         #endif
@@ -498,6 +568,12 @@ struct ReviewView: View {
 
                 Divider()
 
+                Section("Scan") {
+                    PageScanMenuItems(page: page, actions: pageActions)
+                }
+
+                Divider()
+
                 Section("Chapter") {
                     ChapterMenuItems(page: page) { showChapterEditor = true }
                 }
@@ -507,9 +583,11 @@ struct ReviewView: View {
 
             // Project
             Section("Project") {
-                OpenDigestButton { showDigest = true }
                 Button { showPageNumbering = true } label: {
                     Label("Page Numbering…", systemImage: "number")
+                }
+                Button { pageActions.separateProject?() } label: {
+                    Label("Smart Separate Pages…", systemImage: "rectangle.split.2x1")
                 }
             }
 
@@ -590,9 +668,15 @@ struct ReviewView: View {
     }
 
     /// Rebuilds the controller on the page's stored text after it was rewritten behind the editor's back (batch Smart Cleanup, a capture appended to stored text).
-    private func reloadTextController() {
-        textController?.detach()
+    /// - Parameter discardingEdits: `true` when the stored text was *replaced* (read again, separated, rejoined): whatever the editor still holds is the old text and must not be saved back over the new one.
+    private func reloadTextController(discardingEdits: Bool = false) {
+        if discardingEdits {
+            textController?.detachDiscardingEdits()
+        } else {
+            textController?.detach()
+        }
         textController = navigationState.currentPage.map(makeTextController)
+        scheduleCleanupAnalysis()
     }
 
     private func makeTextController(for page: Page) -> PageTextController {
@@ -611,6 +695,72 @@ struct ReviewView: View {
 
     private func restoreTextSheet() {
         showTextSheet = true
+    }
+
+    // MARK: - Page actions (menus, sidebar, grid, menu bar)
+
+    /// Everything the page menus can ask this view to do. Operations that rewrite page text go through `pendingOperation` so the user confirms first.
+    private var pageActions: PageActions {
+        PageActions(
+            insertFromPhotos: { insertAfter in
+                insertAfterPageNumber = insertAfter
+                showAddFromPhotos = true
+            },
+            insertFromFiles: { insertAfter in
+                insertAfterPageNumber = insertAfter
+                showAddFromFiles = true
+            },
+            captureArtwork: { page in beginCapture(on: page, at: nil) },
+            separate: { page in beginSeparation(.page(page.persistentModelID)) },
+            separateProject: { beginSeparation(.project) },
+            rejoin: { page in pendingOperation = .rejoin(page) },
+            viewOriginalScan: { page in originalScanPage = page },
+            recognizeAgain: { page in pendingOperation = .recognizeAgain(page) },
+            restoreVisionText: { page in pendingOperation = .restoreVisionText(page) }
+        )
+    }
+
+    /// Opens the Smart Separate sheet for one page or the whole project. Nothing changes until the user confirms there.
+    private func beginSeparation(_ scope: SmartSeparateModel.Scope) {
+        // The stored text is what gets replaced; make sure it is current first.
+        textController?.saveNow()
+        pageBeforeSeparation = navigationState.currentPage?.persistentModelID
+        smartSeparate.onPageSeparated = { separatedID in
+            // A page was inserted: every later page has a new number. Stay on the page that was on screen.
+            navigationState.refreshPageOrder()
+            navigationState.reselectPage(withID: pageBeforeSeparation)
+            if separatedID == pageBeforeSeparation {
+                reloadTextController(discardingEdits: true)
+            }
+        }
+        smartSeparate.begin(scope, in: document)
+    }
+
+    /// Runs a confirmed page operation, showing progress and keeping the editor in step with the rewritten text.
+    private func perform(_ operation: PendingPageOperation) {
+        textController?.saveNow()
+        let page = operation.page
+        busyMessage = operation.progressMessage
+        Task {
+            defer { busyMessage = nil }
+            do {
+                switch operation {
+                case .rejoin:
+                    try await PageSeparationService.rejoin(page, navigationState: navigationState, context: modelContext)
+                case .recognizeAgain:
+                    try await PageRecognitionService.recognizeAgain(page)
+                case .restoreVisionText:
+                    try await PageRecognitionService.restoreVisionText(page)
+                }
+                // Rejoining can change which page is current; either way the page on screen may be the one rewritten.
+                if navigationState.currentPage === page || textController?.page !== navigationState.currentPage || operation.isRejoin {
+                    reloadTextController(discardingEdits: true)
+                }
+                AccessibilityNotification.Announcement(operation.completionAnnouncement).post()
+            } catch {
+                operationError = error.localizedDescription
+            }
+        }
     }
 
     // MARK: - Artwork capture
@@ -681,7 +831,7 @@ struct ReviewView: View {
         defer { isAddingPages = false }
 
         do {
-            let prepared = try await pipeline.prepare(urls: urls, optimizeImages: optimizeImagesOnImport)
+            let prepared = try await pipeline.prepare(urls: urls)
             await addPages(images: prepared.images, insertAfter: insertAfter)
         } catch {
             print("Import error: \(error)")
@@ -698,7 +848,7 @@ struct ReviewView: View {
             selectedPhotos = []
         }
 
-        let images = await pipeline.loadPhotos(items, optimizeImages: optimizeImagesOnImport)
+        let images = await pipeline.loadPhotos(items)
         await addPages(images: images, insertAfter: insertAfter)
     }
 
@@ -723,6 +873,95 @@ struct ReviewView: View {
         } catch {
             print("Failed to add pages: \(error)")
         }
+    }
+}
+
+// MARK: - Page operations
+
+/// A page operation that replaces or merges page text, held until the user confirms it.
+private enum PendingPageOperation {
+    case rejoin(Page)
+    case recognizeAgain(Page)
+    case restoreVisionText(Page)
+
+    var page: Page {
+        switch self {
+        case .rejoin(let page), .recognizeAgain(let page), .restoreVisionText(let page): page
+        }
+    }
+
+    var isRejoin: Bool {
+        if case .rejoin = self { return true }
+        return false
+    }
+
+    var title: String {
+        switch self {
+        case .rejoin: String(localized: "Rejoin Separated Pages?")
+        case .recognizeAgain(let page): String(localized: "Recognize Page \(page.pageNumber) Again?")
+        case .restoreVisionText(let page): String(localized: "Restore Apple Vision Text on Page \(page.pageNumber)?")
+        }
+    }
+
+    var message: String {
+        switch self {
+        case .rejoin(let page):
+            let numbers = ([page] + page.facingPages).map(\.pageNumber).sorted().map(String.init).joined(separator: String(localized: " and ", comment: "Joins two page numbers"))
+            return String(localized: "Pages \(numbers) become one page again, showing the whole scan. Their text is kept and joined in order.")
+        case .recognizeAgain(let page):
+            return page.hasBeenEditedOrReviewed
+                ? String(localized: "MultiScan reads the page image again, the way it is displayed now. This page has been edited or reviewed — its current text will be replaced. Illustrations stay on the page.")
+                : String(localized: "MultiScan reads the page image again, the way it is displayed now, and replaces the page's text. Illustrations stay on the page.")
+        case .restoreVisionText:
+            return String(localized: "The page's current text will be replaced with Apple Vision's reading of it. Illustrations stay on the page.")
+        }
+    }
+
+    var confirmLabel: String {
+        switch self {
+        case .rejoin: String(localized: "Rejoin")
+        case .recognizeAgain: String(localized: "Recognize Again")
+        case .restoreVisionText: String(localized: "Restore")
+        }
+    }
+
+    var progressMessage: String {
+        switch self {
+        case .rejoin: String(localized: "Rejoining pages…")
+        case .recognizeAgain: String(localized: "Reading the page…")
+        case .restoreVisionText: String(localized: "Restoring text…")
+        }
+    }
+
+    var completionAnnouncement: String {
+        switch self {
+        case .rejoin: String(localized: "Pages rejoined.")
+        case .recognizeAgain: String(localized: "Page text recognized again.")
+        case .restoreVisionText: String(localized: "Apple Vision text restored.")
+        }
+    }
+}
+
+extension PageActions {
+    /// The same actions, each run after `delay` — for a sheet that has to dismiss itself before the review view can present what the action leads to. Insert actions are left out: the sheet presents its own pickers.
+    func deferred(by delay: Duration) -> PageActions {
+        func later(_ action: ((Page) -> Void)?) -> ((Page) -> Void)? {
+            guard let action else { return nil }
+            return { page in
+                Task { @MainActor in
+                    try? await Task.sleep(for: delay)
+                    action(page)
+                }
+            }
+        }
+        var result = PageActions()
+        result.captureArtwork = later(captureArtwork)
+        result.separate = later(separate)
+        result.rejoin = later(rejoin)
+        result.viewOriginalScan = later(viewOriginalScan)
+        result.recognizeAgain = later(recognizeAgain)
+        result.restoreVisionText = later(restoreVisionText)
+        return result
     }
 }
 

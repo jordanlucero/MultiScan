@@ -116,8 +116,10 @@ nonisolated enum PlatformImage {
     ///   - increaseContrast: Whether to apply contrast boost (matches SwiftUI .contrast(1.3))
     ///   - increaseBlackPoint: Whether to apply brightness reduction (matches SwiftUI .brightness(-0.1))
     /// - Returns: A correctly-oriented, optionally adjusted CGImage, or nil if decoding fails
+    ///   - crop: The region of the EXIF-upright image to show (normalized 0…1, upper-left origin), applied *before* `userRotation` — a page Smart Separate split off a two-page scan shows only its half (`Page.imageCrop`). `nil` shows the whole image.
     static func processedCGImage(
         from data: Data,
+        crop: CGRect? = nil,
         userRotation: Int = 0,
         increaseContrast: Bool = false,
         increaseBlackPoint: Bool = false
@@ -138,15 +140,33 @@ nonisolated enum PlatformImage {
         let exif = exifOrientation(from: source)
         let finalOrientation = combinedOrientation(exif: exif, userRotation: userRotation)
 
-        // Fast path: no rotation needed and no adjustments
-        if finalOrientation == .up && !increaseContrast && !increaseBlackPoint {
+        // Fast path: no crop, no rotation needed, and no adjustments
+        if crop == nil && finalOrientation == .up && !increaseContrast && !increaseBlackPoint {
             return rawCGImage
         }
 
-        // Build CIImage pipeline: orientation → optional adjustments → render
+        // Build CIImage pipeline: orientation (→ crop → user rotation) → optional adjustments → render
         var ciImage = CIImage(cgImage: rawCGImage)
 
-        if finalOrientation != .up {
+        if let crop {
+            // The crop is defined on the EXIF-upright image, so the two rotations can't be merged here: upright first, cut, then the user's rotation.
+            ciImage = Self.normalizedToOrigin(ciImage.oriented(cgImagePropertyOrientation(from: exif)))
+            let extent = ciImage.extent
+            // Core Image's origin is lower-left; the stored crop's is upper-left.
+            let region = CGRect(
+                x: crop.minX * extent.width,
+                y: (1 - crop.maxY) * extent.height,
+                width: crop.width * extent.width,
+                height: crop.height * extent.height
+            ).integral.intersection(extent)
+            if region.width >= 1, region.height >= 1 {
+                ciImage = Self.normalizedToOrigin(ciImage.cropped(to: region))
+            }
+            let rotation = combinedOrientation(exif: .up, userRotation: userRotation)
+            if rotation != .up {
+                ciImage = Self.normalizedToOrigin(ciImage.oriented(cgImagePropertyOrientation(from: rotation)))
+            }
+        } else if finalOrientation != .up {
             ciImage = ciImage.oriented(cgImagePropertyOrientation(from: finalOrientation))
         }
 
@@ -170,6 +190,113 @@ nonisolated enum PlatformImage {
             return ciContext.createCGImage(ciImage, from: ciImage.extent, format: .RGBAh, colorSpace: colorSpace)
         }
         return ciContext.createCGImage(ciImage, from: ciImage.extent)
+    }
+
+    /// Convenience for a page's image source (bytes + crop).
+    static func processedCGImage(
+        from source: PageImageSource,
+        userRotation: Int = 0,
+        increaseContrast: Bool = false,
+        increaseBlackPoint: Bool = false
+    ) -> CGImage? {
+        processedCGImage(
+            from: source.data,
+            crop: source.crop,
+            userRotation: userRotation,
+            increaseContrast: increaseContrast,
+            increaseBlackPoint: increaseBlackPoint
+        )
+    }
+
+    /// Moves a CIImage's extent to the origin, so a following crop/orientation works in plain 0…width coordinates.
+    private static func normalizedToOrigin(_ image: CIImage) -> CIImage {
+        let origin = image.extent.origin
+        guard origin != .zero else { return image }
+        return image.transformed(by: CGAffineTransform(translationX: -origin.x, y: -origin.y))
+    }
+
+    // MARK: - Geometry on decoded images
+
+    /// Crops `image` to a normalized (0…1, upper-left origin) rectangle. `nil` when the region is degenerate.
+    static func cropped(_ image: CGImage, to normalizedRect: CGRect) -> CGImage? {
+        let size = CGSize(width: image.width, height: image.height)
+        let rect = CGRect(
+            x: normalizedRect.minX * size.width,
+            y: normalizedRect.minY * size.height,
+            width: normalizedRect.width * size.width,
+            height: normalizedRect.height * size.height
+        ).integral.intersection(CGRect(origin: .zero, size: size))
+        guard rect.width > 8, rect.height > 8 else { return nil }
+        return image.cropping(to: rect)
+    }
+
+    /// `image` turned clockwise by a page's user rotation (0, 90, 180, 270).
+    static func rotated(_ image: CGImage, clockwise degrees: Int) -> CGImage? {
+        let orientation = combinedOrientation(exif: .up, userRotation: degrees)
+        return oriented(image, cgImagePropertyOrientation(from: orientation))
+    }
+
+    /// A copy of `image` with page regions marked on it, for showing where a scan was separated: everything outside `highlighted` is dimmed, and every region is outlined (the highlighted one in `accent`, the rest in white). Regions are normalized (0…1, upper-left origin) on `image` as given. An 8-bit sRGB rendering — a reference picture, not the viewer's image pipeline.
+    static func markingRegions(_ regions: [CGRect], highlighted: CGRect?, accent: CGColor, on image: CGImage) -> CGImage? {
+        let width = image.width
+        let height = image.height
+        guard width > 0, height > 0,
+              let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(
+                data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+              ) else { return nil }
+        let bounds = CGRect(x: 0, y: 0, width: width, height: height)
+        context.draw(image, in: bounds)
+
+        // Core Graphics' origin is lower-left; the regions' is upper-left.
+        func pixelRect(_ region: CGRect) -> CGRect {
+            CGRect(
+                x: region.minX * CGFloat(width),
+                y: (1 - region.maxY) * CGFloat(height),
+                width: region.width * CGFloat(width),
+                height: region.height * CGFloat(height)
+            )
+        }
+
+        if let highlighted {
+            context.saveGState()
+            context.addRect(bounds)
+            context.addRect(pixelRect(highlighted))
+            context.clip(using: .evenOdd)
+            context.setFillColor(CGColor(gray: 0, alpha: 0.45))
+            context.fill(bounds)
+            context.restoreGState()
+        }
+
+        let lineWidth = max(CGFloat(max(width, height)) / 400, 2)
+        context.setLineWidth(lineWidth)
+        for region in regions where region != highlighted {
+            context.setStrokeColor(CGColor(gray: 1, alpha: 0.9))
+            context.stroke(pixelRect(region).insetBy(dx: lineWidth / 2, dy: lineWidth / 2))
+        }
+        if let highlighted {
+            context.setStrokeColor(accent)
+            context.stroke(pixelRect(highlighted).insetBy(dx: lineWidth / 2, dy: lineWidth / 2))
+        }
+        return context.makeImage()
+    }
+
+    /// The decoded bitmap and its EXIF orientation, as the recognizers want them (they apply the orientation themselves).
+    static func decodedImage(from data: Data) -> (image: CGImage, orientation: CGImagePropertyOrientation)? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
+        return (image, cgImagePropertyOrientation(from: exifOrientation(from: source)))
+    }
+
+    /// The bitmap the recognizers read for a page: standard dynamic range, EXIF-upright, cut to the page's region of the scan, and turned by the user's rotation — i.e. the page as displayed, minus the display adjustments.
+    static func recognitionImage(from source: PageImageSource, userRotation: Int) -> CGImage? {
+        guard let decoded = decodedImage(from: source.data),
+              var image = oriented(decoded.image, decoded.orientation) else { return nil }
+        if let crop = source.crop, let region = cropped(image, to: crop) {
+            image = region
+        }
+        return rotated(image, clockwise: userRotation) ?? image
     }
 
     // MARK: - Orientation baking
@@ -196,12 +323,19 @@ nonisolated enum PlatformImage {
     }
 
     /// Re-encodes image data as HEIC ("Optimize images on import" / "Optimize Images…"). Returns nil if the data can't be decoded or encoded.
+    ///
+    /// Re-encodes **from the image source**, not from a decoded bitmap, so the image's metadata comes along — above all its EXIF orientation. Encoding the bare `CGImage` drops the tag while leaving the pixels as stored, which turned every optimized phone photo sideways (and would misplace the crops of separated pages, which are defined on the upright image).
     static func heicReencoding(_ data: Data, quality: CGFloat = 0.8) -> Data? {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-              let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil), CGImageSourceGetCount(source) > 0 else {
             return nil
         }
-        return encode(cgImage, as: .heic, quality: quality)
+        let output = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(output, UTType.heic.identifier as CFString, 1, nil) else {
+            return nil
+        }
+        CGImageDestinationAddImageFromSource(destination, source, 0, [kCGImageDestinationLossyCompressionQuality: quality] as CFDictionary)
+        guard CGImageDestinationFinalize(destination) else { return nil }
+        return output as Data
     }
 
     /// `heicReencoding(_:quality:)` on the cooperative pool, for main-actor callers.
@@ -220,6 +354,19 @@ nonisolated enum PlatformImage {
             kCGImageSourceCreateThumbnailWithTransform: true
         ]
         return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+    }
+
+    /// Encoded, downscaled copy of an already-decoded (and already upright) image — the thumbnail of a region cut from a shared scan, which has no encoded file of its own to thumbnail.
+    static func thumbnailData(of image: CGImage, maxPixelSize: Int, as type: UTType, quality: CGFloat) -> Data? {
+        let output = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(output, type.identifier as CFString, 1, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageDestinationLossyCompressionQuality: quality,
+            kCGImageDestinationImageMaxPixelSize: maxPixelSize
+        ]
+        CGImageDestinationAddImage(destination, image, options as CFDictionary)
+        guard CGImageDestinationFinalize(destination) else { return nil }
+        return output as Data
     }
 
     /// Encoded thumbnail of `data`: HEIC at 400 px for page thumbnails, small JPEGs for the Spotlight index.

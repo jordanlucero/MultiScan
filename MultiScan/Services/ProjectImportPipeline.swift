@@ -50,16 +50,17 @@ final class ProjectImportPipeline {
 
     /// Scans files/folders, renders PDFs to page images, and returns everything ready for OCR.
     /// - Parameter onEstimate: Called with the expected page count *before* PDF rendering, so callers can announce/size progress immediately.
+    ///
+    /// Images are returned exactly as picked. "Optimize images on import" is applied later, by `OCRService`, to the copy that gets stored — recognition always reads the original pixels.
     func prepare(
         urls: [URL],
-        optimizeImages: Bool,
         onEstimate: ((Int) -> Void)? = nil
     ) async throws -> PreparedImport {
         // Hold security-scoped access to the picked items for the whole scan + render, so PDFs inside a picked folder stay readable.
         let accessed = urls.filter { $0.startAccessingSecurityScopedResource() }
         defer { for url in accessed { url.stopAccessingSecurityScopedResource() } }
 
-        let scanned = await Self.scan(urls, optimizeImages: optimizeImages)
+        let scanned = await Self.scan(urls)
         onEstimate?(scanned.images.count + scanned.pdfPageCount)
 
         var images = scanned.images
@@ -71,15 +72,11 @@ final class ProjectImportPipeline {
     }
 
     /// Loads Photos picker selections into image data (with the original filename when Photos provides one).
-    func loadPhotos(_ items: [PhotosPickerItem], optimizeImages: Bool) async -> [(data: Data, fileName: String)] {
+    func loadPhotos(_ items: [PhotosPickerItem]) async -> [(data: Data, fileName: String)] {
         var images: [(data: Data, fileName: String)] = []
         for (index, item) in items.enumerated() {
             guard let loaded = await Self.loadPhoto(item, index: index) else { continue }
-            var data = loaded.data
-            if optimizeImages, let compressed = await PlatformImage.heicReencodingInBackground(data) {
-                data = compressed
-            }
-            images.append((data: data, fileName: loaded.fileName))
+            images.append((data: loaded.data, fileName: loaded.fileName))
         }
         return images
     }
@@ -130,14 +127,10 @@ final class ProjectImportPipeline {
             try context.save()
             MultiScanShortcuts.updateAppShortcutParameters()
 
-            // Post-import intelligence, both cheap enough to run inline on the main actor (they read the cache we just built, not external storage).
-            if UserDefaults.standard.object(forKey: DefaultsKey.autoDetectChapters) == nil || UserDefaults.standard.bool(forKey: DefaultsKey.autoDetectChapters) {
-                ChapterDetector.apply(to: document)
-                try context.save()
-            }
+            // Post-import intelligence. (Automatic chapter detection used to run here; it is on hold — see ChapterDetector.swift. Chapters are marked by hand.)
             if allowsAutomaticTitle {
-                // The model call can take a few seconds; don't hold the import's completion for it. The suggester re-checks the name before writing.
-                Task { await ProjectTitleSuggester.suggestAndApply(to: document, placeholderName: name) }
+                // Never wait for the title: the import is done and the project is usable under its placeholder name. The suggester works off the main actor, at low priority, and re-fetches the project before renaming it (see ProjectTitleSuggester.swift).
+                Task(priority: .utility) { await ProjectTitleSuggester.suggestAndApply(to: document, placeholderName: name) }
             }
             return document.uuid ?? UUID()
         } catch {
@@ -198,42 +191,58 @@ final class ProjectImportPipeline {
     // MARK: Internals
 
     /// OCR with progress mirrored into `progress` (and the intent's per-page handler).
-    /// The engine configuration is snapshotted here, once per batch, so a settings change mid-import can't switch engines halfway through a project.
+    /// The engine configuration and the "Optimize images on import" setting are snapshotted here, once per batch, so a settings change mid-import can't switch behavior halfway through a project.
     private func runOCR(_ images: [(data: Data, fileName: String)], startingPageNumber: Int) async throws -> [ProcessedImage] {
         // Reset so a progress UI doesn't briefly show the previous import's final value
         progress = 0
         let configuration = OCREngineSettings.shared.configuration
-        return try await OCRService.processImages(images, startingPageNumber: startingPageNumber, configuration: configuration) { fraction in
+        let optimize = UserDefaults.standard.bool(forKey: DefaultsKey.optimizeImagesOnImport)
+        return try await OCRService.processImages(images, startingPageNumber: startingPageNumber, configuration: configuration, optimizeStoredImages: optimize) { fraction in
             progress = fraction
             pageProgressHandler?(fraction)
         }
     }
 
-    /// Creates `Page` models for OCR results and attaches them to the document.
+    /// Creates `Page` models for OCR results and attaches them to the document. Pages Smart Separate cut from one scan share a single `SharedScan` holding that scan's bytes; every other page keeps its image itself.
     @discardableResult
     private func insertPages(for results: [ProcessedImage], into document: Document) -> [Page] {
-        results.map { result in
+        var scans: [UUID: SharedScan] = [:]
+        return results.map { result in
+            var scan: SharedScan?
+            if let scanID = result.scanID {
+                scan = scans[scanID] ?? {
+                    let created = SharedScan(imageData: result.imageData, originalFileName: result.scanFileName, document: document)
+                    document.modelContext?.insert(created)
+                    document.sharedScans?.append(created)
+                    scans[scanID] = created
+                    return created
+                }()
+            }
             let page = Page(
                 pageNumber: result.pageNumber,
-                text: result.text,
-                imageData: result.imageData,
+                text: result.recognized.text,
+                imageData: scan == nil ? result.imageData : nil,
                 originalFileName: result.originalFileName,
-                richTextData: result.richTextData,
-                visionLayoutData: result.visionLayoutData,
-                visionTranscript: result.visionTranscript,
-                ocrEngine: result.ocrEngine
+                richTextData: result.recognized.richTextData,
+                visionLayoutData: result.recognized.visionLayoutData,
+                visionTranscript: result.recognized.visionTranscript,
+                ocrEngine: result.recognized.ocrEngine
             )
             page.thumbnailData = result.thumbnailData
             page.splitPosition = result.splitPosition
+            page.imageCrop = result.crop?.cgRect
             page.document = document
             document.pages?.append(page)
+            if let scan {
+                page.sharedScan = scan
+            }
             return page
         }
     }
 
     // MARK: File scanning (off the main actor)
 
-    /// What a scan of the picked URLs found: image bytes (already optimized if requested), PDFs to render, and a name hint.
+    /// What a scan of the picked URLs found: image bytes, PDFs to render, and a name hint.
     private nonisolated struct ScannedInput: Sendable {
         var images: [(data: Data, fileName: String)] = []
         var pdfURLs: [URL] = []
@@ -243,7 +252,7 @@ final class ProjectImportPipeline {
 
     /// Walks files and folders, reading images and noting PDFs. Everything is sorted by filename; a single picked folder names the project.
     @concurrent
-    private nonisolated static func scan(_ urls: [URL], optimizeImages: Bool) async -> ScannedInput {
+    private nonisolated static func scan(_ urls: [URL]) async -> ScannedInput {
         var result = ScannedInput()
         let fileManager = FileManager.default
 
@@ -258,10 +267,10 @@ final class ProjectImportPipeline {
                     options: [.skipsHiddenFiles, .skipsPackageDescendants]
                 ) else { continue }
                 while let fileURL = enumerator.nextObject() as? URL {
-                    collect(fileURL, optimizeImages: optimizeImages, into: &result)
+                    collect(fileURL, into: &result)
                 }
             } else {
-                collect(url, optimizeImages: optimizeImages, into: &result)
+                collect(url, into: &result)
             }
         }
 
@@ -277,7 +286,7 @@ final class ProjectImportPipeline {
         return result
     }
 
-    private nonisolated static func collect(_ url: URL, optimizeImages: Bool, into result: inout ScannedInput) {
+    private nonisolated static func collect(_ url: URL, into result: inout ScannedInput) {
         guard let contentType = try? url.resourceValues(forKeys: [.contentTypeKey]).contentType else { return }
 
         if contentType.conforms(to: .pdf) {
@@ -287,8 +296,7 @@ final class ProjectImportPipeline {
         }
 
         guard contentType.conforms(to: .image), let data = try? Data(contentsOf: url) else { return }
-        let finalData = optimizeImages ? (PlatformImage.heicReencoding(data) ?? data) : data
-        result.images.append((data: finalData, fileName: url.lastPathComponent))
+        result.images.append((data: data, fileName: url.lastPathComponent))
     }
 
     // MARK: Photos

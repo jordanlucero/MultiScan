@@ -16,10 +16,17 @@
 //  ## When it runs
 //  Only on a **new import** whose name is the placeholder ("Import <date>"), when the user has the setting on and `SystemLanguageModel.default.availability == .available`. Never on renames, never on existing projects, never when the import came with a human-chosen name (a picked folder, the share sheet's title). The result is marked `Document.isAutoTitled`; a manual rename clears the flag.
 //
+//  ## It must never hold up the app
+//  The project is usable under its date-based name the moment the import finishes; the title arrives later, in the background, or not at all. Three rules keep it that way:
+//  1. **The main actor only gathers and applies.** `evidence(for:)` reads stored columns and one blob (cheap, bounded); `suggestAndApply` writes three fields at the end. Everything between — decoding the export cache, finding running headers, creating the model session, generating — is in `@concurrent` functions on the cooperative pool. (A plain `nonisolated async` function runs on its *caller's* actor in this project, so "it's async" was not enough: the header analysis ran synchronously on the main actor, and on a long project that analysis took many minutes — the app was frozen until it finished. Whether the framework's own session setup blocks is not something this file can know, which is the other reason it stays off the main actor.)
+//  2. **Nothing is held across the wait.** Only the project's `uuid` crosses it. Afterwards the project is fetched again: it may have been deleted, or renamed by hand (then the user's name stands).
+//  3. **There is a deadline** (`deadline`). On a machine under memory pressure the on-device model can take arbitrarily long; a title that late isn't worth the memory it is holding. Past the deadline the project just keeps its name.
+//
 //  `#if canImport(FoundationModels)` guards the model code so the file compiles on any SDK; the dossier builder is plain Swift and unit-tested.
 //
 
 import Foundation
+import SwiftData
 import os
 
 #if canImport(FoundationModels)
@@ -47,9 +54,17 @@ nonisolated enum ProjectTitleSuggester {
 
     // MARK: Dossier
 
-    /// Builds the dossier from stored columns and the export cache (no external reads of page text).
+    /// What the main actor hands to the background work: the parts of the dossier that are plain stored columns, plus the raw export cache for the header analysis. `Sendable`; no model objects.
+    struct Evidence: Sendable {
+        var dossier: Dossier
+        /// The encoded export cache (decoded and analyzed off the main actor) and the page fingerprints to check it against.
+        var cacheData: Data?
+        var fingerprints: [Int: Date]
+    }
+
+    /// Gathers the evidence. Main actor, and deliberately cheap: stored columns of a handful of pages, the Vision title of the first three, and one read of the export cache blob. No analysis happens here.
     @MainActor
-    static func dossier(for document: Document) -> Dossier {
+    static func evidence(for document: Document) -> Evidence {
         let pages = document.sortedPages
         var dossier = Dossier()
         dossier.pageCount = pages.count
@@ -61,10 +76,29 @@ nonisolated enum ProjectTitleSuggester {
         dossier.visionTitles = pages.prefix(3).compactMap { $0.visionLayout?.title?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
         dossier.chapterTitles = Array(pages.compactMap(\.sectionTitle).prefix(8))
 
-        if let cache = TextExportCacheService.loadFreshCache(from: document) {
-            dossier.repeatedHeaders = repeatedHeaders(in: cache, pageCount: pages.count)
+        return Evidence(
+            dossier: dossier,
+            cacheData: document.textExportCache,
+            fingerprints: TextExportCacheService.fingerprints(of: document)
+        )
+    }
+
+    /// Finishes the dossier off the main actor: decodes the export cache and finds the running headers in it.
+    @concurrent
+    static func completedDossier(from evidence: Evidence) async -> Dossier {
+        var dossier = evidence.dossier
+        if let data = evidence.cacheData,
+           let cache = TextExportCacheService.decodeCache(from: data),
+           TextExportCacheService.isFresh(cache, against: evidence.fingerprints) {
+            dossier.repeatedHeaders = repeatedHeaders(in: cache, pageCount: dossier.pageCount)
         }
         return dossier
+    }
+
+    /// The whole dossier for a project. The gathering happens on the main actor, the analysis off it.
+    @MainActor
+    static func dossier(for document: Document) async -> Dossier {
+        await completedDossier(from: evidence(for: document))
     }
 
     /// Lines that recur across pages, most widespread first — the running-header candidates.
@@ -129,6 +163,8 @@ nonisolated enum ProjectTitleSuggester {
     #endif
 
     /// Asks the model. Returns nil when unavailable, uncertain, or on any error — callers keep the default name.
+    /// `@concurrent`: the session is created and driven on the cooperative pool, never on the caller's actor.
+    @concurrent
     static func suggestTitle(from dossier: Dossier, minimumConfidence: Int = 55) async -> String? {
         guard !dossier.isEmpty else { return nil }
         #if canImport(FoundationModels)
@@ -171,19 +207,44 @@ nonisolated enum ProjectTitleSuggester {
 
     // MARK: Apply
 
-    /// Full flow for a freshly imported project: build the dossier, ask the model, rename if confident. Safe to call fire-and-forget; it re-checks that the name is still the placeholder before writing, so a user who renamed first wins.
+    /// How long a title may take. The answer normally arrives in seconds; under memory pressure the on-device model can take far longer, and by then the title isn't worth what it costs.
+    static let deadline: TimeInterval = 180
+
+    /// The background part, start to finish: complete the dossier, ask the model, give up at the deadline. Returns nil for "leave the name alone".
+    @concurrent
+    static func proposeTitle(from evidence: Evidence) async -> String? {
+        guard isModelAvailable else { return nil }
+        do {
+            return try await ModelTranscriber.withTimeout(deadline) {
+                let dossier = await completedDossier(from: evidence)
+                try Task.checkCancellation()
+                return await suggestTitle(from: dossier)
+            }
+        } catch {
+            logger.info("No automatic title: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+
+    /// Full flow for a freshly imported project: gather the evidence, get a title in the background, rename if the project is still there and still carries its placeholder name. Fire-and-forget; the caller never waits on it and the project is fully usable meanwhile.
     @MainActor
     static func suggestAndApply(to document: Document, placeholderName: String) async {
         guard UserDefaults.standard.object(forKey: DefaultsKey.autoTitleProjects) == nil || UserDefaults.standard.bool(forKey: DefaultsKey.autoTitleProjects) else { return }
-        guard isModelAvailable else { return }
-        let dossier = dossier(for: document)
-        guard let title = await suggestTitle(from: dossier) else { return }
-        guard document.name == placeholderName else { return } // renamed meanwhile
-        guard title.lowercased() != document.name.lowercased() else { return }
-        document.name = title
-        document.isAutoTitled = true
-        document.lastModified = Date()
-        try? document.modelContext?.save()
+        guard let uuid = document.uuid, let context = document.modelContext else { return }
+        let evidence = evidence(for: document)
+
+        // From here until the answer is back, nothing of the project is held — only its identity.
+        guard let title = await proposeTitle(from: evidence) else { return }
+
+        var descriptor = FetchDescriptor<Document>(predicate: #Predicate { $0.uuid == uuid })
+        descriptor.fetchLimit = 1
+        guard let current = try? context.fetch(descriptor).first else { return } // deleted meanwhile
+        guard current.name == placeholderName else { return } // renamed meanwhile: the user's name stands
+        guard title.lowercased() != current.name.lowercased() else { return }
+        current.name = title
+        current.isAutoTitled = true
+        current.lastModified = Date()
+        try? context.save()
         MultiScanShortcuts.updateAppShortcutParameters()
         logger.info("Auto-titled project as \(title, privacy: .public)")
     }

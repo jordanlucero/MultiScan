@@ -5,7 +5,7 @@
 //  The macOS-screenshot-style capture overlay: the page image with a draggable, resizable rectangle; confirm to crop that region into a `PageCapture` that lands inline in the page text.
 //
 //  ## Flow
-//  1. Something opens a session — right-click / long-press on the viewer (seeded at that point), the Image menu or More menu (seeded on the page's center), a page's context menu, or an existing capture's "Recapture…" (seeded with its rectangle).
+//  1. Something opens a session — right-click / long-press on the viewer (seeded at that point), the Edit menu or More menu (seeded on the page's center), a page's context menu, or an existing capture's "Recapture…" (seeded with its rectangle).
 //  2. `ArtworkCaptureView` decodes the page the way the viewer shows it (`PlatformImage.processedCGImage`: EXIF + rotation + adjustments baked in) and lets the user adjust the rectangle. Everything is in **normalized, upper-left-origin coordinates of that displayed image** — the same space `PageCapture.normalizedRect` is stored in, so a recapture starts exactly where the old one was.
 //  3. Capture → `CaptureService.makeCapture` crops off the main actor, encodes HEIC + a 400 px thumbnail, and creates (or updates) the `PageCapture`. The host (`ReviewView`) then inserts the reference attachment into the page text.
 //
@@ -220,16 +220,16 @@ struct ArtworkCaptureView: View {
 
     private func loadImage() async {
         let page = session.page
-        guard let data = page.imageData else { return }
+        guard let source = page.imageSource else { return }
         let rotation = page.rotation
         let contrast = page.increaseContrast
         let blackPoint = page.increaseBlackPoint
-        image = await Self.decode(data, rotation: rotation, contrast: contrast, blackPoint: blackPoint)
+        image = await Self.decode(source, rotation: rotation, contrast: contrast, blackPoint: blackPoint)
     }
 
     @concurrent
-    private nonisolated static func decode(_ data: Data, rotation: Int, contrast: Bool, blackPoint: Bool) async -> CGImage? {
-        PlatformImage.processedCGImage(from: data, userRotation: rotation, increaseContrast: contrast, increaseBlackPoint: blackPoint)
+    private nonisolated static func decode(_ source: PageImageSource, rotation: Int, contrast: Bool, blackPoint: Bool) async -> CGImage? {
+        PlatformImage.processedCGImage(from: source, userRotation: rotation, increaseContrast: contrast, increaseBlackPoint: blackPoint)
     }
 
     private func capture() async {

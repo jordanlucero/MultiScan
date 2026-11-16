@@ -61,14 +61,13 @@ struct CreateProjectIntent: AppIntent, LongRunningIntent, CancellableIntent {
         let files = self.files
         let requestedName = self.name
         let progress = self.progress
-        let optimizeImages = UserDefaults.standard.bool(forKey: DefaultsKey.optimizeImagesOnImport)
 
         let projectID: UUID = try await performBackgroundTask { @MainActor @Sendable in
             // `stageFiles` is `@concurrent`, so the copy/write loop runs off the main actor.
             let urls = try await Self.stageFiles(files, in: stagingDirectory)
 
             let pipeline = ProjectImportPipeline.shared
-            let prepared = try await pipeline.prepare(urls: urls, optimizeImages: optimizeImages) { estimate in
+            let prepared = try await pipeline.prepare(urls: urls) { estimate in
                 progress.totalUnitCount = Int64(max(estimate, 1))
             }
             guard !prepared.images.isEmpty else { throw CreateProjectError.nothingToScan }

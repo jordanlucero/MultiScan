@@ -71,6 +71,8 @@ struct ImageViewer: View {
         var rotation: Int
         var increaseContrast: Bool
         var increaseBlackPoint: Bool
+        /// The region of the scan the page shows. Changes when a page is separated or rejoined in place, which must re-decode even though the page is the same.
+        var crop: CGRect?
     }
 
     private var imageRequest: ImageRequest {
@@ -79,7 +81,8 @@ struct ImageViewer: View {
             pageID: page?.persistentModelID,
             rotation: page?.rotation ?? 0,
             increaseContrast: page?.increaseContrast ?? false,
-            increaseBlackPoint: page?.increaseBlackPoint ?? false
+            increaseBlackPoint: page?.increaseBlackPoint ?? false,
+            crop: page?.imageCrop
         )
     }
 
@@ -136,20 +139,20 @@ struct ImageViewer: View {
     private func loadImage(for request: ImageRequest) async {
         guard let page = navigationState.currentPage,
               page.persistentModelID == request.pageID,
-              let imageData = page.imageData else {
+              let source = page.imageSource else {
             displayImage = nil
             return
         }
 
-        // Decode + rotate + adjust off the main actor
-        let cgImage = await Self.decode(imageData, for: request)
+        // Decode + crop + rotate + adjust off the main actor
+        let cgImage = await Self.decode(source, for: request)
 
         guard !Task.isCancelled else { return }
 
         if let cgImage {
             displayImage = ProcessedPageImage(
                 cgImage: cgImage,
-                contentID: .init(pageID: request.pageID, rotation: request.rotation)
+                contentID: .init(pageID: request.pageID, rotation: request.rotation, crop: request.crop)
             )
         } else {
             displayImage = nil
@@ -157,9 +160,9 @@ struct ImageViewer: View {
     }
 
     @concurrent
-    private nonisolated static func decode(_ imageData: Data, for request: ImageRequest) async -> CGImage? {
+    private nonisolated static func decode(_ source: PageImageSource, for request: ImageRequest) async -> CGImage? {
         PlatformImage.processedCGImage(
-            from: imageData,
+            from: source,
             userRotation: request.rotation,
             increaseContrast: request.increaseContrast,
             increaseBlackPoint: request.increaseBlackPoint

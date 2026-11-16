@@ -138,6 +138,15 @@ final class PageTextController {
         textView = nil
     }
 
+    /// Severs the view link **without saving**, dropping whatever the editor still holds. For when the page's stored text was just replaced wholesale behind the editor — read again, separated, rejoined — so the editor's content is the *old* text and saving it (what `detach()` does) would put it back over the new one.
+    func detachDiscardingEdits() {
+        saveTask?.cancel()
+        saveTask = nil
+        hasUnsavedChanges = false
+        if CaptureImageStore.shared.actionHandler === self { CaptureImageStore.shared.actionHandler = nil }
+        textView = nil
+    }
+
     // MARK: - Text Change Handling
 
     /// Called by the view delegate on every user edit.

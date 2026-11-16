@@ -13,6 +13,13 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>MultiScan connects to a model server on your local network when you choose one as the OCR engine.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

@@ -328,9 +328,9 @@ actor ProjectStore {
     /// The page image with rotation and display adjustments applied, encoded as JPEG.
     func pageJPEG(uuid: UUID) throws -> Data {
         guard let page = page(uuid: uuid) else { throw ProjectStoreError.pageNotFound }
-        guard let data = page.imageData,
+        guard let source = page.imageSource,
               let cgImage = PlatformImage.processedCGImage(
-                from: data,
+                from: source,
                 userRotation: page.rotation,
                 increaseContrast: page.increaseContrast,
                 increaseBlackPoint: page.increaseBlackPoint
@@ -438,7 +438,10 @@ enum ProjectMaintenance {
                     || page.plainTextUpdatedAt == nil
                     || (page.plainTextUpdatedAt ?? .distantPast) < page.lastModified
             }
-            guard !stalePages.isEmpty else { continue }
+            guard !stalePages.isEmpty else {
+                if migratePrintedNumbering(of: document) { touched = true }
+                continue
+            }
 
             // One cache decode per document supplies plain text for every page without external reads.
             var cachedText: [Int: String] = [:]
@@ -457,6 +460,8 @@ enum ProjectMaintenance {
                 updatedPages += 1
             }
             touched = true
+            // After the uuids exist: the numbering plan anchors to them.
+            migratePrintedNumbering(of: document)
 
             do {
                 try context.save()
@@ -471,6 +476,16 @@ enum ProjectMaintenance {
             logger.info("Backfill complete: \(updatedPages) pages updated across \(documents.count) projects")
         }
         return updatedPages
+    }
+
+    /// Rewrites a position-based printed-numbering plan (plan version 1, written by schema-3 development builds) in its current page-anchored form. The getter already reads version 1 by anchoring each range to the page now at its position; this just makes that permanent, so later page moves carry the numbering with them. Skipped while any page still lacks a `uuid` — the plan would lose that range.
+    /// - Returns: whether the document changed.
+    @discardableResult
+    static func migratePrintedNumbering(of document: Document) -> Bool {
+        guard PrintedNumberingPlan.storedVersion(of: document.printedNumberingData) == 1,
+              document.unwrappedPages.allSatisfy({ $0.uuid != nil }) else { return false }
+        document.printedNumbering = document.printedNumbering
+        return true
     }
 
     /// Deletes projects by identity. Cascades to pages; Spotlight cleanup follows from the save notification.

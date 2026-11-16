@@ -2,7 +2,9 @@
 //  PageNumberingSettingsView.swift
 //  MultiScan
 //
-//  Where the physical book starts counting: a small sheet editing the document's `PrintedNumberingPlan`, with a live preview of the resulting labels so the user can check "project page 9 → printed 1, page 8 → viii" before saving.
+//  Where the physical book starts counting: a small sheet editing the document's printed numbering, with a live preview of the resulting labels so the user can check "project page 9 → printed 1, page 8 → viii" before saving.
+//
+//  The sheet talks in project page numbers, so it edits the plan's *resolved* form (`ResolvedPrintedNumbering`, ranges placed at their current positions) and anchors it back to the pages on Save (`anchored(to:)`). After that the numbering follows those pages wherever they move.
 //
 //  The common case is two ranges — Roman (or unnumbered) front matter, then Arabic numbering from one page — and that is all the sheet shows by default. Documents with more structure (an appendix that restarts at 1, plates without numbers) can add ranges under **Additional numbering ranges**, a collapsed disclosure: real, but deliberately out of the way, because for most physical documents it is a confusing concept.
 //
@@ -19,12 +21,12 @@ struct PageNumberingSettingsView: View {
     @State private var startPage: Int
     @State private var startValue: Int
     @State private var frontMatterStyle: PrintedNumberingStyle
-    @State private var additionalRanges: [PrintedNumberingRange]
+    @State private var additionalRanges: [ResolvedPrintedNumbering.Range]
     @State private var showAdditionalRanges = false
 
     init(document: Document) {
         self.document = document
-        let plan = document.printedNumbering
+        let plan = PageNumbering.resolvedPlan(for: document)
         _isEnabled = State(initialValue: plan != nil)
         _startPage = State(initialValue: plan?.mainRange?.startPage ?? 1)
         _startValue = State(initialValue: plan?.mainRange?.startValue ?? 1)
@@ -37,10 +39,10 @@ struct PageNumberingSettingsView: View {
     private var totalPages: Int { max(document.totalPages, 1) }
 
     /// The plan the current draft describes.
-    private var draftPlan: PrintedNumberingPlan {
-        var plan = PrintedNumberingPlan.simple(startPage: startPage, startValue: startValue, frontMatter: frontMatterStyle)
+    private var draftPlan: ResolvedPrintedNumbering {
+        var plan = ResolvedPrintedNumbering.simple(startPage: startPage, startValue: startValue, frontMatter: frontMatterStyle)
         plan.ranges.append(contentsOf: additionalRanges.filter { $0.startPage > startPage })
-        return PrintedNumberingPlan(ranges: plan.ranges)
+        return ResolvedPrintedNumbering(ranges: plan.ranges)
     }
 
     var body: some View {
@@ -92,7 +94,7 @@ struct PageNumberingSettingsView: View {
 
                             Button {
                                 let nextStart = min(totalPages, max(startPage + 1, (additionalRanges.map(\.startPage).max() ?? startPage) + 1))
-                                additionalRanges.append(PrintedNumberingRange(startPage: nextStart, style: .arabic, startValue: 1))
+                                additionalRanges.append(ResolvedPrintedNumbering.Range(startPage: nextStart, style: .arabic, startValue: 1))
                             } label: {
                                 Label("Add Range", systemImage: "plus")
                             }
@@ -131,7 +133,9 @@ struct PageNumberingSettingsView: View {
     }
 
     private func save() {
-        document.printedNumbering = isEnabled ? draftPlan : nil
+        // Anchor each range to the page it currently starts on; from here the numbering follows those pages.
+        let plan = isEnabled ? draftPlan.anchored(to: document.sortedPages) : nil
+        document.printedNumbering = (plan?.ranges.isEmpty ?? true) ? nil : plan
         document.lastModified = Date()
         try? document.modelContext?.save()
         dismiss()
@@ -140,7 +144,7 @@ struct PageNumberingSettingsView: View {
 
 /// One editable additional range: start page, style, start value, delete.
 private struct AdditionalRangeRow: View {
-    @Binding var range: PrintedNumberingRange
+    @Binding var range: ResolvedPrintedNumbering.Range
     let minimumStartPage: Int
     let totalPages: Int
     let onDelete: () -> Void

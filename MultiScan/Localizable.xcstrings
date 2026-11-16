@@ -13,7 +13,7 @@
       "shouldTranslate" : false
     },
     " and " : {
-      "comment" : "Separator joining parts of the filter announcement",
+      "comment" : "Joins two page numbers\nSeparator joining parts of the filter announcement",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -23,51 +23,12 @@
         }
       }
     },
-    "…is printed page" : {
-
-    },
-    "·" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "."
-          }
-        }
-      }
-    },
-    "· p. %@" : {
-      "comment" : "Printed page number next to the project page number"
-    },
-    "[Draft — rescan this illustration]" : {
-      "comment" : "Inline marker next to a draft capture in exported text"
-    },
-    "[Illustration]" : {
-      "comment" : "Placeholder written into exported text where an artwork capture sits"
-    },
     "%@" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@"
-          }
-        }
-      }
-    },
-    "%@ · %@ reviewed" : {
-      "comment" : "Project subtitle in App Intents/Spotlight",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@ · %2$@ reviewed"
-          }
-        },
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "%1$@ · %2$@ revisado"
           }
         }
       }
@@ -119,6 +80,34 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "%@ · %@ reviewed" : {
+      "comment" : "Project subtitle in App Intents/Spotlight",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · %2$@ reviewed"
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "%1$@ · %2$@ revisado"
+          }
+        }
+      }
+    },
+    "%@%@, %@, %@ reviewed, last modified %@" : {
+      "comment" : "VoiceOver label for a project card: emoji, name, page count, percent reviewed, last-modified date",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@%2$@, %3$@, %4$@ revisado, última modificación %5$@"
           }
         }
       }
@@ -243,19 +232,8 @@
         }
       }
     },
-    "%@%@, %@, %@ reviewed, last modified %@" : {
-      "comment" : "VoiceOver label for a project card: emoji, name, page count, percent reviewed, last-modified date",
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@%2$@, %3$@, %4$@ revisado, última modificación %5$@"
-          }
-        }
-      }
-    },
-    "%lld chapters" : {
-      "comment" : "Sidebar project menu: chapter count"
+    "%lld" : {
+      "comment" : "Number of pages in a collapsed chapter"
     },
     "%lld characters" : {
       "localizations" : {
@@ -437,6 +415,9 @@
         }
       }
     },
+    "%lld of them have been edited or reviewed. Their current text will be replaced." : {
+
+    },
     "%lld pages" : {
       "comment" : "App Intents plural type name\nProject page count in App Intents/Spotlight",
       "localizations" : {
@@ -518,6 +499,9 @@
           }
         }
       }
+    },
+    "%lld scans show two facing pages." : {
+
     },
     "%lld suggestions" : {
       "localizations" : {
@@ -733,16 +717,6 @@
         }
       }
     },
-    "Add an emoji" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Introduzca un emoji"
-          }
-        }
-      }
-    },
     "Add Pages from Files…" : {
 
     },
@@ -754,6 +728,16 @@
     },
     "Add Range" : {
 
+    },
+    "Add an emoji" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Introduzca un emoji"
+          }
+        }
+      }
     },
     "Add visual separation" : {
       "localizations" : {
@@ -831,11 +815,11 @@
         }
       }
     },
-    "and %lld more" : {
-      "comment" : "Export panel: overflow count of draft reminders"
-    },
     "Apple Vision" : {
       "comment" : "OCR engine name"
+    },
+    "Apple Vision text restored." : {
+
     },
     "Are you sure you want to delete this project? It will also be removed from your other iCloud devices. This cannot be undone." : {
       "localizations" : {
@@ -1075,6 +1059,12 @@
     "Couldn't Capture" : {
 
     },
+    "Couldn't Finish" : {
+
+    },
+    "Couldn't reach the model server at %@. Is it running?" : {
+
+    },
     "Created" : {
       "localizations" : {
         "es-419" : {
@@ -1135,6 +1125,9 @@
         }
       }
     },
+    "DRAFT" : {
+      "comment" : "Badge on a draft illustration capture"
+    },
     "Dark Gray" : {
       "comment" : "Viewer background option: dark gray color",
       "localizations" : {
@@ -1182,6 +1175,16 @@
         }
       }
     },
+    "Delete ${entities}" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eliminar ${entities}"
+          }
+        }
+      }
+    },
     "Delete %lld projects (%@)? This cannot be undone." : {
       "localizations" : {
         "en" : {
@@ -1218,16 +1221,6 @@
                 }
               }
             }
-          }
-        }
-      }
-    },
-    "Delete ${entities}" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Eliminar ${entities}"
           }
         }
       }
@@ -1272,16 +1265,6 @@
         }
       }
     },
-    "Delete…" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Eliminar…"
-          }
-        }
-      }
-    },
     "Deleted %lld projects." : {
       "localizations" : {
         "en" : {
@@ -1322,17 +1305,15 @@
         }
       }
     },
-    "Detect chapters" : {
-
-    },
-    "Detect Chapters" : {
-
-    },
-    "Detected automatically" : {
-
-    },
-    "Digest" : {
-
+    "Delete…" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eliminar…"
+          }
+        }
+      }
     },
     "Digest text" : {
 
@@ -1373,19 +1354,19 @@
     "Draft" : {
 
     },
-    "DRAFT" : {
-      "comment" : "Badge on a draft illustration capture"
-    },
-    "Draft — rescan later" : {
+    "Draft reminders" : {
 
     },
-    "Draft reminders" : {
+    "Draft — rescan later" : {
 
     },
     "Drag the rectangle or its handles to frame the illustration, then choose Capture." : {
 
     },
     "Drag to move" : {
+
+    },
+    "Each becomes two pages that share the original scan, and the text of each new page is read again." : {
 
     },
     "Edit Chapter Title" : {
@@ -1550,7 +1531,7 @@
         }
       }
     },
-    "Filter by status" : {
+    "Filter By Status" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -1560,7 +1541,7 @@
         }
       }
     },
-    "Filter By Status" : {
+    "Filter by status" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
@@ -1793,13 +1774,8 @@
         }
       }
     },
-    "iCloud" : {
-      "comment" : "Debug only",
-      "shouldTranslate" : false
-    },
-    "iCloud.co.jservices.MultiScan" : {
-      "comment" : "Debug only",
-      "shouldTranslate" : false
+    "If it does show two pages, you can split it down the middle instead." : {
+
     },
     "Illustration" : {
       "comment" : "Accessibility label for an inline capture\nFallback label for a capture whose page is unavailable"
@@ -1936,16 +1912,6 @@
         }
       }
     },
-    "Insert a “Page X of Y” line between pages." : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Inserta una línea “Página X de Y” entre las páginas."
-          }
-        }
-      }
-    },
     "Insert Illustration" : {
 
     },
@@ -1965,6 +1931,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Insertar páginas antes"
+          }
+        }
+      }
+    },
+    "Insert a “Page X of Y” line between pages." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inserta una línea “Página X de Y” entre las páginas."
           }
         }
       }
@@ -1994,6 +1970,9 @@
     },
     "Kerning" : {
 
+    },
+    "LM Studio" : {
+      "comment" : "Model server preset"
     },
     "Larger text" : {
 
@@ -2048,31 +2027,17 @@
     "Loading page…" : {
 
     },
-    "Local server (LM Studio)" : {
-      "comment" : "OCR engine name"
-    },
-    "Mark as Draft" : {
+    "Loading scan…" : {
 
     },
-    "Mark as Not Reviewed" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Marcar como no revisado"
-          }
-        }
-      }
+    "Local model server" : {
+      "comment" : "OCR engine name"
     },
-    "Mark as Reviewed" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Marcar como revisado"
-          }
-        }
-      }
+    "Looking at this scan…" : {
+
+    },
+    "Looking for scans that show two pages…" : {
+
     },
     "Mark Chapter Start" : {
 
@@ -2100,7 +2065,30 @@
         }
       }
     },
-    "Marks pages that begin a chapter, part, or section so the sidebar, Digest, and exports can group them. You can edit or remove any mark from a page's context menu." : {
+    "Mark as Draft" : {
+
+    },
+    "Mark as Not Reviewed" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marcar como no revisado"
+          }
+        }
+      }
+    },
+    "Mark as Reviewed" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marcar como revisado"
+          }
+        }
+      }
+    },
+    "Mark the part of the scan each page shows" : {
 
     },
     "Medium Gray" : {
@@ -2147,16 +2135,6 @@
     "MultiScan" : {
       "shouldTranslate" : false
     },
-    "MultiScan couldn’t finish importing the items you shared." : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "MultiScan no pudo terminar de importar los elementos que compartiste."
-          }
-        }
-      }
-    },
     "MultiScan Documentation" : {
       "localizations" : {
         "es-419" : {
@@ -2176,6 +2154,25 @@
           }
         }
       }
+    },
+    "MultiScan couldn’t finish importing the items you shared." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MultiScan no pudo terminar de importar los elementos que compartiste."
+          }
+        }
+      }
+    },
+    "MultiScan didn't find two facing pages in this scan." : {
+
+    },
+    "MultiScan reads the page image again, the way it is displayed now, and replaces the page's text. Illustrations stay on the page." : {
+
+    },
+    "MultiScan reads the page image again, the way it is displayed now. This page has been edited or reviewed — its current text will be replaced. Illustrations stay on the page." : {
+
     },
     "MultiScan was unable to load your projects due to an unexpected error." : {
       "localizations" : {
@@ -2251,6 +2248,29 @@
     "Night" : {
       "comment" : "Digest theme"
     },
+    "No OCR model is configured." : {
+
+    },
+    "No Page Selected" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No hay ninguna página seleccionada"
+          }
+        }
+      }
+    },
+    "No Projects" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sin proyectos"
+          }
+        }
+      }
+    },
     "No filter active" : {
       "localizations" : {
         "es-419" : {
@@ -2261,22 +2281,22 @@
         }
       }
     },
-    "No images or pages were found." : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "No se encontraron imágenes ni páginas."
-          }
-        }
-      }
-    },
     "No images or PDF pages were found to scan." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "No se encontraron imágenes ni páginas PDF para escanear."
+          }
+        }
+      }
+    },
+    "No images or pages were found." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "machine_translated",
+            "value" : "No se encontraron imágenes ni páginas."
           }
         }
       }
@@ -2303,29 +2323,6 @@
         }
       }
     },
-    "No OCR model is configured." : {
-
-    },
-    "No Page Selected" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No hay ninguna página seleccionada"
-          }
-        }
-      }
-    },
-    "No Projects" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sin proyectos"
-          }
-        }
-      }
-    },
     "No projects were selected." : {
       "localizations" : {
         "es-419" : {
@@ -2336,23 +2333,15 @@
         }
       }
     },
+    "No scans in this project show two facing pages." : {
+
+    },
     "No suggestions" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sin sugerencias"
-          }
-        }
-      }
-    },
-    "Not reviewed" : {
-      "comment" : "Accessibility value for unreviewed page",
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sin revisar"
           }
         }
       }
@@ -2379,6 +2368,17 @@
         }
       }
     },
+    "Not reviewed" : {
+      "comment" : "Accessibility value for unreviewed page",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sin revisar"
+          }
+        }
+      }
+    },
     "Numbers (1, 2, 3)" : {
       "comment" : "Printed page numbering style"
     },
@@ -2392,8 +2392,14 @@
         }
       }
     },
+    "Ollama" : {
+      "comment" : "Model server preset"
+    },
     "On-device model (Core AI)" : {
       "comment" : "OCR engine name"
+    },
+    "One of the two pages would be too small to use." : {
+
     },
     "Open App Store" : {
       "localizations" : {
@@ -2486,6 +2492,16 @@
         }
       }
     },
+    "Optimize Images…" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Optimizar imágenes…"
+          }
+        }
+      }
+    },
     "Optimize images on import" : {
       "localizations" : {
         "es-419" : {
@@ -2496,15 +2512,14 @@
         }
       }
     },
-    "Optimize Images…" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Optimizar imágenes…"
-          }
-        }
-      }
+    "Original Scan" : {
+
+    },
+    "Original scan" : {
+
+    },
+    "Other" : {
+      "comment" : "Model server preset: a custom address"
     },
     "Page" : {
       "comment" : "App Intents type name for a scanned page",
@@ -2528,6 +2543,17 @@
         }
       }
     },
+    "Page %lld Text" : {
+      "comment" : "Preview title for single page export",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Texto de la página %lld"
+          }
+        }
+      }
+    },
     "Page %lld of %lld" : {
       "comment" : "Page number indicator in export separator",
       "localizations" : {
@@ -2545,16 +2571,11 @@
         }
       }
     },
-    "Page %lld Text" : {
-      "comment" : "Preview title for single page export",
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Texto de la página %lld"
-          }
-        }
-      }
+    "Page %lld shows the highlighted region of this scan." : {
+
+    },
+    "Page %lld shows two facing pages." : {
+
     },
     "Page %lld will begin this chapter in the sidebar, the Digest, and exports." : {
 
@@ -2565,29 +2586,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Número de páginas"
-          }
-        }
-      }
-    },
-    "Page image" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Imagen de página"
-          }
-        }
-      }
-    },
-    "Page markers" : {
-
-    },
-    "Page number" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Número de página"
           }
         }
       }
@@ -2618,6 +2616,29 @@
         }
       }
     },
+    "Page image" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Imagen de página"
+          }
+        }
+      }
+    },
+    "Page markers" : {
+
+    },
+    "Page number" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Número de página"
+          }
+        }
+      }
+    },
     "Page text editor" : {
       "localizations" : {
         "es-419" : {
@@ -2627,6 +2648,9 @@
           }
         }
       }
+    },
+    "Page text recognized again." : {
+
     },
     "Pages" : {
       "localizations" : {
@@ -2638,7 +2662,23 @@
         }
       }
     },
+    "Pages %@ become one page again, showing the whole scan. Their text is kept and joined in order." : {
+
+    },
+    "Pages %lld and %lld share this scan. Page %lld shows the highlighted region." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Pages %1$lld and %2$lld share this scan. Page %3$lld shows the highlighted region."
+          }
+        }
+      }
+    },
     "Pages before that" : {
+
+    },
+    "Pages rejoined." : {
 
     },
     "Paper" : {
@@ -2820,16 +2860,6 @@
         }
       }
     },
-    "Project icon" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Icono del proyecto"
-          }
-        }
-      }
-    },
     "Project Name" : {
       "localizations" : {
         "es-419" : {
@@ -2840,22 +2870,32 @@
         }
       }
     },
-    "Project name. Defaults to the folder or file name." : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nombre del proyecto. De forma predeterminada, el nombre de la carpeta o del archivo."
-          }
-        }
-      }
-    },
     "Project Navigation" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Navegación del proyecto"
+          }
+        }
+      }
+    },
+    "Project icon" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Icono del proyecto"
+          }
+        }
+      }
+    },
+    "Project name. Defaults to the folder or file name." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nombre del proyecto. De forma predeterminada, el nombre de la carpeta o del archivo."
           }
         }
       }
@@ -2899,6 +2939,9 @@
     "Read the whole project as one continuous text" : {
 
     },
+    "Reading the page…" : {
+
+    },
     "Recapture" : {
 
     },
@@ -2908,8 +2951,29 @@
     "Recapture…" : {
 
     },
+    "Recognize Again" : {
+
+    },
+    "Recognize Page %lld Again?" : {
+
+    },
+    "Recognize Text Again…" : {
+
+    },
     "Recognized by %@" : {
       "comment" : "Context menu header: OCR engine that produced the page text"
+    },
+    "Rejoin" : {
+
+    },
+    "Rejoin Separated Pages?" : {
+
+    },
+    "Rejoin Separated Pages…" : {
+
+    },
+    "Rejoining pages…" : {
+
     },
     "Remove \"%@\" from pages %lld–%lld" : {
       "localizations" : {
@@ -2950,32 +3014,6 @@
     "Remove Chapter Mark" : {
 
     },
-    "Remove consecutive page numbers from pages %lld–%lld" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Remove consecutive page numbers from pages %1$lld–%2$lld"
-          }
-        },
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Eliminar los números de página consecutivos de las páginas %1$lld–%2$lld"
-          }
-        }
-      }
-    },
-    "Remove detected page numbers from the entire document" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Eliminar los números de página detectados de todo el documento"
-          }
-        }
-      }
-    },
     "Remove Header" : {
       "localizations" : {
         "es-419" : {
@@ -3015,6 +3053,32 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Eliminar número de página"
+          }
+        }
+      }
+    },
+    "Remove consecutive page numbers from pages %lld–%lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Remove consecutive page numbers from pages %1$lld–%2$lld"
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eliminar los números de página consecutivos de las páginas %1$lld–%2$lld"
+          }
+        }
+      }
+    },
+    "Remove detected page numbers from the entire document" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eliminar los números de página detectados de todo el documento"
           }
         }
       }
@@ -3107,6 +3171,18 @@
           }
         }
       }
+    },
+    "Restore" : {
+
+    },
+    "Restore Apple Vision Text on Page %lld?" : {
+
+    },
+    "Restore Apple Vision Text…" : {
+
+    },
+    "Restoring text…" : {
+
     },
     "Returns the recognized text of a project, optionally separated by page." : {
       "localizations" : {
@@ -3213,6 +3289,9 @@
         }
       }
     },
+    "Scan Unavailable" : {
+
+    },
     "Scan complete. %lld pages ready for review." : {
       "localizations" : {
         "en" : {
@@ -3263,6 +3342,16 @@
         }
       }
     },
+    "Search Projects" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buscar proyectos"
+          }
+        }
+      }
+    },
     "Search by page number, filename, or content" : {
       "localizations" : {
         "es-419" : {
@@ -3283,12 +3372,12 @@
         }
       }
     },
-    "Search Projects" : {
+    "Select Photos" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Buscar proyectos"
+            "value" : "Seleccionar fotos"
           }
         }
       }
@@ -3303,17 +3392,13 @@
         }
       }
     },
-    "Select Photos" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Seleccionar fotos"
-          }
-        }
-      }
-    },
     "Selection" : {
+
+    },
+    "Separate" : {
+
+    },
+    "Separate %lld Scans" : {
 
     },
     "Separate Pages" : {
@@ -3322,6 +3407,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Separar páginas"
+          }
+        }
+      }
+    },
+    "Separate into Two Pages…" : {
+
+    },
+    "Separated %lld scans into two pages each." : {
+
+    },
+    "Separating and reading %lld of %lld…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Separating and reading %1$lld of %2$lld…"
           }
         }
       }
@@ -3398,6 +3499,9 @@
     "Share…" : {
 
     },
+    "Show Page Regions" : {
+
+    },
     "Show Smart Cleanup" : {
       "localizations" : {
         "es-419" : {
@@ -3428,9 +3532,6 @@
         }
       }
     },
-    "Show the numbers printed in the physical book next to MultiScan's own page numbers — in the sidebar, the Digest, exports, and reminders to rescan illustrations." : {
-
-    },
     "Show Thumbnails" : {
       "localizations" : {
         "es-419" : {
@@ -3440,6 +3541,9 @@
           }
         }
       }
+    },
+    "Show the numbers printed in the physical book next to MultiScan's own page numbers — in the sidebar, the Digest, exports, and reminders to rescan illustrations." : {
+
     },
     "Showing" : {
       "comment" : "Text editor is visible via RichTextSidebar, accessibility announcement",
@@ -3501,25 +3605,14 @@
     "Smart Separate" : {
 
     },
-    "Start a new project" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Iniciar un nuevo proyecto"
-          }
-        }
-      }
+    "Smart Separate Pages…" : {
+
     },
-    "Start a project using imported images from your photos or files" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Inicie un proyecto utilizando imágenes importadas de sus fotos o archivos"
-          }
-        }
-      }
+    "Some scans couldn't be separated." : {
+
+    },
+    "Split Down the Middle" : {
+
     },
     "Start New Project" : {
       "localizations" : {
@@ -3541,6 +3634,26 @@
         }
       }
     },
+    "Start a new project" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Iniciar un nuevo proyecto"
+          }
+        }
+      }
+    },
+    "Start a project using imported images from your photos or files" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inicie un proyecto utilizando imágenes importadas de sus fotos o archivos"
+          }
+        }
+      }
+    },
     "Starting at" : {
 
     },
@@ -3550,17 +3663,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Estadísticas"
-          }
-        }
-      }
-    },
-    "status: %@" : {
-      "comment" : "Part of a VoiceOver filter announcement",
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "estado: %@"
           }
         }
       }
@@ -3696,16 +3798,6 @@
         }
       }
     },
-    "Text formatting: Bold, Italic, Underline, Strikethrough" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Formato de texto: Negrita, Cursiva, Subrayado, Tachado"
-          }
-        }
-      }
-    },
     "Text Panel" : {
       "localizations" : {
         "es-419" : {
@@ -3716,13 +3808,12 @@
         }
       }
     },
-    "text: \"%@\"" : {
-      "comment" : "Part of a VoiceOver filter announcement",
+    "Text formatting: Bold, Italic, Underline, Strikethrough" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "texto: \"%@\""
+            "value" : "Formato de texto: Negrita, Cursiva, Subrayado, Tachado"
           }
         }
       }
@@ -3747,6 +3838,16 @@
         }
       }
     },
+    "The PDF file could not be opened." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo abrir el archivo PDF."
+          }
+        }
+      }
+    },
     "The model didn't answer within %lld seconds." : {
 
     },
@@ -3766,21 +3867,26 @@
     "The model server's response could not be read." : {
 
     },
+    "The model was skipped after repeated failures (%@)." : {
+
+    },
     "The on-device model can't run: %@" : {
+
+    },
+    "The original scan isn't available on this device yet." : {
 
     },
     "The page image could not be encoded for the model." : {
 
     },
-    "The PDF file could not be opened." : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No se pudo abrir el archivo PDF."
-          }
-        }
-      }
+    "The page is no longer part of this project." : {
+
+    },
+    "The page's current text will be replaced with Apple Vision's reading of it. Illustrations stay on the page." : {
+
+    },
+    "The page's image isn't available on this device yet." : {
+
     },
     "The project was created but could not be loaded." : {
       "localizations" : {
@@ -3808,22 +3914,25 @@
         }
       }
     },
-    "This page has no image." : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Esta página no tiene imagen."
-          }
-        }
-      }
-    },
     "This PDF is empty." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Este PDF está vacío."
+          }
+        }
+      }
+    },
+    "This page has been edited or reviewed. Its current text will be replaced." : {
+
+    },
+    "This page has no image." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esta página no tiene imagen."
           }
         }
       }
@@ -3923,9 +4032,6 @@
         }
       }
     },
-    "Use printed page numbers" : {
-
-    },
     "Use Sequential Order" : {
       "localizations" : {
         "es-419" : {
@@ -3946,6 +4052,9 @@
         }
       }
     },
+    "Use printed page numbers" : {
+
+    },
     "Using %@" : {
       "localizations" : {
         "es-419" : {
@@ -3955,6 +4064,9 @@
           }
         }
       }
+    },
+    "View Original Scan…" : {
+
     },
     "View Progress" : {
       "localizations" : {
@@ -3986,7 +4098,7 @@
         }
       }
     },
-    "When a scan shows two facing pages, MultiScan splits it into two pages along the gutter, using the recognized text's layout. Each half is cropped to its text with a margin for easier review." : {
+    "When a scan shows two facing pages, MultiScan makes it two pages along the gutter, using the recognized text's layout. Both pages keep sharing the original scan, so they can be rejoined later. You can also separate scans after import, from a page's menu or for a whole project." : {
 
     },
     "When shuffle is on and a filter is active, the previous and next page buttons will only visit matching pages." : {
@@ -4103,6 +4215,61 @@
           }
         }
       }
+    },
+    "[Draft — rescan this illustration]" : {
+      "comment" : "Inline marker next to a draft capture in exported text"
+    },
+    "[Illustration]" : {
+      "comment" : "Placeholder written into exported text where an artwork capture sits"
+    },
+    "and %lld more" : {
+      "comment" : "Export panel: overflow count of draft reminders"
+    },
+    "iCloud" : {
+      "comment" : "Debug only",
+      "shouldTranslate" : false
+    },
+    "iCloud.co.jservices.MultiScan" : {
+      "comment" : "Debug only",
+      "shouldTranslate" : false
+    },
+    "status: %@" : {
+      "comment" : "Part of a VoiceOver filter announcement",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "estado: %@"
+          }
+        }
+      }
+    },
+    "text: \"%@\"" : {
+      "comment" : "Part of a VoiceOver filter announcement",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "texto: \"%@\""
+          }
+        }
+      }
+    },
+    "·" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "."
+          }
+        }
+      }
+    },
+    "· p. %@" : {
+      "comment" : "Printed page number next to the project page number"
+    },
+    "…is printed page" : {
+
     }
   },
   "version" : "1.3"

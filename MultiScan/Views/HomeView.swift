@@ -38,7 +38,6 @@ struct HomeView: View {
     }
 
     // Settings
-    @AppStorage(DefaultsKey.optimizeImagesOnImport) private var optimizeImagesOnImport = false
 
     // Settings sheet (iOS only — macOS uses the Settings window)
     #if os(iOS)
@@ -191,6 +190,13 @@ struct HomeView: View {
                       compressed.count < imageData.count else { continue }
                 page.imageData = compressed
             }
+            // Scans shared by separated pages are stored once, on their own records.
+            for scan in document.unwrappedSharedScans {
+                guard let imageData = scan.imageData,
+                      let compressed = await PlatformImage.heicReencodingInBackground(imageData),
+                      compressed.count < imageData.count else { continue }
+                scan.imageData = compressed
+            }
             document.recalculateStorageSize()
             try? modelContext.save()
         }
@@ -215,7 +221,7 @@ struct HomeView: View {
 
         let prepared: ProjectImportPipeline.PreparedImport
         do {
-            prepared = try await pipeline.prepare(urls: urls, optimizeImages: optimizeImagesOnImport) { estimatedPageCount in
+            prepared = try await pipeline.prepare(urls: urls) { estimatedPageCount in
                 // Announce immediately if we have content to process
                 if estimatedPageCount > 0 {
                     AccessibilityNotification.Announcement(String(localized: "Processing \(estimatedPageCount) pages. This will take a few moments.")).post()
@@ -248,7 +254,7 @@ struct HomeView: View {
         guard !items.isEmpty else { return }
 
         isPreparingLocalImport = true
-        let images = await pipeline.loadPhotos(items, optimizeImages: optimizeImagesOnImport)
+        let images = await pipeline.loadPhotos(items)
         isPreparingLocalImport = false
 
         guard !images.isEmpty else {

@@ -27,6 +27,7 @@ struct MultiScanCommands: Commands {
     @FocusedBinding(\.showDigest) private var showDigest
     @FocusedBinding(\.showChapterEditor) private var showChapterEditor
     @FocusedBinding(\.showPageNumbering) private var showPageNumbering
+    @FocusedValue(\.pageActions) private var pageActions
 
     private var document: Document? { navigationState?.selectedDocument }
     private var currentPage: Page? { navigationState?.currentPage }
@@ -89,6 +90,12 @@ struct MultiScanCommands: Commands {
                 showPageNumbering = true
             }
             .disabled(showPageNumbering == nil)
+
+            // Looks through the whole project for scans that show two facing pages; nothing changes until the sheet is confirmed.
+            Button("Smart Separate Pages…", systemImage: "rectangle.split.2x1") {
+                pageActions?.separateProject?()
+            }
+            .disabled(pageActions?.separateProject == nil)
         }
     }
 
@@ -116,6 +123,22 @@ struct MultiScanCommands: Commands {
             }
             .keyboardShortcut("B", modifiers: [.command, .option])
             .disabled(currentPage == nil || showChapterEditor == nil)
+
+            Divider()
+
+            // Things done *to the page's content* live here rather than under Image, which is display options for the picture only.
+            // Opens the capture overlay centered on the page; right-click on the viewer seeds it at the pointer instead.
+            CaptureArtworkButton(page: showArtworkCapture == nil ? nil : currentPage, action: { showArtworkCapture = true }, showsKeyboardShortcut: true)
+
+            // Smart Separate for the current page, as its own submenu: separate / rejoin, and look at the original scan. (The project-wide command is File ▸ Smart Separate Pages….)
+            // With no project in front, the items stay in the menus, disabled (placeholder actions, no page).
+            let scanPage = pageActions == nil ? nil : currentPage
+            let scanActions = pageActions ?? PageActions(separate: { _ in }, viewOriginalScan: { _ in }, recognizeAgain: { _ in })
+            Menu("Smart Separate", systemImage: "rectangle.split.2x1") {
+                SmartSeparateMenuItems(page: scanPage, actions: scanActions)
+            }
+
+            PageRecognitionMenuItems(page: scanPage, actions: scanActions)
 
             Divider()
 
@@ -173,6 +196,7 @@ struct MultiScanCommands: Commands {
 
     // MARK: - Image
 
+    /// Display options for the page image only: rotation, the two adjustments, HDR. Anything that changes the page's content or structure (capturing artwork, separating / rejoining a scan, reading the text again) is under Edit.
     private var imageCommands: some Commands {
         CommandMenu("Image") {
             PageRotationButtons(page: currentPage, showsKeyboardShortcuts: true)
@@ -180,11 +204,6 @@ struct MultiScanCommands: Commands {
             Divider()
 
             PageAdjustmentToggles(page: currentPage)
-
-            Divider()
-
-            // Opens the capture overlay centered on the page; right-click on the viewer seeds it at the pointer instead.
-            CaptureArtworkButton(page: showArtworkCapture == nil ? nil : currentPage, action: { showArtworkCapture = true }, showsKeyboardShortcut: true)
 
             Divider()
 
